@@ -22,7 +22,7 @@ export function createWorkspaceEslintConfig({
     },
     {
       rules: {
-        semi: ["error", "always"],
+        semi: ["error", "never"],
         "import/no-cycle": "off",
         "import/order": "off",
         "sort-imports": "off",

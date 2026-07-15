@@ -10,13 +10,7 @@ export default defineConfig([
   {
     files: ["src/routes/**/*.{ts,tsx}"],
     rules: {
-      "react-refresh/only-export-components": [
-        "error",
-        {
-          allowConstantExport: true,
-          allowExportNames: ["Route"],
-        },
-      ],
+      "react-refresh/only-export-components": "off",
     },
   },
 ]);

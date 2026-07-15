@@ -81,7 +81,7 @@
     },
     "packages/config/eslint": {
       "name": "@pdv/eslint",
-      "peerDependencies": {
+      "dependencies": {
         "@tanstack/eslint-config": "^0.4.0",
       },
     },
@@ -100,6 +100,7 @@
       "devDependencies": {
         "@pdv/eslint": "workspace:*",
         "@pdv/typescript": "workspace:*",
+        "eslint": "^10.6.0",
         "typescript": "^6.0.2",
       },
     },

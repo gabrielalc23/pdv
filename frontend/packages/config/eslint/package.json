@@ -1,6 +1,6 @@
 {
   "name": "@pdv/eslint",
-  "peerDependencies": {
+  "dependencies": {
     "@tanstack/eslint-config": "^0.4.0"
   },
   "exports": {

@@ -18,6 +18,7 @@
   "devDependencies": {
     "@pdv/eslint": "workspace:*",
     "@pdv/typescript": "workspace:*",
+    "eslint": "^10.6.0",
     "typescript": "^6.0.2"
   }
 }
