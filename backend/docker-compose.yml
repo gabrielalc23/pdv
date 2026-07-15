@@ -1,0 +1,96 @@
+name: pdv-backend
+
+services:
+  api:
+    image: golang:1.27rc2-alpine3.23
+    working_dir: /app
+    init: true
+
+    command: go run ./cmd/api
+
+    environment:
+      APP_ENV: development
+      HTTP_ADDRESS: ":8080"
+
+      DATABASE_URL: >-
+        postgres://${POSTGRES_USER:-pdv}:${POSTGRES_PASSWORD:-pdv}@postgres:5432/${POSTGRES_DB:-pdv}?sslmode=disable
+
+      VALKEY_ADDR: "valkey:6379"
+
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    volumes:
+      - .:/app
+      - go_modules:/go/pkg/mod
+      - go_build_cache:/root/.cache/go-build
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+
+    stop_grace_period: 15s
+
+  postgres:
+    image: postgres:18.4-alpine3.23
+
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pdv}
+      POSTGRES_USER: ${POSTGRES_USER:-pdv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pdv}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+
+    ports:
+      - "127.0.0.1:5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+    restart: unless-stopped
+
+  valkey:
+    image: valkey/valkey:9.1.0-alpine3.23
+
+    command:
+      - valkey-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60"
+      - "1"
+      - --loglevel
+      - warning
+
+    ports:
+      - "127.0.0.1:6379:6379"
+
+    volumes:
+      - valkey_data:/data
+
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  valkey_data:
+  go_modules:
+  go_build_cache:

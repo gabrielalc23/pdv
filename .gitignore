@@ -1,0 +1,19 @@
+# Environment and local configuration
+.env
+.env.*
+!.env.example
+
+# Dependencies and build artifacts
+node_modules/
+dist/
+out/
+coverage/
+*.tsbuildinfo
+
+# Go artifacts
+*.test
+
+# OS and editor files
+.DS_Store
+.idea/
+.vscode/

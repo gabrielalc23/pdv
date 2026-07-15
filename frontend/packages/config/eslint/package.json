@@ -1,0 +1,15 @@
+{
+  "name": "@pdv/eslint",
+  "peerDependencies": {
+    "@tanstack/eslint-config": "^0.4.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.ts",
+      "import": "./index.ts",
+      "default": "./index.ts"
+    }
+  },
+  "private": true,
+  "type": "module"
+}

@@ -1,0 +1,23 @@
+version: "2"
+
+sql:
+  - name: "pdv"
+    engine: "postgresql"
+    schema: "migrations"
+    queries: "queries"
+
+    gen:
+      go:
+        package: "database"
+        out: "internal/platform/database"
+        sql_package: "pgx/v5"
+
+        emit_empty_slices: true
+        emit_enum_valid_method: true
+        emit_interface: true
+        omit_unused_structs: true
+
+        initialisms:
+          - id
+          - sku
+          - xml

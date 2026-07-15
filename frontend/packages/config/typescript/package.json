@@ -1,0 +1,22 @@
+{
+  "name": "@pdv/typescript",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./base.json": "./base.json",
+    "./react.json": "./react.json",
+    "./node.json": "./node.json"
+  },
+  "files": [
+    "base.json",
+    "react.json",
+    "node.json"
+  ],
+  "devDependencies": {
+    "@types/bun": "^1.3.14"
+  },
+  "peerDependencies": {
+    "typescript": "^6"
+  }
+}
