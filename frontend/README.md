@@ -5,11 +5,11 @@ packages.
 
 ## Workspace Layout
 
-| Directory | Description |
-| --- | --- |
-| [`apps/web`](./apps/web) | Customer-facing POS web application. |
-| [`apps/admin`](./apps/admin) | Administrative web application. |
-| [`packages`](./packages) | Shared UI, HTTP, type, utility, error, and configuration packages. |
+| Directory                    | Description                                                        |
+| ---------------------------- | ------------------------------------------------------------------ |
+| [`apps/web`](./apps/web)     | Customer-facing POS web application.                               |
+| [`apps/admin`](./apps/admin) | Administrative web application.                                    |
+| [`packages`](./packages)     | Shared UI, HTTP, type, utility, error, and configuration packages. |
 
 ## Requirements
 

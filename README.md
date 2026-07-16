@@ -5,9 +5,9 @@ model, and Bun workspaces for the customer-facing and administrative web apps.
 
 ## Repository Layout
 
-| Directory | Description |
-| --- | --- |
-| [`backend`](./backend) | Go API, SQL migrations, sqlc queries, and Docker Compose services. |
+| Directory                | Description                                                                 |
+| ------------------------ | --------------------------------------------------------------------------- |
+| [`backend`](./backend)   | Go API, SQL migrations, sqlc queries, and Docker Compose services.          |
 | [`frontend`](./frontend) | Bun workspace with web apps, UI components, and shared TypeScript packages. |
 
 ## Prerequisites

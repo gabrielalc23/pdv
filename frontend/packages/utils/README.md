@@ -1,15 +1,22 @@
-# utils
+# @pdv/utils
 
-To install dependencies:
+Shared utility functions for PDV frontend applications.
 
-```bash
-bun install
+## Exports
+
+The root export includes class-name composition, logging helpers, and request
+location resolution utilities.
+
+```ts
+import { cn, resolveRequestLocation } from "@pdv/utils"
 ```
 
-To run:
+The package expects compatible `clsx` and `tailwind-merge` peer dependencies.
 
-```bash
-bun run
+## Commands
+
+```sh
+bun --cwd packages/utils run typecheck
+bun --cwd packages/utils run lint
+bun --cwd packages/utils run format:check
 ```
-
-This project was created using `bun init` in bun v1.4.0. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

@@ -1,15 +1,22 @@
-# types
+# @pdv/types
 
-To install dependencies:
+Shared TypeScript utility types used by PDV applications and packages.
 
-```bash
-bun install
+## Exports
+
+- `Optional<T>`
+- `Nullable<T>`
+- `Either` types and factories
+
+```ts
+import type { Nullable, Optional } from "@pdv/types"
+import { left, right } from "@pdv/types"
 ```
 
-To run:
+## Commands
 
-```bash
-bun run index.ts
+```sh
+bun --cwd packages/types run typecheck
+bun --cwd packages/types run lint
+bun --cwd packages/types run format:check
 ```
-
-This project was created using `bun init` in bun v1.4.0. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

@@ -1,15 +1,28 @@
-# typescript
+# @pdv/typescript
 
-To install dependencies:
+Shared TypeScript configuration presets for workspace packages and applications.
 
-```bash
-bun install
+## Presets
+
+| Export                       | Use case                                       |
+| ---------------------------- | ---------------------------------------------- |
+| `@pdv/typescript/base.json`  | Common strict compiler options.                |
+| `@pdv/typescript/react.json` | React and Vite applications.                   |
+| `@pdv/typescript/node.json`  | Node-oriented configuration files and tooling. |
+
+Example:
+
+```json
+{
+  "extends": "@pdv/typescript/react.json",
+  "include": ["src"]
+}
 ```
 
-To run:
+The package requires TypeScript 6 as a peer dependency.
 
-```bash
-bun run index.ts
+## Formatting
+
+```sh
+bun --cwd packages/config/typescript run format:check
 ```
-
-This project was created using `bun init` in bun v1.4.0. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.

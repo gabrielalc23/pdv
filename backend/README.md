@@ -25,10 +25,10 @@ out of scope.
 
 Copy `.env.example` or export the required variables before running the API.
 
-| Variable | Required | Default | Description |
-| --- | --- | --- | --- |
-| `DATABASE_URL` | Yes | - | PostgreSQL connection string. |
-| `HTTP_ADDRESS` | No | `:8080` | Address used by the HTTP server. |
+| Variable       | Required | Default | Description                      |
+| -------------- | -------- | ------- | -------------------------------- |
+| `DATABASE_URL` | Yes      | -       | PostgreSQL connection string.    |
+| `HTTP_ADDRESS` | No       | `:8080` | Address used by the HTTP server. |
 
 Example:
 
@@ -86,17 +86,17 @@ go test -count=1 ./...
 All API responses use JSON. Amounts and quantities are represented as strings to
 preserve decimal precision.
 
-| Domain | Endpoints |
-| --- | --- |
-| Health | `GET /health` |
-| Products | `POST /products`, `GET /products`, `GET /products/{id}`, `PUT /products/{id}`, `POST /products/{id}/activate`, `POST /products/{id}/deactivate` |
-| Inventory | `GET /inventory`, `GET /products/{id}/inventory`, `POST /inventory/entries`, `POST /inventory/adjustments`, `GET /products/{id}/inventory/movements` |
-| Catalog | `GET /catalog`, `GET /catalog/barcode/{barcode}`, `GET /catalog/{id}` |
-| Sales | `POST /sales`, `GET /sales`, `GET /sales/{id}`, `POST /sales/{id}/items`, `PUT /sales/{id}/items/{itemId}`, `DELETE /sales/{id}/items/{itemId}`, `POST /sales/{id}/cancel` |
-| Checkout | `POST /sales/{id}/checkout` |
-| Payments | `GET /payment-methods`, `GET /sales/{id}/payments` |
-| Fiscal | `GET /sales/{id}/fiscal-document` |
-| Receipt | `GET /sales/{id}/receipt` |
+| Domain    | Endpoints                                                                                                                                                                  |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Health    | `GET /health`                                                                                                                                                              |
+| Products  | `POST /products`, `GET /products`, `GET /products/{id}`, `PUT /products/{id}`, `POST /products/{id}/activate`, `POST /products/{id}/deactivate`                            |
+| Inventory | `GET /inventory`, `GET /products/{id}/inventory`, `POST /inventory/entries`, `POST /inventory/adjustments`, `GET /products/{id}/inventory/movements`                       |
+| Catalog   | `GET /catalog`, `GET /catalog/barcode/{barcode}`, `GET /catalog/{id}`                                                                                                      |
+| Sales     | `POST /sales`, `GET /sales`, `GET /sales/{id}`, `POST /sales/{id}/items`, `PUT /sales/{id}/items/{itemId}`, `DELETE /sales/{id}/items/{itemId}`, `POST /sales/{id}/cancel` |
+| Checkout  | `POST /sales/{id}/checkout`                                                                                                                                                |
+| Payments  | `GET /payment-methods`, `GET /sales/{id}/payments`                                                                                                                         |
+| Fiscal    | `GET /sales/{id}/fiscal-document`                                                                                                                                          |
+| Receipt   | `GET /sales/{id}/receipt`                                                                                                                                                  |
 
 ### Checkout Example
 
