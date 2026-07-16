@@ -3,7 +3,8 @@ import { HttpMethod } from "../http-method.axios"
 import { createApiCall } from "../create-api-call.axios"
 import { z } from "zod"
 import { InvalidApiResponseError } from "@pdv/errors"
-import { server } from "../setup-server"
+import { setupServer } from "msw/native"
+import { http, HttpResponse } from "msw"
 
 describe("createApiCall", () => {
   it("sends GET request with params", async () => {
@@ -47,9 +48,7 @@ describe("createApiCall", () => {
   })
 
   it("throws InvalidApiResponseError when response doesn't match schema", async () => {
-    import { setupServer } from "msw/native"
-    import { http, HttpResponse } from "msw"
-
+    
     const mockServer = setupServer(
       http.get("/not-schema-match", () => HttpResponse.json({ unexpected: "shape" }))
     )
