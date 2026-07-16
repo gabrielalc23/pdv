@@ -47,6 +47,9 @@ describe("createApiCall", () => {
   })
 
   it("throws InvalidApiResponseError when response doesn't match schema", async () => {
+    import { setupServer } from "msw/native"
+    import { http, HttpResponse } from "msw"
+
     const mockServer = setupServer(
       http.get("/not-schema-match", () => HttpResponse.json({ unexpected: "shape" }))
     )
@@ -92,15 +95,10 @@ describe("requestLocation inference", () => {
   })
 
   it("infers 'data' from POST", async () => {
-    const postServer = setupServer(
-      http.post("/items", ({ request }) => HttpResponse.json({ created: true }))
-    )
-    postServer.listen()
-
     const api = createApiCall({
       type: "public",
       method: HttpMethod.POST,
-      path: "/items",
+      path: "/test",
       requestSchema: z.object({ value: z.number() }),
       responseSchema: z.object({ created: z.boolean() }),
     })
@@ -108,6 +106,5 @@ describe("requestLocation inference", () => {
     const result = await api({ value: 42 })
 
     expect(result.created).toBe(true)
-    postServer.close()
   })
 })
