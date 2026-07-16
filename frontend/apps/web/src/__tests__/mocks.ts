@@ -40,7 +40,20 @@ export const mockSale: SaleResponse = {
   createdAt: "2026-07-16T10:00:00Z",
   updatedAt: "2026-07-16T10:00:00Z",
   idempotencyKey: "key-001",
-  items: [],
+  items: [
+    {
+      id: "item-001",
+      saleId: "550e8400-e29b-41d4-a716-446655440001",
+      productId: "550e8400-e29b-41d4-a716-446655440000",
+      productName: "Produto Teste",
+      productSku: "ABC-123",
+      unitPrice: "100.00",
+      quantity: "1",
+      discount: "0.00",
+      total: "100.00",
+      createdAt: "...",
+    },
+  ],
 }
 
 export const mockSaleList: SaleListResponse = {

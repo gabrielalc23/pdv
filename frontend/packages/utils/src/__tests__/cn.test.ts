@@ -3,7 +3,8 @@ import { cn } from "../cn.util"
 
 describe("cn", () => {
   it("merges classes with conditional values", () => {
-    const result = cn("px-4", "py-2", false && "hidden", true && "flex")
+    const flags = { show: false, row: true }
+    const result = cn("px-4", "py-2", flags.show && "hidden", flags.row && "flex")
     expect(result).toBe("px-4 py-2 flex")
   })
 

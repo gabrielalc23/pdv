@@ -1,13 +1,26 @@
-import { describe, it, expect } from "vitest"
+import { describe, it, expect, afterEach } from "vitest"
 import { HttpMethod } from "../http-method.axios"
 import { createApiCall } from "../create-api-call.axios"
+import { instance } from "../instance.axios"
+import { instanceWithoutInterceptors } from "../instance-without-interceptors.axios"
 import { z } from "zod"
 import { InvalidApiResponseError } from "@pdv/errors"
-import { setupServer } from "msw/native"
-import { http, HttpResponse } from "msw"
+import AxiosMockAdapter from "axios-mock-adapter"
+
+const mockInstance = new AxiosMockAdapter(instance)
+const mockInstanceWithoutInterceptors = new AxiosMockAdapter(instanceWithoutInterceptors)
+
+afterEach(() => {
+  mockInstance.reset()
+  mockInstanceWithoutInterceptors.reset()
+})
 
 describe("createApiCall", () => {
   it("sends GET request with params", async () => {
+    mockInstanceWithoutInterceptors
+      .onGet("/products", { params: { search: "foo" } })
+      .reply(200, { data: ["filtered-foo"] })
+
     const api = createApiCall({
       type: "public",
       method: HttpMethod.GET,
@@ -22,6 +35,8 @@ describe("createApiCall", () => {
   })
 
   it("sends GET request without params", async () => {
+    mockInstanceWithoutInterceptors.onGet("/products").reply(200, { data: ["a", "b"] })
+
     const api = createApiCall({
       type: "public",
       method: HttpMethod.GET,
@@ -48,11 +63,9 @@ describe("createApiCall", () => {
   })
 
   it("throws InvalidApiResponseError when response doesn't match schema", async () => {
-    
-    const mockServer = setupServer(
-      http.get("/not-schema-match", () => HttpResponse.json({ unexpected: "shape" }))
-    )
-    mockServer.listen()
+    mockInstanceWithoutInterceptors
+      .onGet("/not-schema-match")
+      .reply(200, { unexpected: "shape" })
 
     const api = createApiCall({
       type: "public",
@@ -63,8 +76,6 @@ describe("createApiCall", () => {
     })
 
     await expect(api({})).rejects.toThrow(InvalidApiResponseError)
-
-    mockServer.close()
   })
 })
 
@@ -80,6 +91,10 @@ describe("http-method constants", () => {
 
 describe("requestLocation inference", () => {
   it("infers 'params' from GET", async () => {
+    mockInstanceWithoutInterceptors
+      .onGet("/search", { params: { q: "test" } })
+      .reply(200, { results: ["a", "b"] })
+
     const api = createApiCall({
       type: "public",
       method: HttpMethod.GET,
@@ -94,6 +109,8 @@ describe("requestLocation inference", () => {
   })
 
   it("infers 'data' from POST", async () => {
+    mockInstanceWithoutInterceptors.onPost("/test").reply(200, { created: true })
+
     const api = createApiCall({
       type: "public",
       method: HttpMethod.POST,
