@@ -1,6 +1,8 @@
 import "@testing-library/jest-dom/vitest"
 import { afterEach, beforeAll, vi } from "vitest"
 import { cleanup } from "@testing-library/react"
+import "@base-ui/react/button"
+import "@base-ui/react/select"
 
 beforeAll(() => {
   if (!window.matchMedia) {
