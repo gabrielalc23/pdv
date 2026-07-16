@@ -1,4 +1,4 @@
-package checkout
+package checkout_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gabrielalc23/pdv/internal/checkout"
 	"github.com/gabrielalc23/pdv/internal/fiscal"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/jackc/pgx/v5"
@@ -55,7 +56,7 @@ func TestCheckoutCompletesSaleWithPaymentsInventoryAndFiscalSuccess(t *testing.T
 			return inventoryMovementFixture(productID, database.InventoryMovementTypeSALE, "2.000", "10.000", "8.000"), nil
 		},
 		createPaymentFn: func(_ context.Context, arg database.CreatePaymentParams) (database.CreatePaymentRow, error) {
-			if arg.IdempotencyKey != paymentIdempotencyKey(sale.id, 0) {
+			if arg.IdempotencyKey != checkout.PaymentIdempotencyKey(sale.id, 0) {
 				t.Fatalf("unexpected idempotency key: %s", arg.IdempotencyKey)
 			}
 			return createPaymentRowFixture(sale.id, paymentMethodID, "100.00", "100.00", "0.00", 1, arg.IdempotencyKey), nil
@@ -91,10 +92,10 @@ func TestCheckoutCompletesSaleWithPaymentsInventoryAndFiscalSuccess(t *testing.T
 		},
 	}
 
-	svc := NewService(&checkoutFakeTxManager{tx: tx}, provider)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, provider, nil)
 
-	resp, err := svc.Checkout(context.Background(), sale.id.String(), CheckoutInput{
-		Payments: []CheckoutPaymentInput{{
+	resp, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
+		Payments: []checkout.CheckoutPaymentInput{{
 			PaymentMethodID: paymentMethodID.String(),
 			Amount:          "100.00",
 		}},
@@ -190,10 +191,10 @@ func TestCheckoutSupportsSplitPayments(t *testing.T) {
 		},
 	}
 
-	svc := NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }}, nil)
 
-	resp, err := svc.Checkout(context.Background(), sale.id.String(), CheckoutInput{
-		Payments: []CheckoutPaymentInput{
+	resp, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
+		Payments: []checkout.CheckoutPaymentInput{
 			{PaymentMethodID: pixID.String(), Amount: "60.00"},
 			{PaymentMethodID: cashID.String(), Amount: "40.00"},
 		},
@@ -227,15 +228,15 @@ func TestCheckoutRejectsZeroAndNegativeAmounts(t *testing.T) {
 		},
 	}
 
-	svc := NewService(&checkoutFakeTxManager{tx: tx}, nil)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, nil, nil)
 
 	cases := []string{"0.00", "-1.00"}
 	for _, amount := range cases {
 		t.Run(amount, func(t *testing.T) {
-			_, err := svc.Checkout(context.Background(), sale.id.String(), CheckoutInput{
-				Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: amount}},
+			_, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
+				Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: amount}},
 			})
-			var validationErr *ValidationError
+			var validationErr *checkout.ValidationError
 			if !errors.As(err, &validationErr) || !strings.Contains(validationErr.Field, "amount") {
 				t.Fatalf("expected validation error for amount, got %v", err)
 			}
@@ -302,10 +303,10 @@ func TestCheckoutAggregatesRepeatedProductsAndProcessesInventoryDeterministicall
 		},
 	}
 
-	svc := NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }}, nil)
 
-	_, err := svc.Checkout(context.Background(), sale.id.String(), CheckoutInput{
-		Payments: []CheckoutPaymentInput{{
+	_, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
+		Payments: []checkout.CheckoutPaymentInput{{
 			PaymentMethodID: paymentMethodID.String(),
 			Amount:          "35.00",
 		}},
@@ -341,45 +342,45 @@ func TestCheckoutValidatesPayments(t *testing.T) {
 
 	tests := []struct {
 		name    string
-		input   CheckoutInput
+		input   checkout.CheckoutInput
 		method  database.PaymentMethod
 		wantErr error
 	}{
 		{
 			name:    "payments required",
-			input:   CheckoutInput{},
+			input:   checkout.CheckoutInput{},
 			method:  activeMethod,
-			wantErr: ErrPaymentsRequired,
+			wantErr: checkout.ErrPaymentsRequired,
 		},
 		{
 			name:    "amount mismatch",
-			input:   CheckoutInput{Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "90.00"}}},
+			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "90.00"}}},
 			method:  activeMethod,
-			wantErr: ErrPaymentAmountMismatch,
+			wantErr: checkout.ErrPaymentAmountMismatch,
 		},
 		{
 			name:    "method not found",
-			input:   CheckoutInput{Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}}},
+			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}}},
 			method:  database.PaymentMethod{},
-			wantErr: ErrPaymentMethodNotFound,
+			wantErr: checkout.ErrPaymentMethodNotFound,
 		},
 		{
 			name:    "method inactive",
-			input:   CheckoutInput{Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}}},
+			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}}},
 			method:  inactiveMethod,
-			wantErr: ErrPaymentMethodInactive,
+			wantErr: checkout.ErrPaymentMethodInactive,
 		},
 		{
 			name:    "cash invalid received amount",
-			input:   CheckoutInput{Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "50.00", ReceivedAmount: strPtr("40.00")}}},
+			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "50.00", ReceivedAmount: strPtr("40.00")}}},
 			method:  cashMethod,
-			wantErr: ErrInvalidReceivedAmount,
+			wantErr: checkout.ErrInvalidReceivedAmount,
 		},
 		{
 			name:    "installments invalid",
-			input:   CheckoutInput{Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00", Installments: intPtr(4)}}},
+			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00", Installments: intPtr(4)}}},
 			method:  creditMethod,
-			wantErr: ErrInvalidInstallments,
+			wantErr: checkout.ErrInvalidInstallments,
 		},
 	}
 
@@ -399,7 +400,7 @@ func TestCheckoutValidatesPayments(t *testing.T) {
 					return tc.method, nil
 				},
 			}
-			svc := NewService(&checkoutFakeTxManager{tx: tx}, nil)
+			svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, nil, nil)
 
 			_, err := svc.Checkout(context.Background(), sale.id.String(), tc.input)
 			if !errors.Is(err, tc.wantErr) {
@@ -457,13 +458,13 @@ func TestCheckoutRollsBackWhenSecondProductFails(t *testing.T) {
 	}
 
 	txManager := &checkoutFakeTxManager{tx: tx}
-	svc := NewService(txManager, nil)
+	svc := checkout.NewService(txManager, nil, nil)
 
-	_, err := svc.Checkout(context.Background(), sale.id.String(), CheckoutInput{
-		Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "60.00"}},
+	_, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
+		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "60.00"}},
 	})
-	if !errors.Is(err, ErrInsufficientInventory) {
-		t.Fatalf("expected ErrInsufficientInventory, got %v", err)
+	if !errors.Is(err, checkout.ErrInsufficientInventory) {
+		t.Fatalf("expected checkout.ErrInsufficientInventory, got %v", err)
 	}
 	if !txManager.rolledBack || txManager.committed {
 		t.Fatalf("expected rollback without commit, got committed=%v rolledBack=%v", txManager.committed, txManager.rolledBack)
@@ -514,10 +515,10 @@ func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 		},
 	}
 
-	svc := NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }}, nil)
 
-	first, err := svc.Checkout(context.Background(), sale.id.String(), CheckoutInput{
-		Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
+	first, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
+		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
 	})
 	if err != nil {
 		t.Fatalf("first checkout returned error: %v", err)
@@ -526,11 +527,11 @@ func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 		t.Fatalf("unexpected first checkout result: %+v", first.Sale)
 	}
 
-	_, err = svc.Checkout(context.Background(), sale.id.String(), CheckoutInput{
-		Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
+	_, err = svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
+		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
 	})
-	if !errors.Is(err, ErrSaleAlreadyCompleted) {
-		t.Fatalf("expected ErrSaleAlreadyCompleted, got %v", err)
+	if !errors.Is(err, checkout.ErrSaleAlreadyCompleted) {
+		t.Fatalf("expected checkout.ErrSaleAlreadyCompleted, got %v", err)
 	}
 }
 
@@ -575,10 +576,10 @@ func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 		},
 	}
 
-	svc := NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Fail: true})
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Fail: true}, nil)
 
-	resp, err := svc.Checkout(context.Background(), sale.id.String(), CheckoutInput{
-		Payments: []CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
+	resp, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
+		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
 	})
 	if err != nil {
 		t.Fatalf("Checkout returned error: %v", err)
@@ -592,29 +593,29 @@ func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 }
 
 func TestNormalizeCheckoutInputRequiresPayments(t *testing.T) {
-	svc := NewService(&checkoutFakeTxManager{tx: &checkoutFakeTxQueries{}}, nil)
-	_, err := svc.validatePayments(context.Background(), &checkoutFakeTxQueries{}, mustNumeric("100.00"), nil)
-	if !errors.Is(err, ErrPaymentsRequired) {
-		t.Fatalf("expected ErrPaymentsRequired, got %v", err)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: &checkoutFakeTxQueries{}}, nil, nil)
+	_, err := svc.ValidatePayments(context.Background(), &checkoutFakeTxQueries{}, mustNumeric("100.00"), nil)
+	if !errors.Is(err, checkout.ErrPaymentsRequired) {
+		t.Fatalf("expected checkout.ErrPaymentsRequired, got %v", err)
 	}
 }
 
 func TestPaymentIdempotencyKey(t *testing.T) {
 	var id pgtype.UUID
 	_ = id.Scan("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-	got := paymentIdempotencyKey(id, 2)
+	got := checkout.PaymentIdempotencyKey(id, 2)
 	if got == "" {
 		t.Fatalf("expected idempotency key")
 	}
 }
 
 type checkoutFakeTxManager struct {
-	tx         TxQueries
+	tx         checkout.TxQueries
 	committed  bool
 	rolledBack bool
 }
 
-func (m *checkoutFakeTxManager) WithTx(_ context.Context, fn func(TxQueries) error) error {
+func (m *checkoutFakeTxManager) WithTx(_ context.Context, fn func(checkout.TxQueries) error) error {
 	if m.tx == nil {
 		return errors.New("nil transaction")
 	}
@@ -974,7 +975,7 @@ func timestamptz(value time.Time) pgtype.Timestamptz {
 }
 
 func numericString(value pgtype.Numeric) string {
-	got, err := moneyToString(value)
+	got, err := checkout.MoneyToString(value)
 	if err != nil {
 		panic(err)
 	}
@@ -982,7 +983,7 @@ func numericString(value pgtype.Numeric) string {
 }
 
 func quantityString(value pgtype.Numeric) string {
-	got, err := quantityToString(value)
+	got, err := checkout.QuantityToString(value)
 	if err != nil {
 		panic(err)
 	}

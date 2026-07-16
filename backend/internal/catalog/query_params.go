@@ -34,7 +34,7 @@ func parseListQuery(r *http.Request) (ListCatalogInput, error) {
 			return ListCatalogInput{}, newValidationError("activeOnly", "must be true or false")
 		}
 		input.ActiveOnly = activeOnly
-		input.activeOnlySet = true
+		input.ActiveOnlySet = true
 	}
 
 	if raw, ok := query["inStockOnly"]; ok && len(raw) > 0 {

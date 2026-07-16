@@ -59,6 +59,7 @@ type Querier interface {
 	ListPaymentMethods(ctx context.Context) ([]PaymentMethod, error)
 	ListPaymentsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]ListPaymentsBySaleIDRow, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
+	ListReceiptPaymentsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]MvReceiptPayment, error)
 	ListSaleItemsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]SaleItem, error)
 	ListSales(ctx context.Context, arg ListSalesParams) ([]ListSalesRow, error)
 	LockFiscalDocumentByID(ctx context.Context, id pgtype.UUID) (FiscalDocument, error)

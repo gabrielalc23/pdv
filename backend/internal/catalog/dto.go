@@ -8,7 +8,7 @@ type ListCatalogInput struct {
 	PageSize      *int
 	ActiveOnly    bool
 	InStockOnly   bool
-	activeOnlySet bool
+	ActiveOnlySet bool
 }
 
 type CatalogProductResponse struct {

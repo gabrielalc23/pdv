@@ -1,4 +1,4 @@
-package payments
+package payments_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gabrielalc23/pdv/internal/payments"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,7 +14,7 @@ import (
 
 func TestListPaymentMethodsReturnsActiveOnlyAndEmptySlice(t *testing.T) {
 	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-	svc := NewService(&paymentsFakeStore{
+	svc := payments.NewService(&paymentsFakeStore{
 		listActivePaymentMethodsFn: func(context.Context) ([]database.PaymentMethod, error) {
 			return []database.PaymentMethod{paymentMethodFixture(methodID, "pix", "PIX", database.PaymentMethodKindPIX, true)}, nil
 		},
@@ -32,7 +33,7 @@ func TestListPaymentMethodsReturnsActiveOnlyAndEmptySlice(t *testing.T) {
 }
 
 func TestListPaymentMethodsPropagatesError(t *testing.T) {
-	svc := NewService(&paymentsFakeStore{
+	svc := payments.NewService(&paymentsFakeStore{
 		listActivePaymentMethodsFn: func(context.Context) ([]database.PaymentMethod, error) {
 			return nil, errors.New("db down")
 		},
@@ -49,7 +50,7 @@ func TestListSalePaymentsReturnsOrderedPayments(t *testing.T) {
 	pixID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	cashID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab")
 
-	svc := NewService(&paymentsFakeStore{
+	svc := payments.NewService(&paymentsFakeStore{
 		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
@@ -88,7 +89,7 @@ func TestListSalePaymentsReturnsOrderedPayments(t *testing.T) {
 
 func TestListSalePaymentsReturnsEmptySliceWhenNone(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
-	svc := NewService(&paymentsFakeStore{
+	svc := payments.NewService(&paymentsFakeStore{
 		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 			return saleFixtureRow(saleID, database.SaleStatusOPEN), nil
 		},
@@ -111,22 +112,22 @@ func TestListSalePaymentsReturnsEmptySliceWhenNone(t *testing.T) {
 
 func TestListSalePaymentsSaleNotFound(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
-	svc := NewService(&paymentsFakeStore{
+	svc := payments.NewService(&paymentsFakeStore{
 		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 			return database.GetSaleByIDRow{}, pgx.ErrNoRows
 		},
 	})
 
 	_, err := svc.ListSalePayments(context.Background(), saleID.String())
-	if !errors.Is(err, ErrSaleNotFound) {
-		t.Fatalf("expected ErrSaleNotFound, got %v", err)
+	if !errors.Is(err, payments.ErrSaleNotFound) {
+		t.Fatalf("expected payments.ErrSaleNotFound, got %v", err)
 	}
 }
 
 func TestListSalePaymentsMethodMissingFails(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
 	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-	svc := NewService(&paymentsFakeStore{
+	svc := payments.NewService(&paymentsFakeStore{
 		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},

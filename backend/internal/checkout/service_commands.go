@@ -57,7 +57,7 @@ func (s *Service) Checkout(ctx context.Context, rawSaleID string, input Checkout
 			return err
 		}
 
-		validatedPayments, err := s.validatePayments(ctx, tx, sale.Total, normalized.Payments)
+		validatedPayments, err := s.ValidatePayments(ctx, tx, sale.Total, normalized.Payments)
 		if err != nil {
 			return err
 		}
@@ -121,10 +121,16 @@ func (s *Service) Checkout(ctx context.Context, rawSaleID string, input Checkout
 	}
 	state.fiscalDocument = authorized
 
+	if s.store != nil {
+		if err := s.store.RefreshReceiptViews(ctx); err != nil {
+			return CheckoutResponse{}, fmt.Errorf("refresh receipt views: %w", err)
+		}
+	}
+
 	return toCheckoutResponse(state)
 }
 
-func (s *Service) validatePayments(ctx context.Context, tx TxQueries, saleTotal pgtype.Numeric, inputs []normalizedCheckoutPaymentInput) ([]validatedCheckoutPayment, error) {
+func (s *Service) ValidatePayments(ctx context.Context, tx TxQueries, saleTotal pgtype.Numeric, inputs []normalizedCheckoutPaymentInput) ([]validatedCheckoutPayment, error) {
 	if len(inputs) == 0 {
 		return nil, ErrPaymentsRequired
 	}
@@ -412,7 +418,7 @@ func (s *Service) createPayments(ctx context.Context, tx TxQueries, saleID pgtyp
 			ChangeAmount:      derefNumeric(input.changeAmount),
 			Installments:      input.installments,
 			ExternalReference: paymentExternalReference(input.externalReference),
-			IdempotencyKey:    paymentIdempotencyKey(saleID, i),
+			IdempotencyKey:    PaymentIdempotencyKey(saleID, i),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("create payment: %w", err)
@@ -441,7 +447,7 @@ func derefNumeric(value *pgtype.Numeric) pgtype.Numeric {
 	return *value
 }
 
-func paymentIdempotencyKey(saleID pgtype.UUID, index int) string {
+func PaymentIdempotencyKey(saleID pgtype.UUID, index int) string {
 	return "checkout:" + saleID.String() + ":payment:" + intToString(index)
 }
 

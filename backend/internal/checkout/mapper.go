@@ -44,22 +44,22 @@ func toCheckoutResponse(state checkoutState) (CheckoutResponse, error) {
 }
 
 func toCheckoutSaleResponse(row database.CompleteSaleRow) (CheckoutSaleResponse, error) {
-	subtotal, err := moneyToString(row.Subtotal)
+	subtotal, err := MoneyToString(row.Subtotal)
 	if err != nil {
 		return CheckoutSaleResponse{}, fmt.Errorf("format subtotal: %w", err)
 	}
 
-	discount, err := moneyToString(row.Discount)
+	discount, err := MoneyToString(row.Discount)
 	if err != nil {
 		return CheckoutSaleResponse{}, fmt.Errorf("format discount: %w", err)
 	}
 
-	addition, err := moneyToString(row.Addition)
+	addition, err := MoneyToString(row.Addition)
 	if err != nil {
 		return CheckoutSaleResponse{}, fmt.Errorf("format addition: %w", err)
 	}
 
-	total, err := moneyToString(row.Total)
+	total, err := MoneyToString(row.Total)
 	if err != nil {
 		return CheckoutSaleResponse{}, fmt.Errorf("format total: %w", err)
 	}
@@ -82,14 +82,14 @@ func toCheckoutSaleResponse(row database.CompleteSaleRow) (CheckoutSaleResponse,
 }
 
 func toCheckoutPaymentResponse(row database.ApprovePaymentRow, method database.PaymentMethod) (CheckoutPaymentResponse, error) {
-	amount, err := moneyToString(row.Amount)
+	amount, err := MoneyToString(row.Amount)
 	if err != nil {
 		return CheckoutPaymentResponse{}, fmt.Errorf("format amount: %w", err)
 	}
 
 	var receivedAmount *string
 	if row.ReceivedAmount.Valid {
-		value, err := moneyToString(row.ReceivedAmount)
+		value, err := MoneyToString(row.ReceivedAmount)
 		if err != nil {
 			return CheckoutPaymentResponse{}, fmt.Errorf("format received amount: %w", err)
 		}
@@ -98,7 +98,7 @@ func toCheckoutPaymentResponse(row database.ApprovePaymentRow, method database.P
 
 	var changeAmount *string
 	if row.ChangeAmount.Valid {
-		value, err := moneyToString(row.ChangeAmount)
+		value, err := MoneyToString(row.ChangeAmount)
 		if err != nil {
 			return CheckoutPaymentResponse{}, fmt.Errorf("format change amount: %w", err)
 		}
@@ -213,7 +213,7 @@ func toFiscalDocumentResponse(row database.FiscalDocument) FiscalDocumentRespons
 }
 
 func toFiscalAuthorizationInput(state checkoutState) (fiscal.AuthorizationInput, error) {
-	saleTotal, err := moneyToString(state.sale.Total)
+	saleTotal, err := MoneyToString(state.sale.Total)
 	if err != nil {
 		return fiscal.AuthorizationInput{}, fmt.Errorf("format sale total: %w", err)
 	}

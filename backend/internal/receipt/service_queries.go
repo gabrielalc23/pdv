@@ -32,9 +32,9 @@ func (s *Service) Get(ctx context.Context, rawSaleID string) (ReceiptResponse, e
 		return ReceiptResponse{}, fmt.Errorf("list sale items: %w", err)
 	}
 
-	payments, err := s.store.ListPaymentsBySaleID(ctx, saleID)
+	payments, err := s.store.ListReceiptPaymentsBySaleID(ctx, saleID)
 	if err != nil {
-		return ReceiptResponse{}, fmt.Errorf("list payments: %w", err)
+		return ReceiptResponse{}, fmt.Errorf("list receipt payments: %w", err)
 	}
 
 	fiscalDoc, err := s.store.GetFiscalDocumentBySaleID(ctx, saleID)
@@ -45,7 +45,7 @@ func (s *Service) Get(ctx context.Context, rawSaleID string) (ReceiptResponse, e
 		return ReceiptResponse{}, fmt.Errorf("get fiscal document: %w", err)
 	}
 
-	result, err := toReceiptResponse(ctx, sale, items, payments, fiscalDoc, s.store)
+	result, err := toReceiptResponse(sale, items, payments, fiscalDoc)
 	if err != nil {
 		return ReceiptResponse{}, err
 	}

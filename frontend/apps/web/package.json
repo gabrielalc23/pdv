@@ -12,13 +12,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pdv/errors": "workspace:*",
+    "@pdv/http": "workspace:*",
     "@pdv/ui-kit": "workspace:*",
+    "@pdv/utils": "workspace:*",
     "@tailwindcss/vite": "^4.3.2",
+    "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-router-devtools": "^1.167.0",
+    "axios": "^1.13.6",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "tailwindcss": "^4.3.2"
+    "tailwindcss": "^4.3.2",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@babel/core": "^7.29.7",
@@ -27,8 +33,11 @@
     "@pdv/prettier": "workspace:*",
     "@pdv/types": "workspace:*",
     "@pdv/typescript": "workspace:*",
+    "@playwright/test": "^1.61.1",
     "@rolldown/plugin-babel": "^0.2.3",
     "@tanstack/router-plugin": "^1.168.20",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/babel__core": "^7.20.5",
     "@types/node": "^24.13.2",
     "@types/react": "^19.2.17",
@@ -39,9 +48,12 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
+    "jsdom": "^29.1.1",
+    "msw": "^2.15.0",
     "prettier": "^3.8.2",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.62.0",
-    "vite": "^8.1.1"
+    "vite": "^8.1.1",
+    "vitest": "^4.1.10"
   }
 }

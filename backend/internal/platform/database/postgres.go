@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -60,4 +61,19 @@ func (s *Store) BeginTx(ctx context.Context, opts pgx.TxOptions) (*Tx, error) {
 		tx:      tx,
 		Queries: s.Queries.WithTx(tx),
 	}, nil
+}
+
+// RefreshReceiptViews refreshes the materialized views that back the receipt
+// read model so they reflect payments committed by the most recent checkout.
+// It must be called outside of a transaction. CONCURRENTLY avoids blocking
+// concurrent readers of the receipt endpoints.
+func (s *Store) RefreshReceiptViews(ctx context.Context) error {
+	if s == nil || s.Pool == nil {
+		return ErrNilPool
+	}
+
+	if _, err := s.Pool.Exec(ctx, "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_receipt_payments"); err != nil {
+		return fmt.Errorf("refresh receipt materialized views: %w", err)
+	}
+	return nil
 }

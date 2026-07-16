@@ -11,22 +11,22 @@ import (
 )
 
 func toSaleItemResponse(item database.SaleItem) (SaleItemResponse, error) {
-	unitPrice, err := numericToMoneyString(item.UnitPrice)
+	unitPrice, err := NumericToMoneyString(item.UnitPrice)
 	if err != nil {
 		return SaleItemResponse{}, fmt.Errorf("format unit price: %w", err)
 	}
 
-	quantity, err := numericToQuantityString(item.Quantity)
+	quantity, err := NumericToQuantityString(item.Quantity)
 	if err != nil {
 		return SaleItemResponse{}, fmt.Errorf("format quantity: %w", err)
 	}
 
-	discount, err := numericToMoneyString(item.Discount)
+	discount, err := NumericToMoneyString(item.Discount)
 	if err != nil {
 		return SaleItemResponse{}, fmt.Errorf("format discount: %w", err)
 	}
 
-	total, err := numericToMoneyString(item.Total)
+	total, err := NumericToMoneyString(item.Total)
 	if err != nil {
 		return SaleItemResponse{}, fmt.Errorf("format total: %w", err)
 	}
@@ -108,22 +108,22 @@ func toSaleHeaderResponseFromColumns(
 	openedAt, completedAt, cancelledAt, createdAt, updatedAt pgtype.Timestamptz,
 	idempotencyKey string,
 ) (SaleListItemResponse, error) {
-	subtotalString, err := numericToMoneyString(subtotal)
+	subtotalString, err := NumericToMoneyString(subtotal)
 	if err != nil {
 		return SaleListItemResponse{}, fmt.Errorf("format subtotal: %w", err)
 	}
 
-	discountString, err := numericToMoneyString(discount)
+	discountString, err := NumericToMoneyString(discount)
 	if err != nil {
 		return SaleListItemResponse{}, fmt.Errorf("format discount: %w", err)
 	}
 
-	additionString, err := numericToMoneyString(addition)
+	additionString, err := NumericToMoneyString(addition)
 	if err != nil {
 		return SaleListItemResponse{}, fmt.Errorf("format addition: %w", err)
 	}
 
-	totalString, err := numericToMoneyString(total)
+	totalString, err := NumericToMoneyString(total)
 	if err != nil {
 		return SaleListItemResponse{}, fmt.Errorf("format total: %w", err)
 	}
@@ -163,7 +163,7 @@ func toSaleListItemResponse(row database.ListSalesRow) (SaleListItemResponse, er
 	)
 }
 
-func numericToMoneyString(value pgtype.Numeric) (string, error) {
+func NumericToMoneyString(value pgtype.Numeric) (string, error) {
 	intVal, err := numericToScaledInt(value, 2)
 	if err != nil {
 		return "", err
@@ -172,7 +172,7 @@ func numericToMoneyString(value pgtype.Numeric) (string, error) {
 	return scaledIntToString(intVal, 2), nil
 }
 
-func numericToQuantityString(value pgtype.Numeric) (string, error) {
+func NumericToQuantityString(value pgtype.Numeric) (string, error) {
 	intVal, err := numericToScaledInt(value, 3)
 	if err != nil {
 		return "", err

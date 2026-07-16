@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Unit & E2E tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.4-alpine3.23
+        env:
+          POSTGRES_DB: pdv
+          POSTGRES_USER: pdv
+          POSTGRES_PASSWORD: pdv
+          POSTGRES_INITDB_ARGS: "--data-checksums"
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pdv -d pdv"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 15
+          --health-start-period 5s
+    env:
+      DATABASE_URL: "postgres://pdv:pdv@localhost:5432/pdv?sslmode=disable"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26.5"
+          cache-dependency-path: backend/go.sum
+
+      - name: Verify sqlc generation is up to date
+        working-directory: backend
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          sqlc diff || (echo "sqlc generated code is out of date, run 'sqlc generate'"; exit 1)
+
+      - name: Run unit tests
+        working-directory: backend
+        run: go test -count=1 ./tests/unit/...
+
+      - name: Run e2e tests
+        working-directory: backend
+        run: go test -count=1 ./tests/e2e/...
+
+      - name: Vet
+        working-directory: backend
+        run: go vet ./...

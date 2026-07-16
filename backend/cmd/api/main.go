@@ -63,7 +63,7 @@ func main() {
 
 	fiscalProvider := &fiscal.MockProvider{}
 
-	checkoutService := checkout.NewService(checkout.NewTxManager(store), fiscalProvider)
+	checkoutService := checkout.NewService(checkout.NewTxManager(store), fiscalProvider, store)
 	checkoutHandler := checkout.NewHandler(checkoutService)
 	checkout.RegisterRoutes(router, checkoutHandler)
 

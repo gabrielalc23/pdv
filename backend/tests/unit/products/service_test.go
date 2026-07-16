@@ -1,4 +1,4 @@
-package products
+package products_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/products"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -33,8 +34,8 @@ func TestCreateProductValid(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	resp, err := svc.Create(context.Background(), UpsertProductInput{
+	svc := products.NewService(store)
+	resp, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:     " COCA-2L ",
 		Barcode: strPtr(" 7890000000000 "),
 		Name:    " Coca-Cola 2L ",
@@ -61,9 +62,9 @@ func TestCreateProductValid(t *testing.T) {
 }
 
 func TestCreateProductSKUEmpty(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := products.NewService(&fakeStore{})
 
-	_, err := svc.Create(context.Background(), UpsertProductInput{
+	_, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:   "   ",
 		Name:  "Coca-Cola 2L",
 		Price: "12.90",
@@ -72,9 +73,9 @@ func TestCreateProductSKUEmpty(t *testing.T) {
 }
 
 func TestCreateProductNameEmpty(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := products.NewService(&fakeStore{})
 
-	_, err := svc.Create(context.Background(), UpsertProductInput{
+	_, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:   "COCA-2L",
 		Name:  "   ",
 		Price: "12.90",
@@ -83,9 +84,9 @@ func TestCreateProductNameEmpty(t *testing.T) {
 }
 
 func TestCreateProductPriceInvalid(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := products.NewService(&fakeStore{})
 
-	_, err := svc.Create(context.Background(), UpsertProductInput{
+	_, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:   "COCA-2L",
 		Name:  "Coca-Cola 2L",
 		Price: "abc",
@@ -94,9 +95,9 @@ func TestCreateProductPriceInvalid(t *testing.T) {
 }
 
 func TestCreateProductPriceNegative(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := products.NewService(&fakeStore{})
 
-	_, err := svc.Create(context.Background(), UpsertProductInput{
+	_, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:   "COCA-2L",
 		Name:  "Coca-Cola 2L",
 		Price: "-1.00",
@@ -105,9 +106,9 @@ func TestCreateProductPriceNegative(t *testing.T) {
 }
 
 func TestCreateProductPriceTooManyDecimals(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := products.NewService(&fakeStore{})
 
-	_, err := svc.Create(context.Background(), UpsertProductInput{
+	_, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:   "COCA-2L",
 		Name:  "Coca-Cola 2L",
 		Price: "1.234",
@@ -116,9 +117,9 @@ func TestCreateProductPriceTooManyDecimals(t *testing.T) {
 }
 
 func TestCreateProductBarcodeEmptyWhenInformed(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := products.NewService(&fakeStore{})
 
-	_, err := svc.Create(context.Background(), UpsertProductInput{
+	_, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:     "COCA-2L",
 		Barcode: strPtr("   "),
 		Name:    "Coca-Cola 2L",
@@ -128,15 +129,15 @@ func TestCreateProductBarcodeEmptyWhenInformed(t *testing.T) {
 }
 
 func TestGetProductNotFound(t *testing.T) {
-	svc := NewService(&fakeStore{
+	svc := products.NewService(&fakeStore{
 		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
 			return database.Product{}, pgx.ErrNoRows
 		},
 	})
 
 	_, err := svc.Get(context.Background(), "01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
-	if !errors.Is(err, ErrProductNotFound) {
-		t.Fatalf("expected ErrProductNotFound, got %v", err)
+	if !errors.Is(err, products.ErrProductNotFound) {
+		t.Fatalf("expected products.ErrProductNotFound, got %v", err)
 	}
 }
 
@@ -147,14 +148,14 @@ func TestCreateProductDuplicateSKU(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	_, err := svc.Create(context.Background(), UpsertProductInput{
+	svc := products.NewService(store)
+	_, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:   "COCA-2L",
 		Name:  "Coca-Cola 2L",
 		Price: "12.90",
 	})
-	if !errors.Is(err, ErrSKUAlreadyExists) {
-		t.Fatalf("expected ErrSKUAlreadyExists, got %v", err)
+	if !errors.Is(err, products.ErrSKUAlreadyExists) {
+		t.Fatalf("expected products.ErrSKUAlreadyExists, got %v", err)
 	}
 }
 
@@ -168,15 +169,15 @@ func TestCreateProductDuplicateBarcode(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store)
-	_, err := svc.Create(context.Background(), UpsertProductInput{
+	svc := products.NewService(store)
+	_, err := svc.Create(context.Background(), products.UpsertProductInput{
 		SKU:     "COCA-2L",
 		Barcode: strPtr("7890000000000"),
 		Name:    "Coca-Cola 2L",
 		Price:   "12.90",
 	})
-	if !errors.Is(err, ErrBarcodeAlreadyExists) {
-		t.Fatalf("expected ErrBarcodeAlreadyExists, got %v", err)
+	if !errors.Is(err, products.ErrBarcodeAlreadyExists) {
+		t.Fatalf("expected products.ErrBarcodeAlreadyExists, got %v", err)
 	}
 }
 
@@ -184,7 +185,7 @@ func TestListProductsDefaultPagination(t *testing.T) {
 	var capturedCount database.CountProductsParams
 	var capturedList database.ListProductsParams
 
-	svc := NewService(&fakeStore{
+	svc := products.NewService(&fakeStore{
 		countProductsFn: func(_ context.Context, arg database.CountProductsParams) (int64, error) {
 			capturedCount = arg
 			return 1, nil
@@ -195,7 +196,7 @@ func TestListProductsDefaultPagination(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.List(context.Background(), ListProductsInput{})
+	resp, err := svc.List(context.Background(), products.ListProductsInput{})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -219,10 +220,10 @@ func TestListProductsDefaultPagination(t *testing.T) {
 }
 
 func TestListProductsPageSizeMaximum(t *testing.T) {
-	svc := NewService(&fakeStore{})
+	svc := products.NewService(&fakeStore{})
 
 	pageSize := 101
-	_, err := svc.List(context.Background(), ListProductsInput{
+	_, err := svc.List(context.Background(), products.ListProductsInput{
 		PageSize: &pageSize,
 	})
 	requireValidationField(t, err, "pageSize")
@@ -231,7 +232,7 @@ func TestListProductsPageSizeMaximum(t *testing.T) {
 func TestActivateProduct(t *testing.T) {
 	t.Run("activates inactive product", func(t *testing.T) {
 		activated := false
-		svc := NewService(&fakeStore{
+		svc := products.NewService(&fakeStore{
 			getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
 				product := productFixture(false)
 				return product, nil
@@ -257,7 +258,7 @@ func TestActivateProduct(t *testing.T) {
 	t.Run("returns active product unchanged", func(t *testing.T) {
 		activated := false
 		activeProduct := productFixture(true)
-		svc := NewService(&fakeStore{
+		svc := products.NewService(&fakeStore{
 			getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
 				return activeProduct, nil
 			},
@@ -284,7 +285,7 @@ func TestDeactivateProduct(t *testing.T) {
 	t.Run("deactivates active product", func(t *testing.T) {
 		deactivated := false
 		activeProduct := productFixture(true)
-		svc := NewService(&fakeStore{
+		svc := products.NewService(&fakeStore{
 			getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
 				return activeProduct, nil
 			},
@@ -309,7 +310,7 @@ func TestDeactivateProduct(t *testing.T) {
 	t.Run("returns inactive product unchanged", func(t *testing.T) {
 		deactivated := false
 		inactiveProduct := productFixture(false)
-		svc := NewService(&fakeStore{
+		svc := products.NewService(&fakeStore{
 			getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
 				return inactiveProduct, nil
 			},
@@ -430,7 +431,7 @@ func productFixture(active bool) database.Product {
 	}
 }
 
-func assertProductResponse(t *testing.T, resp ProductResponse) {
+func assertProductResponse(t *testing.T, resp products.ProductResponse) {
 	t.Helper()
 
 	if resp.ID == "" {
@@ -447,9 +448,9 @@ func assertProductResponse(t *testing.T, resp ProductResponse) {
 func requireValidationField(t *testing.T, err error, field string) {
 	t.Helper()
 
-	var validationErr *ValidationError
+	var validationErr *products.ValidationError
 	if !errors.As(err, &validationErr) {
-		t.Fatalf("expected ValidationError, got %v", err)
+		t.Fatalf("expected products.ValidationError, got %v", err)
 	}
 	if validationErr.Field != field {
 		t.Fatalf("expected field %q, got %q", field, validationErr.Field)

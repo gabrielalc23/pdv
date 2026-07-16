@@ -1,4 +1,4 @@
-package fiscal
+package fiscal_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gabrielalc23/pdv/internal/fiscal"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -14,7 +15,7 @@ import (
 func TestGetBySaleIDReturnsFiscalDocument(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
 	docID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-	svc := NewService(&fiscalFakeStore{
+	svc := fiscal.NewService(&fiscalFakeStore{
 		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
@@ -34,7 +35,7 @@ func TestGetBySaleIDReturnsFiscalDocument(t *testing.T) {
 
 func TestGetBySaleIDDocumentNotFound(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
-	svc := NewService(&fiscalFakeStore{
+	svc := fiscal.NewService(&fiscalFakeStore{
 		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
@@ -44,8 +45,8 @@ func TestGetBySaleIDDocumentNotFound(t *testing.T) {
 	}, nil)
 
 	_, err := svc.GetBySaleID(context.Background(), saleID.String())
-	if !errors.Is(err, ErrFiscalDocumentNotFound) {
-		t.Fatalf("expected ErrFiscalDocumentNotFound, got %v", err)
+	if !errors.Is(err, fiscal.ErrFiscalDocumentNotFound) {
+		t.Fatalf("expected fiscal.ErrFiscalDocumentNotFound, got %v", err)
 	}
 }
 
@@ -68,8 +69,8 @@ func TestAuthorizeSuccessUpdatesDocument(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, &MockProvider{Now: func() time.Time { return authorizedAt }})
-	resp, err := svc.Authorize(context.Background(), saleID.String(), AuthorizationInput{SaleID: saleID.String(), SaleNumber: 77, SaleTotal: "100.00"})
+	svc := fiscal.NewService(store, &fiscal.MockProvider{Now: func() time.Time { return authorizedAt }})
+	resp, err := svc.Authorize(context.Background(), saleID.String(), fiscal.AuthorizationInput{SaleID: saleID.String(), SaleNumber: 77, SaleTotal: "100.00"})
 	if err != nil {
 		t.Fatalf("Authorize returned error: %v", err)
 	}
@@ -99,10 +100,10 @@ func TestAuthorizeFailureUpdatesDocumentError(t *testing.T) {
 		},
 	}
 
-	svc := NewService(store, &MockProvider{Fail: true})
-	resp, err := svc.Authorize(context.Background(), saleID.String(), AuthorizationInput{SaleID: saleID.String(), SaleNumber: 77, SaleTotal: "100.00"})
-	if !errors.Is(err, ErrFiscalAuthorizationFailed) {
-		t.Fatalf("expected ErrFiscalAuthorizationFailed, got %v", err)
+	svc := fiscal.NewService(store, &fiscal.MockProvider{Fail: true})
+	resp, err := svc.Authorize(context.Background(), saleID.String(), fiscal.AuthorizationInput{SaleID: saleID.String(), SaleNumber: 77, SaleTotal: "100.00"})
+	if !errors.Is(err, fiscal.ErrFiscalAuthorizationFailed) {
+		t.Fatalf("expected fiscal.ErrFiscalAuthorizationFailed, got %v", err)
 	}
 	if resp.Status != string(database.FiscalDocumentStatusERROR) {
 		t.Fatalf("unexpected response: %+v", resp)
@@ -113,8 +114,8 @@ func TestAuthorizeFailureUpdatesDocumentError(t *testing.T) {
 }
 
 func TestMockProviderAuthorizeFailure(t *testing.T) {
-	p := &MockProvider{Fail: true}
-	_, err := p.Authorize(context.Background(), AuthorizationInput{SaleID: "1", SaleNumber: 1, SaleTotal: "10.00"})
+	p := &fiscal.MockProvider{Fail: true}
+	_, err := p.Authorize(context.Background(), fiscal.AuthorizationInput{SaleID: "1", SaleNumber: 1, SaleTotal: "10.00"})
 	if err == nil {
 		t.Fatalf("expected error")
 	}

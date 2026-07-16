@@ -81,6 +81,27 @@ go vet ./...
 go test -count=1 ./...
 ```
 
+### End-to-end tests
+
+The e2e suite (`tests/e2e`) boots the real HTTP server against a throwaway
+PostgreSQL database, runs the migrations, seeds the payment methods, and
+exercises the full API surface through HTTP.
+
+It needs a PostgreSQL reachable at `DATABASE_URL`
+(default `postgres://pdv:pdv@localhost:5432/pdv?sslmode=disable`). If no
+database is reachable, the suite automatically starts one via
+`docker compose -f docker-compose.test.yml up -d`.
+
+```sh
+# from the backend directory
+make test-e2e
+# or
+go test -count=1 ./tests/e2e/...
+```
+
+A GitHub Actions workflow (`.github/workflows/ci.yml`) runs unit and e2e tests
+on every push/PR using a Postgres service container.
+
 ## API Overview
 
 All API responses use JSON. Amounts and quantities are represented as strings to

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/gabrielalc23/pdv/internal/fiscal"
+	"github.com/gabrielalc23/pdv/internal/platform/database"
 )
 
 type FiscalProvider interface {
@@ -13,11 +14,13 @@ type FiscalProvider interface {
 type Service struct {
 	txManager      TxManager
 	fiscalProvider FiscalProvider
+	store          *database.Store
 }
 
-func NewService(txManager TxManager, fiscalProvider FiscalProvider) *Service {
+func NewService(txManager TxManager, fiscalProvider FiscalProvider, store *database.Store) *Service {
 	return &Service{
 		txManager:      txManager,
 		fiscalProvider: fiscalProvider,
+		store:          store,
 	}
 }

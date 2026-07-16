@@ -1,4 +1,4 @@
-package sales
+package sales_test
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/sales"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -23,9 +24,9 @@ func TestCreateSale(t *testing.T) {
 		}
 
 		txManager := &fakeTxManager{tx: tx}
-		svc := NewService(&fakeReadStore{}, txManager)
+		svc := sales.NewService(&fakeReadStore{}, txManager)
 
-		resp, err := svc.Create(context.Background(), CreateSaleInput{IdempotencyKey: "sale-1"})
+		resp, err := svc.Create(context.Background(), sales.CreateSaleInput{IdempotencyKey: "sale-1"})
 		if err != nil {
 			t.Fatalf("Create returned error: %v", err)
 		}
@@ -51,9 +52,9 @@ func TestCreateSale(t *testing.T) {
 			},
 		}
 		txManager := &fakeTxManager{tx: tx}
-		svc := NewService(&fakeReadStore{}, txManager)
+		svc := sales.NewService(&fakeReadStore{}, txManager)
 
-		_, err := svc.Create(context.Background(), CreateSaleInput{IdempotencyKey: "sale-1"})
+		_, err := svc.Create(context.Background(), sales.CreateSaleInput{IdempotencyKey: "sale-1"})
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -74,9 +75,9 @@ func TestCreateSale(t *testing.T) {
 			},
 		}
 		txManager := &fakeTxManager{tx: tx}
-		svc := NewService(&fakeReadStore{}, txManager)
+		svc := sales.NewService(&fakeReadStore{}, txManager)
 
-		_, err := svc.Create(context.Background(), CreateSaleInput{IdempotencyKey: "sale-1"})
+		_, err := svc.Create(context.Background(), sales.CreateSaleInput{IdempotencyKey: "sale-1"})
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -91,7 +92,7 @@ func TestListSales(t *testing.T) {
 		var capturedCount database.NullSaleStatus
 		var capturedList database.ListSalesParams
 
-		svc := NewService(&fakeReadStore{
+		svc := sales.NewService(&fakeReadStore{
 			countSalesFn: func(_ context.Context, arg database.NullSaleStatus) (int64, error) {
 				capturedCount = arg
 				return 1, nil
@@ -102,7 +103,7 @@ func TestListSales(t *testing.T) {
 			},
 		}, &fakeTxManager{})
 
-		resp, err := svc.List(context.Background(), ListSalesInput{})
+		resp, err := svc.List(context.Background(), sales.ListSalesInput{})
 		if err != nil {
 			t.Fatalf("List returned error: %v", err)
 		}
@@ -123,36 +124,36 @@ func TestListSales(t *testing.T) {
 
 	t.Run("rejects page less than 1", func(t *testing.T) {
 		page := 0
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{}).List(context.Background(), ListSalesInput{Page: &page})
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{}).List(context.Background(), sales.ListSalesInput{Page: &page})
 		requireValidationField(t, err, "page")
 	})
 
 	t.Run("rejects page size greater than 100", func(t *testing.T) {
 		pageSize := 101
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{}).List(context.Background(), ListSalesInput{PageSize: &pageSize})
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{}).List(context.Background(), sales.ListSalesInput{PageSize: &pageSize})
 		requireValidationField(t, err, "pageSize")
 	})
 
 	t.Run("rejects invalid status", func(t *testing.T) {
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{}).List(context.Background(), ListSalesInput{Status: "wrong"})
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{}).List(context.Background(), sales.ListSalesInput{Status: "wrong"})
 		requireValidationField(t, err, "status")
 	})
 
 	t.Run("propagates list error", func(t *testing.T) {
-		svc := NewService(&fakeReadStore{
+		svc := sales.NewService(&fakeReadStore{
 			countSalesFn: func(context.Context, database.NullSaleStatus) (int64, error) {
 				return 0, errors.New("count failed")
 			},
 		}, &fakeTxManager{})
 
-		_, err := svc.List(context.Background(), ListSalesInput{})
+		_, err := svc.List(context.Background(), sales.ListSalesInput{})
 		if err == nil {
 			t.Fatalf("expected error")
 		}
 	})
 
 	t.Run("propagates mapper error", func(t *testing.T) {
-		svc := NewService(&fakeReadStore{
+		svc := sales.NewService(&fakeReadStore{
 			countSalesFn: func(context.Context, database.NullSaleStatus) (int64, error) {
 				return 1, nil
 			},
@@ -163,7 +164,7 @@ func TestListSales(t *testing.T) {
 			},
 		}, &fakeTxManager{})
 
-		_, err := svc.List(context.Background(), ListSalesInput{})
+		_, err := svc.List(context.Background(), sales.ListSalesInput{})
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -173,7 +174,7 @@ func TestListSales(t *testing.T) {
 func TestGetSale(t *testing.T) {
 	t.Run("gets sale with items", func(t *testing.T) {
 		item := saleItemFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa"), "1.000", "0.00", "12.90")
-		svc := NewService(&fakeReadStore{
+		svc := sales.NewService(&fakeReadStore{
 			getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 				return saleWithItemsFixture(database.SaleStatusOPEN).get(), nil
 			},
@@ -192,20 +193,20 @@ func TestGetSale(t *testing.T) {
 	})
 
 	t.Run("not found", func(t *testing.T) {
-		svc := NewService(&fakeReadStore{
+		svc := sales.NewService(&fakeReadStore{
 			getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 				return database.GetSaleByIDRow{}, pgx.ErrNoRows
 			},
 		}, &fakeTxManager{})
 
 		_, err := svc.Get(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
-		if !errors.Is(err, ErrSaleNotFound) {
-			t.Fatalf("expected ErrSaleNotFound, got %v", err)
+		if !errors.Is(err, sales.ErrSaleNotFound) {
+			t.Fatalf("expected sales.ErrSaleNotFound, got %v", err)
 		}
 	})
 
 	t.Run("mapper error", func(t *testing.T) {
-		svc := NewService(&fakeReadStore{
+		svc := sales.NewService(&fakeReadStore{
 			getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
 				row := saleWithItemsFixture(database.SaleStatusOPEN).get()
 				row.Subtotal = pgtype.Numeric{}
@@ -250,9 +251,9 @@ func TestAddItem(t *testing.T) {
 		}
 
 		txManager := &fakeTxManager{tx: tx}
-		svc := NewService(&fakeReadStore{}, txManager)
+		svc := sales.NewService(&fakeReadStore{}, txManager)
 
-		resp, err := svc.AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		resp, err := svc.AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "2.500",
 			Discount:  strPtr("2.25"),
@@ -267,26 +268,26 @@ func TestAddItem(t *testing.T) {
 		if capturedCreate.ProductName != productFixture(true).Name || capturedCreate.ProductSKU != productFixture(true).SKU {
 			t.Fatalf("unexpected item snapshot: %+v", capturedCreate)
 		}
-		unitPrice, err := numericToMoneyString(capturedCreate.UnitPrice)
+		unitPrice, err := sales.NumericToMoneyString(capturedCreate.UnitPrice)
 		if err != nil {
 			t.Fatalf("format unit price: %v", err)
 		}
-		expectedUnitPrice, err := numericToMoneyString(productFixture(true).Price)
+		expectedUnitPrice, err := sales.NumericToMoneyString(productFixture(true).Price)
 		if err != nil {
 			t.Fatalf("format expected unit price: %v", err)
 		}
 		if unitPrice != expectedUnitPrice {
 			t.Fatalf("unexpected unit price: %s", unitPrice)
 		}
-		subtotal, err := numericToMoneyString(capturedRecalc.Subtotal)
+		subtotal, err := sales.NumericToMoneyString(capturedRecalc.Subtotal)
 		if err != nil {
 			t.Fatalf("format subtotal: %v", err)
 		}
-		discount, err := numericToMoneyString(capturedRecalc.Discount)
+		discount, err := sales.NumericToMoneyString(capturedRecalc.Discount)
 		if err != nil {
 			t.Fatalf("format discount: %v", err)
 		}
-		total, err := numericToMoneyString(capturedRecalc.Total)
+		total, err := sales.NumericToMoneyString(capturedRecalc.Total)
 		if err != nil {
 			t.Fatalf("format total: %v", err)
 		}
@@ -307,12 +308,12 @@ func TestAddItem(t *testing.T) {
 				return database.Product{}, pgx.ErrNoRows
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "1.000",
 		})
-		if !errors.Is(err, ErrProductNotFound) {
-			t.Fatalf("expected ErrProductNotFound, got %v", err)
+		if !errors.Is(err, sales.ErrProductNotFound) {
+			t.Fatalf("expected sales.ErrProductNotFound, got %v", err)
 		}
 	})
 
@@ -325,12 +326,12 @@ func TestAddItem(t *testing.T) {
 				return productFixture(false), nil
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "1.000",
 		})
-		if !errors.Is(err, ErrProductInactive) {
-			t.Fatalf("expected ErrProductInactive, got %v", err)
+		if !errors.Is(err, sales.ErrProductInactive) {
+			t.Fatalf("expected sales.ErrProductInactive, got %v", err)
 		}
 	})
 
@@ -340,12 +341,12 @@ func TestAddItem(t *testing.T) {
 				return database.LockSaleByIDRow{}, pgx.ErrNoRows
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "1.000",
 		})
-		if !errors.Is(err, ErrSaleNotFound) {
-			t.Fatalf("expected ErrSaleNotFound, got %v", err)
+		if !errors.Is(err, sales.ErrSaleNotFound) {
+			t.Fatalf("expected sales.ErrSaleNotFound, got %v", err)
 		}
 	})
 
@@ -355,17 +356,17 @@ func TestAddItem(t *testing.T) {
 				return saleWithItemsFixture(database.SaleStatusCANCELLED).lock(), nil
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "1.000",
 		})
-		if !errors.Is(err, ErrSaleNotOpen) {
-			t.Fatalf("expected ErrSaleNotOpen, got %v", err)
+		if !errors.Is(err, sales.ErrSaleNotOpen) {
+			t.Fatalf("expected sales.ErrSaleNotOpen, got %v", err)
 		}
 	})
 
 	t.Run("quantity invalid", func(t *testing.T) {
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "abc",
 		})
@@ -373,7 +374,7 @@ func TestAddItem(t *testing.T) {
 	})
 
 	t.Run("discount invalid", func(t *testing.T) {
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "1.000",
 			Discount:  strPtr("abc"),
@@ -390,7 +391,7 @@ func TestAddItem(t *testing.T) {
 				return productFixture(true), nil
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "1.000",
 			Discount:  strPtr("100.00"),
@@ -411,7 +412,7 @@ func TestAddItem(t *testing.T) {
 			},
 		}
 		txManager := &fakeTxManager{tx: tx}
-		_, err := NewService(&fakeReadStore{}, txManager).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, txManager).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "1.000",
 		})
@@ -443,7 +444,7 @@ func TestAddItem(t *testing.T) {
 			},
 		}
 		txManager := &fakeTxManager{tx: tx}
-		_, err := NewService(&fakeReadStore{}, txManager).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, txManager).AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 			ProductID: productFixture(true).ID.String(),
 			Quantity:  "1.000",
 		})
@@ -482,22 +483,22 @@ func TestUpdateItem(t *testing.T) {
 		}
 
 		txManager := &fakeTxManager{tx: tx}
-		resp, err := NewService(&fakeReadStore{}, txManager).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String(), UpdateSaleItemInput{
+		resp, err := sales.NewService(&fakeReadStore{}, txManager).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String(), sales.UpdateSaleItemInput{
 			Quantity: "2.000",
 			Discount: strPtr("1.00"),
 		})
 		if err != nil {
 			t.Fatalf("UpdateItem returned error: %v", err)
 		}
-		quantity, err := numericToQuantityString(capturedUpdate.Quantity)
+		quantity, err := sales.NumericToQuantityString(capturedUpdate.Quantity)
 		if err != nil {
 			t.Fatalf("format quantity: %v", err)
 		}
-		discount, err := numericToMoneyString(capturedUpdate.Discount)
+		discount, err := sales.NumericToMoneyString(capturedUpdate.Discount)
 		if err != nil {
 			t.Fatalf("format discount: %v", err)
 		}
-		total, err := numericToMoneyString(capturedUpdate.Total)
+		total, err := sales.NumericToMoneyString(capturedUpdate.Total)
 		if err != nil {
 			t.Fatalf("format total: %v", err)
 		}
@@ -521,11 +522,11 @@ func TestUpdateItem(t *testing.T) {
 				return database.SaleItem{}, pgx.ErrNoRows
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa").String(), UpdateSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa").String(), sales.UpdateSaleItemInput{
 			Quantity: "2.000",
 		})
-		if !errors.Is(err, ErrSaleItemNotFound) {
-			t.Fatalf("expected ErrSaleItemNotFound, got %v", err)
+		if !errors.Is(err, sales.ErrSaleItemNotFound) {
+			t.Fatalf("expected sales.ErrSaleItemNotFound, got %v", err)
 		}
 	})
 
@@ -538,11 +539,11 @@ func TestUpdateItem(t *testing.T) {
 				return database.SaleItem{}, pgx.ErrNoRows
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab").String(), UpdateSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab").String(), sales.UpdateSaleItemInput{
 			Quantity: "2.000",
 		})
-		if !errors.Is(err, ErrSaleItemNotFound) {
-			t.Fatalf("expected ErrSaleItemNotFound, got %v", err)
+		if !errors.Is(err, sales.ErrSaleItemNotFound) {
+			t.Fatalf("expected sales.ErrSaleItemNotFound, got %v", err)
 		}
 	})
 
@@ -552,11 +553,11 @@ func TestUpdateItem(t *testing.T) {
 				return saleWithItemsFixture(database.SaleStatusCOMPLETED).lock(), nil
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa").String(), UpdateSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa").String(), sales.UpdateSaleItemInput{
 			Quantity: "2.000",
 		})
-		if !errors.Is(err, ErrSaleNotOpen) {
-			t.Fatalf("expected ErrSaleNotOpen, got %v", err)
+		if !errors.Is(err, sales.ErrSaleNotOpen) {
+			t.Fatalf("expected sales.ErrSaleNotOpen, got %v", err)
 		}
 	})
 
@@ -570,7 +571,7 @@ func TestUpdateItem(t *testing.T) {
 				return item, nil
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String(), UpdateSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String(), sales.UpdateSaleItemInput{
 			Quantity: "1.000",
 			Discount: strPtr("100.00"),
 		})
@@ -598,7 +599,7 @@ func TestUpdateItem(t *testing.T) {
 			},
 		}
 		txManager := &fakeTxManager{tx: tx}
-		_, err := NewService(&fakeReadStore{}, txManager).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String(), UpdateSaleItemInput{
+		_, err := sales.NewService(&fakeReadStore{}, txManager).UpdateItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String(), sales.UpdateSaleItemInput{
 			Quantity: "2.000",
 		})
 		if err == nil {
@@ -635,7 +636,7 @@ func TestRemoveItem(t *testing.T) {
 		}
 
 		txManager := &fakeTxManager{tx: tx}
-		resp, err := NewService(&fakeReadStore{}, txManager).RemoveItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String())
+		resp, err := sales.NewService(&fakeReadStore{}, txManager).RemoveItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String())
 		if err != nil {
 			t.Fatalf("RemoveItem returned error: %v", err)
 		}
@@ -656,9 +657,9 @@ func TestRemoveItem(t *testing.T) {
 				return database.SaleItem{}, pgx.ErrNoRows
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).RemoveItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa").String())
-		if !errors.Is(err, ErrSaleItemNotFound) {
-			t.Fatalf("expected ErrSaleItemNotFound, got %v", err)
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).RemoveItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa").String())
+		if !errors.Is(err, sales.ErrSaleItemNotFound) {
+			t.Fatalf("expected sales.ErrSaleItemNotFound, got %v", err)
 		}
 	})
 
@@ -668,9 +669,9 @@ func TestRemoveItem(t *testing.T) {
 				return saleWithItemsFixture(database.SaleStatusCANCELLED).lock(), nil
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).RemoveItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa").String())
-		if !errors.Is(err, ErrSaleNotOpen) {
-			t.Fatalf("expected ErrSaleNotOpen, got %v", err)
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).RemoveItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa").String())
+		if !errors.Is(err, sales.ErrSaleNotOpen) {
+			t.Fatalf("expected sales.ErrSaleNotOpen, got %v", err)
 		}
 	})
 
@@ -688,7 +689,7 @@ func TestRemoveItem(t *testing.T) {
 			},
 		}
 		txManager := &fakeTxManager{tx: tx}
-		_, err := NewService(&fakeReadStore{}, txManager).RemoveItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String())
+		_, err := sales.NewService(&fakeReadStore{}, txManager).RemoveItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), item.ID.String())
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -712,7 +713,7 @@ func TestCancelSale(t *testing.T) {
 			},
 		}
 		txManager := &fakeTxManager{tx: tx}
-		resp, err := NewService(&fakeReadStore{}, txManager).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
+		resp, err := sales.NewService(&fakeReadStore{}, txManager).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
 		if err != nil {
 			t.Fatalf("Cancel returned error: %v", err)
 		}
@@ -730,9 +731,9 @@ func TestCancelSale(t *testing.T) {
 				return database.LockSaleByIDRow{}, pgx.ErrNoRows
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
-		if !errors.Is(err, ErrSaleNotFound) {
-			t.Fatalf("expected ErrSaleNotFound, got %v", err)
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
+		if !errors.Is(err, sales.ErrSaleNotFound) {
+			t.Fatalf("expected sales.ErrSaleNotFound, got %v", err)
 		}
 	})
 
@@ -742,9 +743,9 @@ func TestCancelSale(t *testing.T) {
 				return saleWithItemsFixture(database.SaleStatusCANCELLED).lock(), nil
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
-		if !errors.Is(err, ErrSaleAlreadyCancelled) {
-			t.Fatalf("expected ErrSaleAlreadyCancelled, got %v", err)
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
+		if !errors.Is(err, sales.ErrSaleAlreadyCancelled) {
+			t.Fatalf("expected sales.ErrSaleAlreadyCancelled, got %v", err)
 		}
 	})
 
@@ -754,9 +755,9 @@ func TestCancelSale(t *testing.T) {
 				return saleWithItemsFixture(database.SaleStatusCOMPLETED).lock(), nil
 			},
 		}
-		_, err := NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
-		if !errors.Is(err, ErrSaleNotOpen) {
-			t.Fatalf("expected ErrSaleNotOpen, got %v", err)
+		_, err := sales.NewService(&fakeReadStore{}, &fakeTxManager{tx: tx}).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
+		if !errors.Is(err, sales.ErrSaleNotOpen) {
+			t.Fatalf("expected sales.ErrSaleNotOpen, got %v", err)
 		}
 	})
 
@@ -770,7 +771,7 @@ func TestCancelSale(t *testing.T) {
 			},
 		}
 		txManager := &fakeTxManager{tx: tx}
-		_, err := NewService(&fakeReadStore{}, txManager).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
+		_, err := sales.NewService(&fakeReadStore{}, txManager).Cancel(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String())
 		if err == nil {
 			t.Fatalf("expected error")
 		}
@@ -781,15 +782,15 @@ func TestCancelSale(t *testing.T) {
 }
 
 func TestQuantityAndMoneyValidation(t *testing.T) {
-	svc := NewService(&fakeReadStore{}, &fakeTxManager{})
+	svc := sales.NewService(&fakeReadStore{}, &fakeTxManager{})
 
-	_, err := svc.AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+	_, err := svc.AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 		ProductID: productFixture(true).ID.String(),
 		Quantity:  "0",
 	})
 	requireValidationField(t, err, "quantity")
 
-	_, err = svc.AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), AddSaleItemInput{
+	_, err = svc.AddItem(context.Background(), saleWithItemsFixture(database.SaleStatusOPEN).ID.String(), sales.AddSaleItemInput{
 		ProductID: productFixture(true).ID.String(),
 		Quantity:  "1.000",
 		Discount:  strPtr("-1.00"),
@@ -924,12 +925,12 @@ func (f *fakeTxQueries) ListSaleItemsBySaleID(ctx context.Context, saleID pgtype
 }
 
 type fakeTxManager struct {
-	tx         TxQueries
+	tx         sales.TxQueries
 	committed  bool
 	rolledBack bool
 }
 
-func (f *fakeTxManager) WithTx(ctx context.Context, fn func(TxQueries) error) error {
+func (f *fakeTxManager) WithTx(ctx context.Context, fn func(sales.TxQueries) error) error {
 	if f.tx == nil {
 		panic("unexpected transaction")
 	}
@@ -1133,9 +1134,9 @@ func productFixture(active bool) database.Product {
 func requireValidationField(t *testing.T, err error, field string) {
 	t.Helper()
 
-	var validationErr *ValidationError
+	var validationErr *sales.ValidationError
 	if !errors.As(err, &validationErr) {
-		t.Fatalf("expected ValidationError, got %v", err)
+		t.Fatalf("expected sales.ValidationError, got %v", err)
 	}
 	if validationErr.Field != field {
 		t.Fatalf("expected field %q, got %q", field, validationErr.Field)

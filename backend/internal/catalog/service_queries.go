@@ -17,7 +17,7 @@ func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogList
 
 	search := normalizeOptionalSearch(input.Search)
 	activeOnly := input.ActiveOnly
-	if !input.activeOnlySet && !input.ActiveOnly {
+	if !input.ActiveOnlySet && !input.ActiveOnly {
 		activeOnly = true
 	}
 
@@ -43,7 +43,7 @@ func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogList
 
 	items := make([]CatalogProductResponse, 0, len(rows))
 	for _, row := range rows {
-		item, err := toCatalogProductResponse(toCatalogProductDataFromListRow(row))
+		item, err := ToCatalogProductResponse(toCatalogProductDataFromListRow(row))
 		if err != nil {
 			return CatalogListResponse{}, fmt.Errorf("map catalog product response: %w", err)
 		}
@@ -52,7 +52,7 @@ func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogList
 
 	return CatalogListResponse{
 		Data:       items,
-		Pagination: paginationResponse(page, pageSize, total),
+		Pagination: NewPaginationResponse(page, pageSize, total),
 	}, nil
 }
 
@@ -70,7 +70,7 @@ func (s *Service) GetByID(ctx context.Context, rawID string) (CatalogProductResp
 		return CatalogProductResponse{}, fmt.Errorf("get catalog product by id: %w", err)
 	}
 
-	return toCatalogProductResponse(toCatalogProductDataFromIDRow(row))
+	return ToCatalogProductResponse(toCatalogProductDataFromIDRow(row))
 }
 
 func (s *Service) GetByBarcode(ctx context.Context, rawBarcode string) (CatalogProductResponse, error) {
@@ -87,5 +87,5 @@ func (s *Service) GetByBarcode(ctx context.Context, rawBarcode string) (CatalogP
 		return CatalogProductResponse{}, fmt.Errorf("get catalog product by barcode: %w", err)
 	}
 
-	return toCatalogProductResponse(toCatalogProductDataFromBarcodeRow(row))
+	return ToCatalogProductResponse(toCatalogProductDataFromBarcodeRow(row))
 }

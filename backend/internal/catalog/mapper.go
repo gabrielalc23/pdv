@@ -9,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-type catalogProductData struct {
+type CatalogProductData struct {
 	ID        pgtype.UUID
 	SKU       string
 	Barcode   pgtype.Text
@@ -22,13 +22,13 @@ type catalogProductData struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
-func toCatalogProductResponse(data catalogProductData) (CatalogProductResponse, error) {
-	price, err := numericToMoneyString(data.Price)
+func ToCatalogProductResponse(data CatalogProductData) (CatalogProductResponse, error) {
+	price, err := NumericToMoneyString(data.Price)
 	if err != nil {
 		return CatalogProductResponse{}, fmt.Errorf("format price: %w", err)
 	}
 
-	quantity, err := numericToQuantityString(data.Quantity)
+	quantity, err := NumericToQuantityString(data.Quantity)
 	if err != nil {
 		return CatalogProductResponse{}, fmt.Errorf("format quantity: %w", err)
 	}
@@ -53,8 +53,8 @@ func toCatalogProductResponse(data catalogProductData) (CatalogProductResponse, 
 	}, nil
 }
 
-func toCatalogProductDataFromListRow(row database.ListCatalogProductsRow) catalogProductData {
-	return catalogProductData{
+func toCatalogProductDataFromListRow(row database.ListCatalogProductsRow) CatalogProductData {
+	return CatalogProductData{
 		ID:        row.ID,
 		SKU:       row.SKU,
 		Barcode:   row.Barcode,
@@ -68,8 +68,8 @@ func toCatalogProductDataFromListRow(row database.ListCatalogProductsRow) catalo
 	}
 }
 
-func toCatalogProductDataFromIDRow(row database.GetCatalogProductByIDRow) catalogProductData {
-	return catalogProductData{
+func toCatalogProductDataFromIDRow(row database.GetCatalogProductByIDRow) CatalogProductData {
+	return CatalogProductData{
 		ID:        row.ID,
 		SKU:       row.SKU,
 		Barcode:   row.Barcode,
@@ -83,8 +83,8 @@ func toCatalogProductDataFromIDRow(row database.GetCatalogProductByIDRow) catalo
 	}
 }
 
-func toCatalogProductDataFromBarcodeRow(row database.GetCatalogProductByBarcodeRow) catalogProductData {
-	return catalogProductData{
+func toCatalogProductDataFromBarcodeRow(row database.GetCatalogProductByBarcodeRow) CatalogProductData {
+	return CatalogProductData{
 		ID:        row.ID,
 		SKU:       row.SKU,
 		Barcode:   row.Barcode,
@@ -98,11 +98,11 @@ func toCatalogProductDataFromBarcodeRow(row database.GetCatalogProductByBarcodeR
 	}
 }
 
-func numericToMoneyString(value pgtype.Numeric) (string, error) {
+func NumericToMoneyString(value pgtype.Numeric) (string, error) {
 	return numericToFixedScaleString(value, 2)
 }
 
-func numericToQuantityString(value pgtype.Numeric) (string, error) {
+func NumericToQuantityString(value pgtype.Numeric) (string, error) {
 	return numericToFixedScaleString(value, 3)
 }
 
@@ -185,7 +185,7 @@ func timestampOrZero(value pgtype.Timestamptz) time.Time {
 	return value.Time.UTC()
 }
 
-func paginationResponse(page, pageSize int, total int64) PaginationResponse {
+func NewPaginationResponse(page, pageSize int, total int64) PaginationResponse {
 	totalPages := 0
 	if total > 0 {
 		totalPages = int((total + int64(pageSize) - 1) / int64(pageSize))

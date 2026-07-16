@@ -10,7 +10,6 @@ import (
 type Store interface {
 	GetSaleByID(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error)
 	ListSaleItemsBySaleID(context.Context, pgtype.UUID) ([]database.SaleItem, error)
-	ListPaymentsBySaleID(context.Context, pgtype.UUID) ([]database.ListPaymentsBySaleIDRow, error)
-	GetPaymentMethodByID(context.Context, pgtype.UUID) (database.PaymentMethod, error)
+	ListReceiptPaymentsBySaleID(context.Context, pgtype.UUID) ([]database.MvReceiptPayment, error)
 	GetFiscalDocumentBySaleID(context.Context, pgtype.UUID) (database.FiscalDocument, error)
 }

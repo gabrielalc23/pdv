@@ -8,7 +8,7 @@ export default defineConfig([
   reactRefresh.configs.vite,
 
   {
-    files: ["src/routes/**/*.{ts,tsx}"],
+    files: ["src/routes/**/*.{ts,tsx}", "src/**/__tests__/**/*.{ts,tsx}"],
     rules: {
       "react-refresh/only-export-components": "off",
     },

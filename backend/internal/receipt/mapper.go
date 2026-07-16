@@ -1,7 +1,6 @@
 package receipt
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -10,7 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func toReceiptResponse(ctx context.Context, sale database.GetSaleByIDRow, items []database.SaleItem, payments []database.ListPaymentsBySaleIDRow, fiscalDoc database.FiscalDocument, store Store) (ReceiptResponse, error) {
+func toReceiptResponse(sale database.GetSaleByIDRow, items []database.SaleItem, payments []database.MvReceiptPayment, fiscalDoc database.FiscalDocument) (ReceiptResponse, error) {
 	saleResponse, err := toReceiptSaleResponse(sale)
 	if err != nil {
 		return ReceiptResponse{}, err
@@ -27,12 +26,7 @@ func toReceiptResponse(ctx context.Context, sale database.GetSaleByIDRow, items 
 
 	paymentResponses := make([]ReceiptPaymentResponse, 0, len(payments))
 	for _, payment := range payments {
-		method, err := store.GetPaymentMethodByID(ctx, payment.PaymentMethodID)
-		if err != nil {
-			return ReceiptResponse{}, fmt.Errorf("get payment method: %w", err)
-		}
-
-		response, err := toReceiptPaymentResponse(payment, method)
+		response, err := toReceiptPaymentResponse(payment)
 		if err != nil {
 			return ReceiptResponse{}, err
 		}
@@ -188,7 +182,7 @@ func toReceiptItemResponse(row database.SaleItem) (ReceiptItemResponse, error) {
 	}, nil
 }
 
-func toReceiptPaymentResponse(row database.ListPaymentsBySaleIDRow, method database.PaymentMethod) (ReceiptPaymentResponse, error) {
+func toReceiptPaymentResponse(row database.MvReceiptPayment) (ReceiptPaymentResponse, error) {
 	amount, err := moneyToString(row.Amount)
 	if err != nil {
 		return ReceiptPaymentResponse{}, fmt.Errorf("format amount: %w", err)
@@ -219,7 +213,7 @@ func toReceiptPaymentResponse(row database.ListPaymentsBySaleIDRow, method datab
 	}
 
 	return ReceiptPaymentResponse{
-		Method:            method.Name,
+		Method:            row.PaymentMethodName,
 		Amount:            amount,
 		Status:            string(row.Status),
 		Installments:      row.Installments,

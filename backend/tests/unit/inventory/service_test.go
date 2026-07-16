@@ -1,4 +1,4 @@
-package inventory
+package inventory_test
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gabrielalc23/pdv/internal/inventory"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -35,9 +36,9 @@ func TestCreateEntryValid(t *testing.T) {
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
-	svc := NewService(&fakeReadStore{}, txManager)
+	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateEntry(context.Background(), CreateInventoryEntryInput{
+	resp, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.500",
 		Reason:        strPtr("Compra de fornecedor"),
@@ -79,9 +80,9 @@ func TestCreateAdjustmentValidIn(t *testing.T) {
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
-	svc := NewService(&fakeReadStore{}, txManager)
+	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateAdjustment(context.Background(), CreateInventoryAdjustmentInput{
+	resp, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "IN",
 		Quantity:      "1.500",
@@ -121,9 +122,9 @@ func TestCreateAdjustmentValidOut(t *testing.T) {
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
-	svc := NewService(&fakeReadStore{}, txManager)
+	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateAdjustment(context.Background(), CreateInventoryAdjustmentInput{
+	resp, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -154,16 +155,16 @@ func TestCreateEntryProductNotFound(t *testing.T) {
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
-	svc := NewService(&fakeReadStore{}, txManager)
+	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "1.000",
 		ReferenceType: "purchase",
 		ReferenceID:   productFixture(true).ID.String(),
 	})
-	if !errors.Is(err, ErrProductNotFound) {
-		t.Fatalf("expected ErrProductNotFound, got %v", err)
+	if !errors.Is(err, inventory.ErrProductNotFound) {
+		t.Fatalf("expected inventory.ErrProductNotFound, got %v", err)
 	}
 	if !txManager.rolledBack || txManager.committed {
 		t.Fatalf("expected rollback without commit, got committed=%v rolledBack=%v", txManager.committed, txManager.rolledBack)
@@ -184,9 +185,9 @@ func TestCreateAdjustmentInsufficientInventory(t *testing.T) {
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
-	svc := NewService(&fakeReadStore{}, txManager)
+	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateAdjustment(context.Background(), CreateInventoryAdjustmentInput{
+	_, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -194,8 +195,8 @@ func TestCreateAdjustmentInsufficientInventory(t *testing.T) {
 		ReferenceType: "manual_adjustment",
 		ReferenceID:   productFixture(true).ID.String(),
 	})
-	if !errors.Is(err, ErrInsufficientInventory) {
-		t.Fatalf("expected ErrInsufficientInventory, got %v", err)
+	if !errors.Is(err, inventory.ErrInsufficientInventory) {
+		t.Fatalf("expected inventory.ErrInsufficientInventory, got %v", err)
 	}
 	if !txManager.rolledBack || txManager.committed {
 		t.Fatalf("expected rollback without commit, got committed=%v rolledBack=%v", txManager.committed, txManager.rolledBack)
@@ -203,7 +204,7 @@ func TestCreateAdjustmentInsufficientInventory(t *testing.T) {
 }
 
 func TestCreateEntryQuantityValidation(t *testing.T) {
-	svc := NewService(&fakeReadStore{}, &fakeTxManager{})
+	svc := inventory.NewService(&fakeReadStore{}, &fakeTxManager{})
 
 	cases := []struct {
 		name     string
@@ -218,7 +219,7 @@ func TestCreateEntryQuantityValidation(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.CreateEntry(context.Background(), CreateInventoryEntryInput{
+			_, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
 				ProductID:     productFixture(true).ID.String(),
 				Quantity:      tc.quantity,
 				ReferenceType: "purchase",
@@ -230,10 +231,10 @@ func TestCreateEntryQuantityValidation(t *testing.T) {
 }
 
 func TestCreateAdjustmentValidation(t *testing.T) {
-	svc := NewService(&fakeReadStore{}, &fakeTxManager{})
+	svc := inventory.NewService(&fakeReadStore{}, &fakeTxManager{})
 
 	t.Run("direction invalid", func(t *testing.T) {
-		_, err := svc.CreateAdjustment(context.Background(), CreateInventoryAdjustmentInput{
+		_, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
 			ProductID:     productFixture(true).ID.String(),
 			Direction:     "SIDEWAYS",
 			Quantity:      "1.000",
@@ -245,7 +246,7 @@ func TestCreateAdjustmentValidation(t *testing.T) {
 	})
 
 	t.Run("reason blank", func(t *testing.T) {
-		_, err := svc.CreateAdjustment(context.Background(), CreateInventoryAdjustmentInput{
+		_, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
 			ProductID:     productFixture(true).ID.String(),
 			Direction:     "OUT",
 			Quantity:      "1.000",
@@ -271,16 +272,16 @@ func TestDuplicateOperation(t *testing.T) {
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
-	svc := NewService(&fakeReadStore{}, txManager)
+	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.000",
 		ReferenceType: "purchase",
 		ReferenceID:   productFixture(true).ID.String(),
 	})
-	if !errors.Is(err, ErrInventoryOperationAlreadyProcessed) {
-		t.Fatalf("expected ErrInventoryOperationAlreadyProcessed, got %v", err)
+	if !errors.Is(err, inventory.ErrInventoryOperationAlreadyProcessed) {
+		t.Fatalf("expected inventory.ErrInventoryOperationAlreadyProcessed, got %v", err)
 	}
 	if !txManager.rolledBack || txManager.committed {
 		t.Fatalf("expected rollback without commit, got committed=%v rolledBack=%v", txManager.committed, txManager.rolledBack)
@@ -291,7 +292,7 @@ func TestListInventoryDefaultPagination(t *testing.T) {
 	var capturedCount database.CountInventoryParams
 	var capturedList database.ListInventoryParams
 
-	svc := NewService(&fakeReadStore{
+	svc := inventory.NewService(&fakeReadStore{
 		countInventoryFn: func(_ context.Context, arg database.CountInventoryParams) (int64, error) {
 			capturedCount = arg
 			return 1, nil
@@ -302,7 +303,7 @@ func TestListInventoryDefaultPagination(t *testing.T) {
 		},
 	}, &fakeTxManager{})
 
-	resp, err := svc.ListInventory(context.Background(), ListInventoryInput{})
+	resp, err := svc.ListInventory(context.Background(), inventory.ListInventoryInput{})
 	if err != nil {
 		t.Fatalf("ListInventory returned error: %v", err)
 	}
@@ -323,10 +324,10 @@ func TestListInventoryDefaultPagination(t *testing.T) {
 }
 
 func TestListInventoryPageSizeMaximum(t *testing.T) {
-	svc := NewService(&fakeReadStore{}, &fakeTxManager{})
+	svc := inventory.NewService(&fakeReadStore{}, &fakeTxManager{})
 
 	pageSize := 101
-	_, err := svc.ListInventory(context.Background(), ListInventoryInput{PageSize: &pageSize})
+	_, err := svc.ListInventory(context.Background(), inventory.ListInventoryInput{PageSize: &pageSize})
 	requireValidationField(t, err, "pageSize")
 }
 
@@ -344,9 +345,9 @@ func TestCreateEntryRollbackOnMovementError(t *testing.T) {
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
-	svc := NewService(&fakeReadStore{}, txManager)
+	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.000",
 		ReferenceType: "purchase",
@@ -371,9 +372,9 @@ func TestCreateAdjustmentRollbackOnBalanceError(t *testing.T) {
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
-	svc := NewService(&fakeReadStore{}, txManager)
+	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateAdjustment(context.Background(), CreateInventoryAdjustmentInput{
+	_, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -484,12 +485,12 @@ func (f *fakeTxQueries) CreateInventoryMovement(ctx context.Context, arg databas
 }
 
 type fakeTxManager struct {
-	tx         TxQueries
+	tx         inventory.TxQueries
 	committed  bool
 	rolledBack bool
 }
 
-func (f *fakeTxManager) WithTx(ctx context.Context, fn func(TxQueries) error) error {
+func (f *fakeTxManager) WithTx(ctx context.Context, fn func(inventory.TxQueries) error) error {
 	if f.tx == nil {
 		panic("unexpected transaction")
 	}
@@ -578,9 +579,9 @@ func movementFixture(movementType database.InventoryMovementType, quantity, prev
 func requireValidationField(t *testing.T, err error, field string) {
 	t.Helper()
 
-	var validationErr *ValidationError
+	var validationErr *inventory.ValidationError
 	if !errors.As(err, &validationErr) {
-		t.Fatalf("expected ValidationError, got %v", err)
+		t.Fatalf("expected inventory.ValidationError, got %v", err)
 	}
 	if validationErr.Field != field {
 		t.Fatalf("expected field %q, got %q", field, validationErr.Field)

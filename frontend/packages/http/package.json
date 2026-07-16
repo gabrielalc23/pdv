@@ -21,6 +21,7 @@
     "@pdv/errors": "workspace:*",
     "@pdv/utils": "workspace:*",
     "axios": "^1.13.6",
+    "msw": "^2.15.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -28,8 +29,10 @@
     "@pdv/prettier": "workspace:*",
     "@pdv/typescript": "workspace:*",
     "@types/bun": "latest",
+    "axios-mock-adapter": "^2.1.0",
     "eslint": "^10.6.0",
     "prettier": "^3.8.2",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.10"
   }
 }

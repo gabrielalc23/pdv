@@ -411,6 +411,22 @@ type InventoryMovement struct {
 	CreatedAt        pgtype.Timestamptz
 }
 
+type MvReceiptPayment struct {
+	ID                pgtype.UUID
+	SaleID            pgtype.UUID
+	PaymentMethodID   pgtype.UUID
+	PaymentMethodName string
+	Status            PaymentStatus
+	Amount            pgtype.Numeric
+	ReceivedAmount    pgtype.Numeric
+	ChangeAmount      pgtype.Numeric
+	Installments      int16
+	ExternalReference pgtype.Text
+	PaidAt            pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
 type PaymentMethod struct {
 	ID                        pgtype.UUID
 	Code                      string

@@ -346,7 +346,7 @@ type normalizedPaymentCalculation struct {
 	Amount pgtype.Numeric
 }
 
-func moneyToString(value pgtype.Numeric) (string, error) {
+func MoneyToString(value pgtype.Numeric) (string, error) {
 	scaled, err := numericToScaledInt(value, 2)
 	if err != nil {
 		return "", err
@@ -354,7 +354,7 @@ func moneyToString(value pgtype.Numeric) (string, error) {
 	return scaledIntToString(scaled, 2), nil
 }
 
-func quantityToString(value pgtype.Numeric) (string, error) {
+func QuantityToString(value pgtype.Numeric) (string, error) {
 	scaled, err := numericToScaledInt(value, 3)
 	if err != nil {
 		return "", err

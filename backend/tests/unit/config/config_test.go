@@ -1,12 +1,16 @@
-package config
+package config_test
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/gabrielalc23/pdv/config"
+)
 
 func TestLoadUsesDefaultsAndDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
 	t.Setenv("HTTP_ADDRESS", "")
 
-	cfg, err := Load()
+	cfg, err := config.Load()
 	if err != nil {
 		t.Fatalf("Load() returned error: %v", err)
 	}
@@ -23,7 +27,7 @@ func TestLoadUsesDefaultsAndDatabaseURL(t *testing.T) {
 func TestLoadRequiresDatabaseURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 
-	if _, err := Load(); err == nil {
+	if _, err := config.Load(); err == nil {
 		t.Fatalf("expected error when DATABASE_URL is missing")
 	}
 }
