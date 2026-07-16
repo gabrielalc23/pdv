@@ -262,6 +262,28 @@ RETURNING
     updated_at,
     idempotency_key;
 
+-- name: CompleteSale :one
+UPDATE sales
+SET
+    status = 'COMPLETED',
+    completed_at = NOW()
+WHERE id = sqlc.arg(id)
+  AND status = 'OPEN'
+RETURNING
+    id,
+    number,
+    status,
+    subtotal,
+    discount,
+    addition,
+    total,
+    opened_at,
+    completed_at,
+    cancelled_at,
+    created_at,
+    updated_at,
+    idempotency_key;
+
 -- name: CancelSale :one
 UPDATE sales
 SET

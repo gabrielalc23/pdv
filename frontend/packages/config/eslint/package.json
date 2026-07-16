@@ -3,11 +3,19 @@
   "dependencies": {
     "@tanstack/eslint-config": "^0.4.0"
   },
+  "scripts": {
+    "format": "prettier --ignore-path ../../../.prettierignore --write .",
+    "format:check": "prettier --ignore-path ../../../.prettierignore --check ."
+  },
+  "devDependencies": {
+    "@pdv/prettier": "workspace:*",
+    "prettier": "^3.8.2"
+  },
   "exports": {
     ".": {
-      "types": "./index.ts",
-      "import": "./index.ts",
-      "default": "./index.ts"
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
     }
   },
   "private": true,

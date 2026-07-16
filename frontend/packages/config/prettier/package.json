@@ -1,0 +1,22 @@
+{
+  "name": "@pdv/prettier",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./src/index.js",
+      "default": "./src/index.js"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "format": "prettier --config ./src/index.js --ignore-path ../../../.prettierignore --write .",
+    "format:check": "prettier --config ./src/index.js --ignore-path ../../../.prettierignore --check ."
+  },
+  "devDependencies": {
+    "prettier": "^3.8.2"
+  }
+}

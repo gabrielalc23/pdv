@@ -6,10 +6,19 @@
     ".": "./src/index.ts"
   },
   "types": "./src/index.ts",
-  "devDependencies": {
-    "@types/bun": "latest"
+  "scripts": {
+    "format": "prettier --ignore-path ../../.prettierignore --write .",
+    "format:check": "prettier --ignore-path ../../.prettierignore --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
   },
-  "peerDependencies": {
-    "typescript": "^6"
+  "devDependencies": {
+    "@pdv/eslint": "workspace:*",
+    "@pdv/prettier": "workspace:*",
+    "@pdv/typescript": "workspace:*",
+    "@types/bun": "latest",
+    "eslint": "^10.6.0",
+    "prettier": "^3.8.2",
+    "typescript": "^6.0.2"
   }
 }

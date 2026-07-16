@@ -1,0 +1,33 @@
+{
+  "name": "@pdv/utils",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "format": "prettier --ignore-path ../../.prettierignore --write .",
+    "format:check": "prettier --ignore-path ../../.prettierignore --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.5.0"
+  },
+  "devDependencies": {
+    "@pdv/eslint": "workspace:*",
+    "@pdv/prettier": "workspace:*",
+    "@pdv/typescript": "workspace:*",
+    "@types/bun": "latest",
+    "eslint": "^10.6.0",
+    "prettier": "^3.8.2",
+    "typescript": "^6.0.2"
+  }
+}

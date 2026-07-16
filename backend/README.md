@@ -1,91 +1,119 @@
-# Backend
+# PDV Backend
 
-Backend Go do PDV com PostgreSQL, `pgx/v5`, `sqlc` e servidor HTTP.
+The PDV backend is a Go HTTP API backed by PostgreSQL. It uses Chi for routing,
+pgx/v5 for database access, and sqlc for type-safe query generation.
 
-## Execução
+## Capabilities
+
+- Product management and catalog lookup.
+- Inventory entries, adjustments, balances, and movements.
+- Open sales with snapshot sale items and totals.
+- Transactional checkout with local payment approval and atomic stock decrements.
+- Mock fiscal authorization and structured JSON receipts.
+
+Real payment processors, TEF, real PIX, and SEFAZ integrations are intentionally
+out of scope.
+
+## Requirements
+
+- Go 1.26.5
+- PostgreSQL 18
+- `sqlc`
+- Docker and Docker Compose are optional, but recommended for local services.
+
+## Configuration
+
+Copy `.env.example` or export the required variables before running the API.
+
+| Variable | Required | Default | Description |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | Yes | - | PostgreSQL connection string. |
+| `HTTP_ADDRESS` | No | `:8080` | Address used by the HTTP server. |
+
+Example:
 
 ```sh
-cd backend
+export DATABASE_URL='postgres://pdv:pdv@localhost:5432/pdv?sslmode=disable'
+export HTTP_ADDRESS=':8080'
+```
+
+## Run Locally
+
+Start only the API when PostgreSQL is already available:
+
+```sh
 go run ./cmd/api
 ```
 
-Variáveis de ambiente:
-
-- `DATABASE_URL` obrigatória;
-- `HTTP_ADDRESS` opcional, padrão `:8080`.
-
-## Produtos
-
-### Endpoints
-
-- `POST /products`
-- `GET /products`
-- `GET /products/{id}`
-- `PUT /products/{id}`
-- `POST /products/{id}/activate`
-- `POST /products/{id}/deactivate`
-
-### Listagem
-
-`GET /products` aceita:
-
-- `search`
-- `page`
-- `pageSize`
-- `activeOnly`
-
-Exemplo:
+Or start the local service stack:
 
 ```sh
-curl 'http://localhost:8080/products?search=coca&page=1&pageSize=20&activeOnly=true'
+docker compose up
 ```
 
-### Criação e atualização
+Docker Compose exposes the API on `http://localhost:8080`, PostgreSQL on port
+`5432`, and Valkey on port `6379`.
 
-Exemplo de request:
+## Database Code
 
-```json
-{
-  "sku": "COCA-2L",
-  "barcode": "7890000000000",
-  "name": "Coca-Cola 2L",
-  "price": "12.90",
-  "cost": "8.50"
-}
+- SQL migrations live in [`migrations`](./migrations).
+- sqlc query definitions live in [`queries`](./queries).
+- Generated code lives in [`internal/platform/database`](./internal/platform/database).
+
+Do not manually edit generated sqlc files. Regenerate them after changing a query
+or migration schema:
+
+```sh
+sqlc generate
+sqlc vet
 ```
 
-Exemplo de response:
+Apply migrations with the PostgreSQL migration workflow used by your environment
+before starting the API.
 
-```json
-{
-  "id": "01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9",
-  "sku": "COCA-2L",
-  "barcode": "7890000000000",
-  "name": "Coca-Cola 2L",
-  "price": "12.90",
-  "cost": "8.50",
-  "isActive": true,
-  "createdAt": "2026-07-15T10:00:00Z",
-  "updatedAt": "2026-07-15T10:00:00Z"
-}
-```
-
-### Principais erros
-
-- `400 Bad Request` para JSON inválido, parâmetros inválidos ou `id` inválido;
-- `404 Not Found` para produto inexistente;
-- `409 Conflict` para SKU ou barcode duplicado;
-- `422 Unprocessable Entity` para validação semântica do payload;
-- `500 Internal Server Error` para falhas inesperadas.
-
-## Validação
-
-Os comandos principais do backend são:
+## Validation
 
 ```sh
 sqlc generate
 sqlc vet
 go fmt ./...
 go vet ./...
-go test ./...
+go test -count=1 ./...
 ```
+
+## API Overview
+
+All API responses use JSON. Amounts and quantities are represented as strings to
+preserve decimal precision.
+
+| Domain | Endpoints |
+| --- | --- |
+| Health | `GET /health` |
+| Products | `POST /products`, `GET /products`, `GET /products/{id}`, `PUT /products/{id}`, `POST /products/{id}/activate`, `POST /products/{id}/deactivate` |
+| Inventory | `GET /inventory`, `GET /products/{id}/inventory`, `POST /inventory/entries`, `POST /inventory/adjustments`, `GET /products/{id}/inventory/movements` |
+| Catalog | `GET /catalog`, `GET /catalog/barcode/{barcode}`, `GET /catalog/{id}` |
+| Sales | `POST /sales`, `GET /sales`, `GET /sales/{id}`, `POST /sales/{id}/items`, `PUT /sales/{id}/items/{itemId}`, `DELETE /sales/{id}/items/{itemId}`, `POST /sales/{id}/cancel` |
+| Checkout | `POST /sales/{id}/checkout` |
+| Payments | `GET /payment-methods`, `GET /sales/{id}/payments` |
+| Fiscal | `GET /sales/{id}/fiscal-document` |
+| Receipt | `GET /sales/{id}/receipt` |
+
+### Checkout Example
+
+```sh
+curl -X POST http://localhost:8080/sales/<sale-id>/checkout \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "payments": [
+      {
+        "paymentMethodId": "<payment-method-id>",
+        "amount": "50.00"
+      }
+    ]
+  }'
+```
+
+Checkout is transactional: it validates the open sale, validates payments,
+decrements inventory atomically, creates sale movements and approved payments,
+completes the sale, and creates a pending fiscal document. Fiscal authorization
+is performed by the mock provider after the commercial transaction commits.

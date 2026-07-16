@@ -1,6 +1,6 @@
-import reactRefresh from "eslint-plugin-react-refresh";
-import { defineConfig } from "eslint/config";
-import { createWorkspaceEslintConfig } from "@pdv/eslint";
+import reactRefresh from "eslint-plugin-react-refresh"
+import { defineConfig } from "eslint/config"
+import { createWorkspaceEslintConfig } from "@pdv/eslint"
 
 export default defineConfig([
   ...createWorkspaceEslintConfig({ tsconfigRootDir: import.meta.dirname }),
@@ -13,4 +13,4 @@ export default defineConfig([
       "react-refresh/only-export-components": "off",
     },
   },
-]);
+])

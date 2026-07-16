@@ -12,13 +12,17 @@
     }
   },
   "scripts": {
+    "format": "prettier --ignore-path ../../.prettierignore --write .",
+    "format:check": "prettier --ignore-path ../../.prettierignore --check .",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@pdv/eslint": "workspace:*",
+    "@pdv/prettier": "workspace:*",
     "@pdv/typescript": "workspace:*",
     "eslint": "^10.6.0",
+    "prettier": "^3.8.2",
     "typescript": "^6.0.2"
   }
 }

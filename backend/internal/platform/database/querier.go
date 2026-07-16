@@ -16,6 +16,7 @@ type Querier interface {
 	ApprovePayment(ctx context.Context, arg ApprovePaymentParams) (ApprovePaymentRow, error)
 	CancelPayment(ctx context.Context, id pgtype.UUID) (CancelPaymentRow, error)
 	CancelSale(ctx context.Context, id pgtype.UUID) (CancelSaleRow, error)
+	CompleteSale(ctx context.Context, id pgtype.UUID) (CompleteSaleRow, error)
 	CountCatalogProducts(ctx context.Context, arg CountCatalogProductsParams) (int64, error)
 	CountInventory(ctx context.Context, arg CountInventoryParams) (int64, error)
 	CountInventoryMovementsByProductID(ctx context.Context, arg CountInventoryMovementsByProductIDParams) (int64, error)

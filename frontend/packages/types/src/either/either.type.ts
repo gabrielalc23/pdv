@@ -1,10 +1,10 @@
 export type Left<L> = {
-  readonly type: 'left'
+  readonly type: "left"
   readonly value: L
 }
 
 export type Right<R> = {
-  readonly type: 'right'
+  readonly type: "right"
   readonly value: R
 }
 

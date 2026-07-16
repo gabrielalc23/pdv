@@ -1,4 +1,4 @@
-import { Outlet, createRootRoute } from '@tanstack/react-router'
+import { Outlet, createRootRoute } from "@tanstack/react-router"
 import { Toaster } from "@pdv/ui-kit/components/sonner"
 import { Tooltip } from "@pdv/ui-kit/components/tooltip"
 

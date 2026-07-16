@@ -11,10 +11,14 @@ import (
 
 	"github.com/gabrielalc23/pdv/config"
 	"github.com/gabrielalc23/pdv/internal/catalog"
+	"github.com/gabrielalc23/pdv/internal/checkout"
+	"github.com/gabrielalc23/pdv/internal/fiscal"
 	"github.com/gabrielalc23/pdv/internal/inventory"
+	"github.com/gabrielalc23/pdv/internal/payments"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
 	"github.com/gabrielalc23/pdv/internal/products"
+	"github.com/gabrielalc23/pdv/internal/receipt"
 	"github.com/gabrielalc23/pdv/internal/sales"
 )
 
@@ -56,6 +60,24 @@ func main() {
 	salesService := sales.NewService(store.Queries, sales.NewTxManager(store))
 	salesHandler := sales.NewHandler(salesService)
 	sales.RegisterRoutes(router, salesHandler)
+
+	fiscalProvider := &fiscal.MockProvider{}
+
+	checkoutService := checkout.NewService(checkout.NewTxManager(store), fiscalProvider)
+	checkoutHandler := checkout.NewHandler(checkoutService)
+	checkout.RegisterRoutes(router, checkoutHandler)
+
+	paymentsService := payments.NewService(store.Queries)
+	paymentsHandler := payments.NewHandler(paymentsService)
+	payments.RegisterRoutes(router, paymentsHandler)
+
+	fiscalService := fiscal.NewService(store.Queries, fiscalProvider)
+	fiscalHandler := fiscal.NewHandler(fiscalService)
+	fiscal.RegisterRoutes(router, fiscalHandler)
+
+	receiptService := receipt.NewService(store.Queries)
+	receiptHandler := receipt.NewHandler(receiptService)
+	receipt.RegisterRoutes(router, receiptHandler)
 
 	server := &http.Server{
 		Addr:    cfg.Address,

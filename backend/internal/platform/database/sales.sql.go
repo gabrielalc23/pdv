@@ -71,6 +71,66 @@ func (q *Queries) CancelSale(ctx context.Context, id pgtype.UUID) (CancelSaleRow
 	return i, err
 }
 
+const completeSale = `-- name: CompleteSale :one
+UPDATE sales
+SET
+    status = 'COMPLETED',
+    completed_at = NOW()
+WHERE id = $1
+  AND status = 'OPEN'
+RETURNING
+    id,
+    number,
+    status,
+    subtotal,
+    discount,
+    addition,
+    total,
+    opened_at,
+    completed_at,
+    cancelled_at,
+    created_at,
+    updated_at,
+    idempotency_key
+`
+
+type CompleteSaleRow struct {
+	ID             pgtype.UUID
+	Number         int64
+	Status         SaleStatus
+	Subtotal       pgtype.Numeric
+	Discount       pgtype.Numeric
+	Addition       pgtype.Numeric
+	Total          pgtype.Numeric
+	OpenedAt       pgtype.Timestamptz
+	CompletedAt    pgtype.Timestamptz
+	CancelledAt    pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	IdempotencyKey string
+}
+
+func (q *Queries) CompleteSale(ctx context.Context, id pgtype.UUID) (CompleteSaleRow, error) {
+	row := q.db.QueryRow(ctx, completeSale, id)
+	var i CompleteSaleRow
+	err := row.Scan(
+		&i.ID,
+		&i.Number,
+		&i.Status,
+		&i.Subtotal,
+		&i.Discount,
+		&i.Addition,
+		&i.Total,
+		&i.OpenedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.IdempotencyKey,
+	)
+	return i, err
+}
+
 const countSales = `-- name: CountSales :one
 SELECT COUNT(*)
 FROM sales
