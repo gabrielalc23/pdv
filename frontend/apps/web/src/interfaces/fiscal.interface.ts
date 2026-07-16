@@ -1,3 +1,5 @@
+import type { Nullable } from "@pdv/types"
+
 export interface FiscalDocumentResponse {
   id: string
   saleId: string
@@ -11,10 +13,10 @@ export interface FiscalDocumentResponse {
   provider?: string
   externalReference?: string
   xml?: string
-  errorCode?: string
-  errorMessage?: string
-  issuedAt?: string
-  cancelledAt?: string
+  errorCode?: Nullable<string>
+  errorMessage?: Nullable<string>
+  issuedAt?: Nullable<string>
+  cancelledAt?: Nullable<string>
   createdAt: string
   updatedAt: string
 }

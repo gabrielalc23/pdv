@@ -3,7 +3,10 @@ import type { HealthResponse } from "../interfaces/health.interface"
 import type { SaleResponse, SaleListResponse } from "../interfaces/sale.interface"
 import type { PaymentMethodsResponse } from "../interfaces/payment.interface"
 import type { CatalogProductResponse, CatalogListResponse } from "../interfaces/catalog.interface"
-import type { InventoryResponse, InventoryMovementResponse } from "../interfaces/inventory.interface"
+import type {
+  InventoryResponse,
+  InventoryMovementResponse,
+} from "../interfaces/inventory.interface"
 import type { FiscalDocumentResponse } from "../interfaces/fiscal.interface"
 import type { ReceiptResponse } from "../interfaces/receipt.interface"
 

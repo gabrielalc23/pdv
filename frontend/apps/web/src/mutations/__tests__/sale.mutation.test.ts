@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest"
 import { renderHook, waitFor } from "@testing-library/react"
 import { createMockHandler, testServer, TestWrapper } from "../../__tests__/test-utils"
-import { mockSale, mockSaleList } from "../../__tests__/mocks"
+import { mockSale } from "../../__tests__/mocks"
 import {
   useAddSaleItemMutation,
   useUpdateSaleItemMutation,

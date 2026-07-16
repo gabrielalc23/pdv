@@ -1,3 +1,5 @@
+import type { Nullable } from "@pdv/types"
+
 export interface ReceiptSaleResponse {
   id: string
   number: number
@@ -31,25 +33,25 @@ export interface ReceiptPaymentResponse {
   amount: string
   status: string
   installments: number
-  receivedAmount?: string
-  changeAmount?: string
-  externalReference?: string
+  receivedAmount?: Nullable<string>
+  changeAmount?: Nullable<string>
+  externalReference?: Nullable<string>
 }
 
 export interface ReceiptFiscalResponse {
   status: string
-  accessKey?: string
-  protocol?: string
-  provider?: string
-  externalReference?: string
-  errorCode?: string
-  errorMessage?: string
-  issuedAt?: string
+  accessKey?: Nullable<string>
+  protocol?: Nullable<string>
+  provider?: Nullable<string>
+  externalReference?: Nullable<string>
+  errorCode?: Nullable<string>
+  errorMessage?: Nullable<string>
+  issuedAt?: Nullable<string>
 }
 
 export interface ReceiptResponse {
   sale: ReceiptSaleResponse
   items: ReceiptItemResponse[]
   payments: ReceiptPaymentResponse[]
-  fiscalDocument: ReceiptFiscalResponse | null
+  fiscalDocument: Nullable<ReceiptFiscalResponse>
 }
