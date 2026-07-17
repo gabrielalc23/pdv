@@ -7,11 +7,12 @@ import (
 )
 
 type normalizedProductInput struct {
-	SKU     string
-	Barcode *string
-	Name    string
-	Price   pgtype.Numeric
-	Cost    pgtype.Numeric
+	SKU        string
+	Barcode    *string
+	Name       string
+	CategoryID pgtype.UUID
+	Price      pgtype.Numeric
+	Cost       pgtype.Numeric
 }
 
 func normalizeRequiredText(field, value string) (string, error) {
@@ -63,12 +64,20 @@ func normalizeUpsertInput(input UpsertProductInput) (normalizedProductInput, err
 		return normalizedProductInput{}, err
 	}
 
+	categoryID := pgtype.UUID{}
+	if input.CategoryID != nil && strings.TrimSpace(*input.CategoryID) != "" {
+		if err := categoryID.Scan(strings.TrimSpace(*input.CategoryID)); err != nil || !categoryID.Valid {
+			return normalizedProductInput{}, newValidationError("categoryId", "must be a valid UUID")
+		}
+	}
+
 	return normalizedProductInput{
-		SKU:     sku,
-		Barcode: barcode,
-		Name:    name,
-		Price:   price,
-		Cost:    cost,
+		SKU:        sku,
+		Barcode:    barcode,
+		Name:       name,
+		CategoryID: categoryID,
+		Price:      price,
+		Cost:       cost,
 	}, nil
 }
 

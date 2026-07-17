@@ -9,7 +9,8 @@ func parseListQuery(r *http.Request) (ListProductsInput, error) {
 	query := r.URL.Query()
 
 	input := ListProductsInput{
-		Search: query.Get("search"),
+		Search:     query.Get("search"),
+		CategoryID: query.Get("categoryId"),
 	}
 
 	if raw, ok := query["page"]; ok && len(raw) > 0 {

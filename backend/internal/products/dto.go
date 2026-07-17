@@ -3,11 +3,12 @@ package products
 import "time"
 
 type UpsertProductInput struct {
-	SKU     string  `json:"sku"`
-	Barcode *string `json:"barcode"`
-	Name    string  `json:"name"`
-	Price   string  `json:"price"`
-	Cost    *string `json:"cost"`
+	SKU        string  `json:"sku"`
+	Barcode    *string `json:"barcode"`
+	Name       string  `json:"name"`
+	CategoryID *string `json:"categoryId"`
+	Price      string  `json:"price"`
+	Cost       *string `json:"cost"`
 }
 
 type ListProductsInput struct {
@@ -15,18 +16,20 @@ type ListProductsInput struct {
 	Page       *int   `json:"page"`
 	PageSize   *int   `json:"pageSize"`
 	ActiveOnly bool   `json:"activeOnly"`
+	CategoryID string `json:"categoryId"`
 }
 
 type ProductResponse struct {
-	ID        string    `json:"id"`
-	SKU       string    `json:"sku"`
-	Barcode   *string   `json:"barcode"`
-	Name      string    `json:"name"`
-	Price     string    `json:"price"`
-	Cost      *string   `json:"cost"`
-	IsActive  bool      `json:"isActive"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID         string    `json:"id"`
+	SKU        string    `json:"sku"`
+	Barcode    *string   `json:"barcode"`
+	Name       string    `json:"name"`
+	CategoryID *string   `json:"categoryId"`
+	Price      string    `json:"price"`
+	Cost       *string   `json:"cost"`
+	IsActive   bool      `json:"isActive"`
+	CreatedAt  time.Time `json:"createdAt"`
+	UpdatedAt  time.Time `json:"updatedAt"`
 }
 
 type PaginationResponse struct {

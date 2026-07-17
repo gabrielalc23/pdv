@@ -59,12 +59,13 @@ func (s *Service) Create(ctx context.Context, input UpsertProductInput) (Product
 	}
 
 	product, err := s.store.CreateProduct(ctx, database.CreateProductParams{
-		SKU:      normalized.SKU,
-		Barcode:  toText(normalized.Barcode),
-		Name:     normalized.Name,
-		Price:    normalized.Price,
-		Cost:     normalized.Cost,
-		IsActive: true,
+		SKU:        normalized.SKU,
+		Barcode:    toText(normalized.Barcode),
+		Name:       normalized.Name,
+		CategoryID: normalized.CategoryID,
+		Price:      normalized.Price,
+		Cost:       normalized.Cost,
+		IsActive:   true,
 	})
 	if err != nil {
 		return ProductResponse{}, translatePersistenceError(err)
@@ -104,12 +105,13 @@ func (s *Service) Update(ctx context.Context, id string, input UpsertProductInpu
 	}
 
 	product, err := s.store.UpdateProduct(ctx, database.UpdateProductParams{
-		ID:      productID,
-		SKU:     normalized.SKU,
-		Barcode: toText(normalized.Barcode),
-		Name:    normalized.Name,
-		Price:   normalized.Price,
-		Cost:    normalized.Cost,
+		ID:         productID,
+		SKU:        normalized.SKU,
+		Barcode:    toText(normalized.Barcode),
+		Name:       normalized.Name,
+		CategoryID: normalized.CategoryID,
+		Price:      normalized.Price,
+		Cost:       normalized.Cost,
 	})
 	if err != nil {
 		return ProductResponse{}, translatePersistenceError(err)

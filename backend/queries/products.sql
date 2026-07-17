@@ -3,6 +3,7 @@ INSERT INTO products (
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active
@@ -11,6 +12,7 @@ VALUES (
     sqlc.arg(sku),
     sqlc.narg(barcode),
     sqlc.arg(name),
+    sqlc.narg(category_id),
     sqlc.arg(price),
     sqlc.narg(cost),
     sqlc.arg(is_active)
@@ -20,6 +22,7 @@ RETURNING
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -32,6 +35,7 @@ SELECT
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -47,6 +51,7 @@ SELECT
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -62,6 +67,7 @@ SELECT
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -77,6 +83,7 @@ SELECT
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -89,6 +96,10 @@ WHERE
         OR name ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
         OR sku ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
         OR barcode ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
+    )
+    AND (
+        CAST(sqlc.narg(category_id) AS UUID) IS NULL
+        OR category_id = CAST(sqlc.narg(category_id) AS UUID)
     )
     AND (NOT sqlc.arg(active_only) OR is_active = TRUE)
 ORDER BY name ASC, id ASC
@@ -105,6 +116,10 @@ WHERE
         OR sku ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
         OR barcode ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
     )
+    AND (
+        CAST(sqlc.narg(category_id) AS UUID) IS NULL
+        OR category_id = CAST(sqlc.narg(category_id) AS UUID)
+    )
     AND (NOT sqlc.arg(active_only) OR is_active = TRUE);
 
 -- name: UpdateProduct :one
@@ -113,6 +128,7 @@ SET
     sku = sqlc.arg(sku),
     barcode = sqlc.narg(barcode),
     name = sqlc.arg(name),
+    category_id = sqlc.narg(category_id),
     price = sqlc.arg(price),
     cost = sqlc.narg(cost),
     updated_at = NOW()
@@ -122,6 +138,7 @@ RETURNING
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -139,6 +156,7 @@ RETURNING
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -156,6 +174,7 @@ RETURNING
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,

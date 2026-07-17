@@ -14,6 +14,7 @@ CREATE TABLE products (
     sku VARCHAR(50) NOT NULL,
     barcode VARCHAR(50),
     name VARCHAR(150) NOT NULL,
+    category_id UUID REFERENCES categories (id) ON DELETE SET NULL,
     price NUMERIC(15, 2) NOT NULL,
     cost NUMERIC(15, 2),
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -39,6 +40,8 @@ CREATE INDEX idx_products_active_name ON products (name)
 WHERE
     is_active = TRUE;
 
+CREATE INDEX idx_products_category_id ON products (category_id);
+
 CREATE INDEX idx_products_name_trgm ON products USING GIN (name gin_trgm_ops);
 
 COMMENT ON
@@ -51,6 +54,8 @@ COMMENT ON COLUMN products.sku IS 'Unique internal stock keeping unit.';
 COMMENT ON COLUMN products.barcode IS 'Optional unique barcode used by barcode scanners.';
 
 COMMENT ON COLUMN products.name IS 'Product name displayed in administrative and POS interfaces.';
+
+COMMENT ON COLUMN products.category_id IS 'Optional category used to organize the product catalog.';
 
 COMMENT ON COLUMN products.price IS 'Current product sale price. Historical prices are preserved in sale_items.';
 

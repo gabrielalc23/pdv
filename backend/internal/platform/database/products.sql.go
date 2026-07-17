@@ -22,6 +22,7 @@ RETURNING
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -37,6 +38,7 @@ func (q *Queries) ActivateProduct(ctx context.Context, id pgtype.UUID) (Product,
 		&i.SKU,
 		&i.Barcode,
 		&i.Name,
+		&i.CategoryID,
 		&i.Price,
 		&i.Cost,
 		&i.IsActive,
@@ -56,16 +58,21 @@ WHERE
         OR sku ILIKE '%' || CAST($1 AS TEXT) || '%'
         OR barcode ILIKE '%' || CAST($1 AS TEXT) || '%'
     )
-    AND (NOT $2 OR is_active = TRUE)
+    AND (
+        CAST($2 AS UUID) IS NULL
+        OR category_id = CAST($2 AS UUID)
+    )
+    AND (NOT $3 OR is_active = TRUE)
 `
 
 type CountProductsParams struct {
 	Search     pgtype.Text
+	CategoryID pgtype.UUID
 	ActiveOnly interface{}
 }
 
 func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countProducts, arg.Search, arg.ActiveOnly)
+	row := q.db.QueryRow(ctx, countProducts, arg.Search, arg.CategoryID, arg.ActiveOnly)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -76,6 +83,7 @@ INSERT INTO products (
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active
@@ -86,13 +94,15 @@ VALUES (
     $3,
     $4,
     $5,
-    $6
+    $6,
+    $7
 )
 RETURNING
     id,
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -101,12 +111,13 @@ RETURNING
 `
 
 type CreateProductParams struct {
-	SKU      string
-	Barcode  pgtype.Text
-	Name     string
-	Price    pgtype.Numeric
-	Cost     pgtype.Numeric
-	IsActive bool
+	SKU        string
+	Barcode    pgtype.Text
+	Name       string
+	CategoryID pgtype.UUID
+	Price      pgtype.Numeric
+	Cost       pgtype.Numeric
+	IsActive   bool
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -114,6 +125,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.SKU,
 		arg.Barcode,
 		arg.Name,
+		arg.CategoryID,
 		arg.Price,
 		arg.Cost,
 		arg.IsActive,
@@ -124,6 +136,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.SKU,
 		&i.Barcode,
 		&i.Name,
+		&i.CategoryID,
 		&i.Price,
 		&i.Cost,
 		&i.IsActive,
@@ -144,6 +157,7 @@ RETURNING
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -159,6 +173,7 @@ func (q *Queries) DeactivateProduct(ctx context.Context, id pgtype.UUID) (Produc
 		&i.SKU,
 		&i.Barcode,
 		&i.Name,
+		&i.CategoryID,
 		&i.Price,
 		&i.Cost,
 		&i.IsActive,
@@ -174,6 +189,7 @@ SELECT
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -192,6 +208,7 @@ func (q *Queries) GetProductByBarcode(ctx context.Context, barcode pgtype.Text) 
 		&i.SKU,
 		&i.Barcode,
 		&i.Name,
+		&i.CategoryID,
 		&i.Price,
 		&i.Cost,
 		&i.IsActive,
@@ -207,6 +224,7 @@ SELECT
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -225,6 +243,7 @@ func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (Product, 
 		&i.SKU,
 		&i.Barcode,
 		&i.Name,
+		&i.CategoryID,
 		&i.Price,
 		&i.Cost,
 		&i.IsActive,
@@ -240,6 +259,7 @@ SELECT
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -258,6 +278,7 @@ func (q *Queries) GetProductBySKU(ctx context.Context, sku string) (Product, err
 		&i.SKU,
 		&i.Barcode,
 		&i.Name,
+		&i.CategoryID,
 		&i.Price,
 		&i.Cost,
 		&i.IsActive,
@@ -273,6 +294,7 @@ SELECT
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -286,14 +308,19 @@ WHERE
         OR sku ILIKE '%' || CAST($1 AS TEXT) || '%'
         OR barcode ILIKE '%' || CAST($1 AS TEXT) || '%'
     )
-    AND (NOT $2 OR is_active = TRUE)
+    AND (
+        CAST($2 AS UUID) IS NULL
+        OR category_id = CAST($2 AS UUID)
+    )
+    AND (NOT $3 OR is_active = TRUE)
 ORDER BY name ASC, id ASC
-LIMIT $4
-OFFSET $3
+LIMIT $5
+OFFSET $4
 `
 
 type ListProductsParams struct {
 	Search     pgtype.Text
+	CategoryID pgtype.UUID
 	ActiveOnly interface{}
 	PageOffset int32
 	PageSize   int32
@@ -302,6 +329,7 @@ type ListProductsParams struct {
 func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
 	rows, err := q.db.Query(ctx, listProducts,
 		arg.Search,
+		arg.CategoryID,
 		arg.ActiveOnly,
 		arg.PageOffset,
 		arg.PageSize,
@@ -318,6 +346,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 			&i.SKU,
 			&i.Barcode,
 			&i.Name,
+			&i.CategoryID,
 			&i.Price,
 			&i.Cost,
 			&i.IsActive,
@@ -340,15 +369,17 @@ SET
     sku = $1,
     barcode = $2,
     name = $3,
-    price = $4,
-    cost = $5,
+    category_id = $4,
+    price = $5,
+    cost = $6,
     updated_at = NOW()
-WHERE id = $6
+WHERE id = $7
 RETURNING
     id,
     sku,
     barcode,
     name,
+    category_id,
     price,
     cost,
     is_active,
@@ -357,12 +388,13 @@ RETURNING
 `
 
 type UpdateProductParams struct {
-	SKU     string
-	Barcode pgtype.Text
-	Name    string
-	Price   pgtype.Numeric
-	Cost    pgtype.Numeric
-	ID      pgtype.UUID
+	SKU        string
+	Barcode    pgtype.Text
+	Name       string
+	CategoryID pgtype.UUID
+	Price      pgtype.Numeric
+	Cost       pgtype.Numeric
+	ID         pgtype.UUID
 }
 
 func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
@@ -370,6 +402,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		arg.SKU,
 		arg.Barcode,
 		arg.Name,
+		arg.CategoryID,
 		arg.Price,
 		arg.Cost,
 		arg.ID,
@@ -380,6 +413,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.SKU,
 		&i.Barcode,
 		&i.Name,
+		&i.CategoryID,
 		&i.Price,
 		&i.Cost,
 		&i.IsActive,

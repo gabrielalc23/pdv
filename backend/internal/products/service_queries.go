@@ -33,11 +33,19 @@ func (s *Service) List(
 	}
 
 	search := optionalText(input.Search)
+	categoryID := pgtype.UUID{}
+	if input.CategoryID != "" {
+		categoryID, err = parseUUID(input.CategoryID, "categoryId")
+		if err != nil {
+			return ProductListResponse{}, err
+		}
+	}
 
 	total, err := s.store.CountProducts(
 		ctx,
 		database.CountProductsParams{
 			Search:     search,
+			CategoryID: categoryID,
 			ActiveOnly: input.ActiveOnly,
 		},
 	)
@@ -50,6 +58,7 @@ func (s *Service) List(
 		ctx,
 		database.ListProductsParams{
 			Search:     search,
+			CategoryID: categoryID,
 			ActiveOnly: input.ActiveOnly,
 			PageOffset: int32((page - 1) * pageSize),
 			PageSize:   int32(pageSize),

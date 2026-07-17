@@ -30,16 +30,23 @@ func toProductResponse(product database.Product) (ProductResponse, error) {
 		cost = &value
 	}
 
+	var categoryID *string
+	if product.CategoryID.Valid {
+		value := product.CategoryID.String()
+		categoryID = &value
+	}
+
 	return ProductResponse{
-		ID:        product.ID.String(),
-		SKU:       product.SKU,
-		Barcode:   barcode,
-		Name:      product.Name,
-		Price:     price,
-		Cost:      cost,
-		IsActive:  product.IsActive,
-		CreatedAt: timestampOrZero(product.CreatedAt),
-		UpdatedAt: timestampOrZero(product.UpdatedAt),
+		ID:         product.ID.String(),
+		SKU:        product.SKU,
+		Barcode:    barcode,
+		Name:       product.Name,
+		CategoryID: categoryID,
+		Price:      price,
+		Cost:       cost,
+		IsActive:   product.IsActive,
+		CreatedAt:  timestampOrZero(product.CreatedAt),
+		UpdatedAt:  timestampOrZero(product.UpdatedAt),
 	}, nil
 }
 
