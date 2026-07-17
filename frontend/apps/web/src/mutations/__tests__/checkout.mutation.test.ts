@@ -1,12 +1,16 @@
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest"
-import { renderHook, waitFor } from "@testing-library/react"
-import { createMockHandler, testServer, TestWrapper } from "../../__tests__/test-utils"
-import { mockSale } from "../../__tests__/mocks"
-import { useCheckoutSaleMutation } from "../checkout.mutation"
+import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
+import {
+  createMockHandler,
+  testServer,
+  TestWrapper,
+} from "../../__tests__/test-utils";
+import { mockSale } from "../../__tests__/mocks";
+import { useCheckoutSaleMutation } from "../checkout.mutation";
 
-beforeAll(() => testServer.listen())
-afterAll(() => testServer.close())
-afterEach(() => testServer.resetHandlers())
+beforeAll(() => testServer.listen());
+afterAll(() => testServer.close());
+afterEach(() => testServer.resetHandlers());
 
 describe("useCheckoutSaleMutation", () => {
   it("completes checkout with single payment", async () => {
@@ -55,10 +59,19 @@ describe("useCheckoutSaleMutation", () => {
         createdAt: "...",
         updatedAt: "...",
       },
-    }
-    testServer.use(createMockHandler("post", `/sales/${mockSale.id}/checkout`, 200, checkoutResult))
+    };
+    testServer.use(
+      createMockHandler(
+        "post",
+        `/sales/${mockSale.id}/checkout`,
+        200,
+        checkoutResult,
+      ),
+    );
 
-    const { result } = renderHook(() => useCheckoutSaleMutation(), { wrapper: TestWrapper })
+    const { result } = renderHook(() => useCheckoutSaleMutation(), {
+      wrapper: TestWrapper,
+    });
 
     result.current.mutate({
       saleId: mockSale.id,
@@ -73,12 +86,12 @@ describe("useCheckoutSaleMutation", () => {
           },
         ],
       },
-    })
+    });
 
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(result.current.data?.sale.status).toBe("COMPLETED")
-    expect(result.current.data?.sale.completedAt).toBe("2026-07-16T10:00:00Z")
-    expect(result.current.data?.payments).toHaveLength(1)
-    expect(result.current.data?.payments[0].status).toBe("APPROVED")
-  })
-})
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.sale.status).toBe("COMPLETED");
+    expect(result.current.data?.sale.completedAt).toBe("2026-07-16T10:00:00Z");
+    expect(result.current.data?.payments).toHaveLength(1);
+    expect(result.current.data?.payments[0].status).toBe("APPROVED");
+  });
+});

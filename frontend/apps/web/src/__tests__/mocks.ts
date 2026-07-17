@@ -1,14 +1,22 @@
-import type { ProductResponse, ProductListResponse } from "../interfaces/product.interface"
-import type { HealthResponse } from "../interfaces/health.interface"
-import type { SaleResponse, SaleListResponse } from "../interfaces/sale.interface"
-import type { PaymentMethodsResponse } from "../interfaces/payment.interface"
-import type { CatalogProductResponse, CatalogListResponse } from "../interfaces/catalog.interface"
+import type {
+  ProductResponse,
+  ProductListResponse,
+} from "../interfaces/product.interface";
+import type {
+  SaleResponse,
+  SaleListResponse,
+} from "../interfaces/sale.interface";
+import type { PaymentMethodsResponse } from "../interfaces/payment.interface";
+import type {
+  CatalogProductResponse,
+  CatalogListResponse,
+} from "../interfaces/catalog.interface";
 import type {
   InventoryResponse,
   InventoryMovementResponse,
-} from "../interfaces/inventory.interface"
-import type { FiscalDocumentResponse } from "../interfaces/fiscal.interface"
-import type { ReceiptResponse } from "../interfaces/receipt.interface"
+} from "../interfaces/inventory.interface";
+import type { FiscalDocumentResponse } from "../interfaces/fiscal.interface";
+import type { ReceiptResponse } from "../interfaces/receipt.interface";
 
 export const mockProduct: ProductResponse = {
   id: "550e8400-e29b-41d4-a716-446655440000",
@@ -20,14 +28,12 @@ export const mockProduct: ProductResponse = {
   isActive: true,
   createdAt: "2026-07-16T10:00:00Z",
   updatedAt: "2026-07-16T10:00:00Z",
-}
+};
 
 export const mockProductList: ProductListResponse = {
   data: [mockProduct],
   pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
-}
-
-export const mockHealth: HealthResponse = { status: "ok" }
+};
 
 export const mockSale: SaleResponse = {
   id: "550e8400-e29b-41d4-a716-446655440001",
@@ -57,12 +63,12 @@ export const mockSale: SaleResponse = {
       createdAt: "...",
     },
   ],
-}
+};
 
 export const mockSaleList: SaleListResponse = {
   data: [mockSale],
   pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
-}
+};
 
 export const mockPaymentMethods: PaymentMethodsResponse = {
   data: [
@@ -93,7 +99,7 @@ export const mockPaymentMethods: PaymentMethodsResponse = {
       updatedAt: "...",
     },
   ],
-}
+};
 
 export const mockCatalogProduct: CatalogProductResponse = {
   id: "550e8400-e29b-41d4-a716-446655440002",
@@ -106,12 +112,12 @@ export const mockCatalogProduct: CatalogProductResponse = {
   inStock: true,
   createdAt: "...",
   updatedAt: "...",
-}
+};
 
 export const mockCatalogProductList: CatalogListResponse = {
   data: [mockCatalogProduct],
   pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
-}
+};
 
 export const mockCatalogProductByBarcode: CatalogProductResponse = {
   id: "550e8400-e29b-41d4-a716-446655440003",
@@ -124,7 +130,7 @@ export const mockCatalogProductByBarcode: CatalogProductResponse = {
   inStock: true,
   createdAt: "...",
   updatedAt: "...",
-}
+};
 
 export const mockInventory: InventoryResponse = {
   productId: "550e8400-e29b-41d4-a716-446655440000",
@@ -134,7 +140,7 @@ export const mockInventory: InventoryResponse = {
   isActive: true,
   createdAt: "...",
   updatedAt: "...",
-}
+};
 
 export const mockInventoryMovement: InventoryMovementResponse = {
   id: "550e8400-e29b-41d4-a716-446655440004",
@@ -147,7 +153,7 @@ export const mockInventoryMovement: InventoryMovementResponse = {
   referenceType: "PURCHASE",
   referenceId: "PO-001",
   createdAt: "...",
-}
+};
 
 export const mockFiscalDocument: FiscalDocumentResponse = {
   id: "550e8400-e29b-41d4-a716-446655440005",
@@ -168,7 +174,7 @@ export const mockFiscalDocument: FiscalDocumentResponse = {
   cancelledAt: null,
   createdAt: "...",
   updatedAt: "...",
-}
+};
 
 export const mockReceipt: ReceiptResponse = {
   sale: {
@@ -211,4 +217,4 @@ export const mockReceipt: ReceiptResponse = {
     },
   ],
   fiscalDocument: mockFiscalDocument,
-}
+};

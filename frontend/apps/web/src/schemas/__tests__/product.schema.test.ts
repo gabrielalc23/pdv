@@ -1,5 +1,10 @@
-import { describe, it, expect } from "vitest"
-import { UpsertProductInputSchema, ProductResponseSchema, ListProductsParamsSchema, ProductListResponseSchema } from "../product.schema"
+import { describe, it, expect } from "vitest";
+import {
+  UpsertProductInputSchema,
+  ProductResponseSchema,
+  ListProductsParamsSchema,
+  ProductListResponseSchema,
+} from "../product.schema";
 
 describe("UpsertProductInputSchema", () => {
   it("accepts valid input", () => {
@@ -9,9 +14,9 @@ describe("UpsertProductInputSchema", () => {
       name: "Produto Teste",
       price: "99.90",
       cost: null,
-    })
-    expect(result.success).toBe(true)
-  })
+    });
+    expect(result.success).toBe(true);
+  });
 
   it("accepts input with barcode and cost", () => {
     const result = UpsertProductInputSchema.safeParse({
@@ -20,9 +25,9 @@ describe("UpsertProductInputSchema", () => {
       name: "Produto Teste",
       price: "99.90",
       cost: "50.00",
-    })
-    expect(result.success).toBe(true)
-  })
+    });
+    expect(result.success).toBe(true);
+  });
 
   it("rejects empty sku", () => {
     const result = UpsertProductInputSchema.safeParse({
@@ -31,9 +36,9 @@ describe("UpsertProductInputSchema", () => {
       name: "Produto",
       price: "10.00",
       cost: null,
-    })
-    expect(result.success).toBe(true)
-  })
+    });
+    expect(result.success).toBe(true);
+  });
 
   it("rejects missing name", () => {
     const result = UpsertProductInputSchema.safeParse({
@@ -41,9 +46,9 @@ describe("UpsertProductInputSchema", () => {
       barcode: null,
       price: "10.00",
       cost: null,
-    })
-    expect(result.success).toBe(false)
-  })
+    });
+    expect(result.success).toBe(false);
+  });
 
   it("rejects non-string price", () => {
     const result = UpsertProductInputSchema.safeParse({
@@ -52,10 +57,10 @@ describe("UpsertProductInputSchema", () => {
       name: "Produto",
       price: 99.9,
       cost: null,
-    })
-    expect(result.success).toBe(false)
-  })
-})
+    });
+    expect(result.success).toBe(false);
+  });
+});
 
 describe("ProductResponseSchema", () => {
   it("accepts full product response", () => {
@@ -69,9 +74,9 @@ describe("ProductResponseSchema", () => {
       isActive: true,
       createdAt: "2026-07-16T10:00:00Z",
       updatedAt: "2026-07-16T10:00:00Z",
-    })
-    expect(result.success).toBe(true)
-  })
+    });
+    expect(result.success).toBe(true);
+  });
 
   it("rejects missing isActive", () => {
     const result = ProductResponseSchema.safeParse({
@@ -81,16 +86,16 @@ describe("ProductResponseSchema", () => {
       price: "10.00",
       createdAt: "...",
       updatedAt: "...",
-    })
-    expect(result.success).toBe(false)
-  })
-})
+    });
+    expect(result.success).toBe(false);
+  });
+});
 
 describe("ListProductsParamsSchema", () => {
   it("accepts empty params", () => {
-    const result = ListProductsParamsSchema.safeParse({})
-    expect(result.success).toBe(true)
-  })
+    const result = ListProductsParamsSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
 
   it("accepts full params", () => {
     const result = ListProductsParamsSchema.safeParse({
@@ -98,10 +103,10 @@ describe("ListProductsParamsSchema", () => {
       page: 1,
       pageSize: 50,
       activeOnly: true,
-    })
-    expect(result.success).toBe(true)
-  })
-})
+    });
+    expect(result.success).toBe(true);
+  });
+});
 
 describe("ProductListResponseSchema", () => {
   it("accepts paginated response", () => {
@@ -120,15 +125,15 @@ describe("ProductListResponseSchema", () => {
         },
       ],
       pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1 },
-    })
-    expect(result.success).toBe(true)
-  })
+    });
+    expect(result.success).toBe(true);
+  });
 
   it("accepts empty data array", () => {
     const result = ProductListResponseSchema.safeParse({
       data: [],
       pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0 },
-    })
-    expect(result.success).toBe(true)
-  })
-})
+    });
+    expect(result.success).toBe(true);
+  });
+});

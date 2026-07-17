@@ -1,17 +1,20 @@
-import { describe, it, expect } from "vitest"
-import { ListCatalogParamsSchema, CatalogProductResponseSchema } from "../catalog.schema"
+import { describe, it, expect } from "vitest";
+import {
+  ListCatalogParamsSchema,
+  CatalogProductResponseSchema,
+} from "../catalog.schema";
 
 describe("ListCatalogParamsSchema", () => {
   it("accepts empty params", () => {
-    const result = ListCatalogParamsSchema.safeParse({})
-    expect(result.success).toBe(true)
-  })
+    const result = ListCatalogParamsSchema.safeParse({});
+    expect(result.success).toBe(true);
+  });
 
   it("accepts inStockOnly filter", () => {
-    const result = ListCatalogParamsSchema.safeParse({ inStockOnly: true })
-    expect(result.success).toBe(true)
-  })
-})
+    const result = ListCatalogParamsSchema.safeParse({ inStockOnly: true });
+    expect(result.success).toBe(true);
+  });
+});
 
 describe("CatalogProductResponseSchema", () => {
   it("accepts valid catalog product", () => {
@@ -26,9 +29,9 @@ describe("CatalogProductResponseSchema", () => {
       inStock: true,
       createdAt: "...",
       updatedAt: "...",
-    })
-    expect(result.success).toBe(true)
-  })
+    });
+    expect(result.success).toBe(true);
+  });
 
   it("rejects missing inStock", () => {
     const result = CatalogProductResponseSchema.safeParse({
@@ -40,7 +43,7 @@ describe("CatalogProductResponseSchema", () => {
       isActive: true,
       createdAt: "...",
       updatedAt: "...",
-    })
-    expect(result.success).toBe(false)
-  })
-})
+    });
+    expect(result.success).toBe(false);
+  });
+});

@@ -1,11 +1,14 @@
-import { describe, it, expect } from "vitest"
-import { PaymentMethodsResponseSchema, SalePaymentsResponseSchema } from "../payment.schema"
+import { describe, it, expect } from "vitest";
+import {
+  PaymentMethodsResponseSchema,
+  SalePaymentsResponseSchema,
+} from "../payment.schema";
 
 describe("PaymentMethodsResponseSchema", () => {
   it("accepts empty list", () => {
-    const result = PaymentMethodsResponseSchema.safeParse({ data: [] })
-    expect(result.success).toBe(true)
-  })
+    const result = PaymentMethodsResponseSchema.safeParse({ data: [] });
+    expect(result.success).toBe(true);
+  });
 
   it("accepts payment methods", () => {
     const result = PaymentMethodsResponseSchema.safeParse({
@@ -24,16 +27,16 @@ describe("PaymentMethodsResponseSchema", () => {
           updatedAt: "...",
         },
       ],
-    })
-    expect(result.success).toBe(true)
-  })
-})
+    });
+    expect(result.success).toBe(true);
+  });
+});
 
 describe("SalePaymentsResponseSchema", () => {
   it("accepts empty payments", () => {
-    const result = SalePaymentsResponseSchema.safeParse({ data: [] })
-    expect(result.success).toBe(true)
-  })
+    const result = SalePaymentsResponseSchema.safeParse({ data: [] });
+    expect(result.success).toBe(true);
+  });
 
   it("accepts payment without optional fields", () => {
     const result = SalePaymentsResponseSchema.safeParse({
@@ -51,7 +54,7 @@ describe("SalePaymentsResponseSchema", () => {
           updatedAt: "...",
         },
       ],
-    })
-    expect(result.success).toBe(true)
-  })
-})
+    });
+    expect(result.success).toBe(true);
+  });
+});

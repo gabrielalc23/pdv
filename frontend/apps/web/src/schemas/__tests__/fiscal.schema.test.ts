@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest"
-import { FiscalDocumentResponseSchema } from "../fiscal.schema"
+import { describe, it, expect } from "vitest";
+import { FiscalDocumentResponseSchema } from "../fiscal.schema";
 
 describe("FiscalDocumentResponseSchema", () => {
   it("accepts minimal fiscal document", () => {
@@ -11,9 +11,9 @@ describe("FiscalDocumentResponseSchema", () => {
       documentModel: 65,
       createdAt: "...",
       updatedAt: "...",
-    })
-    expect(result.success).toBe(true)
-  })
+    });
+    expect(result.success).toBe(true);
+  });
 
   it("accepts authorized document with all fields", () => {
     const result = FiscalDocumentResponseSchema.safeParse({
@@ -32,7 +32,7 @@ describe("FiscalDocumentResponseSchema", () => {
       issuedAt: "2026-07-16T10:00:00Z",
       createdAt: "...",
       updatedAt: "...",
-    })
-    expect(result.success).toBe(true)
-  })
-})
+    });
+    expect(result.success).toBe(true);
+  });
+});

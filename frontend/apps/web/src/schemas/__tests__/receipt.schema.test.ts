@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest"
-import { ReceiptResponseSchema } from "../receipt.schema"
+import { describe, it, expect } from "vitest";
+import { ReceiptResponseSchema } from "../receipt.schema";
 
 describe("ReceiptResponseSchema", () => {
   it("accepts complete receipt", () => {
@@ -47,9 +47,9 @@ describe("ReceiptResponseSchema", () => {
         provider: "mock",
         externalReference: "sale-uuid",
       },
-    })
-    expect(result.success).toBe(true)
-  })
+    });
+    expect(result.success).toBe(true);
+  });
 
   it("accepts receipt without fiscal document", () => {
     const result = ReceiptResponseSchema.safeParse({
@@ -71,7 +71,7 @@ describe("ReceiptResponseSchema", () => {
       items: [],
       payments: [],
       fiscalDocument: null,
-    })
-    expect(result.success).toBe(true)
-  })
-})
+    });
+    expect(result.success).toBe(true);
+  });
+});
