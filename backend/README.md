@@ -6,6 +6,7 @@ pgx/v5 for database access, and sqlc for type-safe query generation.
 ## Capabilities
 
 - Product management and catalog lookup.
+- Product categories with filtering across products and catalog.
 - Inventory entries, adjustments, balances, and movements.
 - Open sales with snapshot sale items and totals.
 - Transactional checkout with local payment approval and atomic stock decrements.
@@ -111,6 +112,7 @@ preserve decimal precision.
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Health    | `GET /health`                                                                                                                                                              |
 | Products  | `POST /products`, `GET /products`, `GET /products/{id}`, `PUT /products/{id}`, `POST /products/{id}/activate`, `POST /products/{id}/deactivate`                            |
+| Categories | `POST /categories`, `GET /categories`, `GET /categories/{id}`, `PUT /categories/{id}`, `POST /categories/{id}/activate`, `POST /categories/{id}/deactivate`                 |
 | Inventory | `GET /inventory`, `GET /products/{id}/inventory`, `POST /inventory/entries`, `POST /inventory/adjustments`, `GET /products/{id}/inventory/movements`                       |
 | Catalog   | `GET /catalog`, `GET /catalog/barcode/{barcode}`, `GET /catalog/{id}`                                                                                                      |
 | Sales     | `POST /sales`, `GET /sales`, `GET /sales/{id}`, `POST /sales/{id}/items`, `PUT /sales/{id}/items/{itemId}`, `DELETE /sales/{id}/items/{itemId}`, `POST /sales/{id}/cancel` |

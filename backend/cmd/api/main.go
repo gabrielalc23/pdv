@@ -11,6 +11,7 @@ import (
 
 	"github.com/gabrielalc23/pdv/config"
 	"github.com/gabrielalc23/pdv/internal/catalog"
+	"github.com/gabrielalc23/pdv/internal/categories"
 	"github.com/gabrielalc23/pdv/internal/checkout"
 	"github.com/gabrielalc23/pdv/internal/fiscal"
 	"github.com/gabrielalc23/pdv/internal/inventory"
@@ -48,6 +49,10 @@ func main() {
 	productService := products.NewService(store.Queries)
 	productHandler := products.NewHandler(productService)
 	products.RegisterRoutes(router, productHandler)
+
+	categoryService := categories.NewService(store.Queries)
+	categoryHandler := categories.NewHandler(categoryService)
+	categories.RegisterRoutes(router, categoryHandler)
 
 	inventoryService := inventory.NewService(store.Queries, inventory.NewTxManager(store))
 	inventoryHandler := inventory.NewHandler(inventoryService)

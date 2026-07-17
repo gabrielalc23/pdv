@@ -351,6 +351,16 @@ func (e SaleStatus) Valid() bool {
 	return false
 }
 
+// Product categories used to organize the catalog.
+type Category struct {
+	ID        pgtype.UUID
+	Name      string
+	Slug      string
+	IsActive  bool
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 // Stores fiscal documents issued for completed POS sales.
 type FiscalDocument struct {
 	ID pgtype.UUID
@@ -455,6 +465,8 @@ type Product struct {
 	Barcode pgtype.Text
 	// Product name displayed in administrative and POS interfaces.
 	Name string
+	// Optional category used to organize the product catalog.
+	CategoryID pgtype.UUID
 	// Current product sale price. Historical prices are preserved in sale_items.
 	Price pgtype.Numeric
 	// Optional product acquisition cost used for margin calculations.
