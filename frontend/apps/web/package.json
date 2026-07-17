@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "format": "prettier --ignore-path ../../.prettierignore --write .",
-    "format:check": "prettier --ignore-path ../../.prettierignore --check .",
+    "format": "prettier --config ./prettier.config.js --ignore-path ../../.prettierignore --write .",
+    "format:check": "prettier --config ./prettier.config.js --ignore-path ../../.prettierignore --check .",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix && prettier --config ./prettier.config.js --ignore-path ../../.prettierignore --write .",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -17,10 +18,12 @@
     "@pdv/ui-kit": "workspace:*",
     "@pdv/utils": "workspace:*",
     "@tailwindcss/vite": "^4.3.2",
+    "@tanstack/react-form": "^1.33.2",
     "@tanstack/react-query": "^5.101.2",
     "@tanstack/react-router": "^1.170.18",
     "@tanstack/react-router-devtools": "^1.167.0",
     "axios": "^1.13.6",
+    "lucide-react": "^1.24.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwindcss": "^4.3.2",

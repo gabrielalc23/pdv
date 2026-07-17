@@ -1,113 +1,186 @@
 @import "@pdv/ui-kit/styles.css";
 @source "../../../../packages/ui-kit/src";
 
+@font-face {
+  font-family: "Avenir Next";
+  src: url("/fonts/avenir-next-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Avenir Next";
+  src: url("/fonts/avenir-next-medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Avenir Next";
+  src: url("/fonts/avenir-next-demi.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Avenir Next";
+  src: url("/fonts/avenir-next-bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Avenir Next";
+  src: url("/fonts/avenir-next-heavy.woff2") format("woff2");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Iowan Old Style";
+  src: url("/fonts/iowan-old-style-roman.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --animate-page-enter: page-enter 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-command-overlay-enter: command-overlay-enter 180ms ease-out both;
+  --animate-command-menu-enter: command-menu-enter 220ms
+    cubic-bezier(0.22, 1, 0.36, 1) both;
+  --font-sans: "Avenir Next", "Segoe UI", sans-serif;
+  --font-serif: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(0.75rem);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes command-overlay-enter {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes command-menu-enter {
+    from {
+      opacity: 0;
+      transform: translateY(-0.5rem) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+}
+
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow: x rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+  --ink: #18282c;
+  --ink-soft: #536265;
+  --paper: #f5f2eb;
+  --paper-deep: #ebe7de;
+  --surface: #faf8f3;
+  --surface-muted: #f2efe7;
+  --line: #d8d6cd;
+  --coral: #e5654d;
+  --coral-dark: #b84e3c;
+  --coral-bright: #f08365;
+  --coral-wash: #f8e3dc;
+  --coral-soft: #f6b09d;
+  --coral-border: #e7b1a4;
+  --coral-foreground: #fff9f1;
+  --mint: #dcebe4;
+  --mint-foreground: #39705b;
+  --mint-border: #cbd7d0;
+  --mint-deep: #24463b;
+  --mint-muted: #527268;
+  --mint-accent: #315b4c;
+  --mint-accent-border: #aac7b8;
+  --mint-progress: #5c9a7e;
+  --blue-wash: #dce9ed;
+  --blue-foreground: #31535a;
+  --sand: #eee5d3;
+  --sand-foreground: #866a3f;
+  --contrast-light: #fff;
+  --neutral-dark: #000;
+  --transparent: transparent;
+  --shadow: 0 18px 45px rgb(24 40 44 / 8%);
+  --shadow-coral: 0 8px 18px rgb(240 131 101 / 18%);
+  --shadow-active: 0 8px 20px rgb(0 0 0 / 12%);
+  --grain: rgb(24 40 44 / 8%);
 
-  --sans: system-ui, "Segoe UI", Roboto, sans-serif;
-  --heading: system-ui, "Segoe UI", Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+  --sans: "Avenir Next", "Segoe UI", sans-serif;
+  --heading: "Iowan Old Style", "Palatino Linotype", Palatino, serif;
+  --mono: "SFMono-Regular", Consolas, monospace;
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
+  font: 16px/1.45 var(--sans);
+  color: var(--ink);
+  background: var(--paper);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-
-  @media (max-width: 1024px) {
-    font-size: 16px;
-  }
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow: rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
-  }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
 }
 
 #root {
-  width: 1126px;
   max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
   min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
 }
 
 body {
   margin: 0;
   position: relative;
+  min-width: 320px;
+  background: var(--paper);
 }
 
 h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
+h2,
+h3,
 p {
   margin: 0;
 }
 
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
+h1,
+h2,
+h3 {
+  font-family: var(--heading);
+  font-weight: 600;
+  color: var(--ink);
 }
 
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
+h1 {
+  font-size: clamp(2rem, 3.4vw, 3.5rem);
+  line-height: 0.98;
+  letter-spacing: -0.045em;
+}
+
+h2 {
+  font-size: 1.7rem;
+  line-height: 1.05;
+}
+
+.app-grain {
+  background-image: radial-gradient(
+    var(--grain) 0.6px,
+    var(--transparent) 0.6px
+  );
+  background-size: 7px 7px;
+  opacity: 0.14;
+  pointer-events: none;
 }
