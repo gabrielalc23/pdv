@@ -1,1 +1,1 @@
-export type SaleStatus = "OPEN" | "COMPLETED" | "CANCELLED"
+export type SaleStatus = "OPEN" | "COMPLETED" | "CANCELLED";

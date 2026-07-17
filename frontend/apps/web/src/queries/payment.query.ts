@@ -1,16 +1,16 @@
-import { createApiCall, HttpMethod } from "@pdv/http"
-import { z } from "zod"
-import { mapApiError } from "@pdv/errors"
-import { useQuery } from "@tanstack/react-query"
-import type { UseQueryResult } from "@tanstack/react-query"
+import { createApiCall, HttpMethod } from "@pdv/http";
+import { z } from "zod";
+import { mapApiError } from "@pdv/errors";
+import { useQuery } from "@tanstack/react-query";
+import type { UseQueryResult } from "@tanstack/react-query";
 import {
   PaymentMethodsResponseSchema,
   SalePaymentsResponseSchema,
-} from "../schemas/payment.schema"
+} from "../schemas/payment.schema";
 import type {
   PaymentMethodsResponse,
   SalePaymentsResponse,
-} from "../interfaces/payment.interface"
+} from "../interfaces/payment.interface";
 
 function listPaymentMethods(): Promise<PaymentMethodsResponse> {
   const api = createApiCall({
@@ -19,9 +19,9 @@ function listPaymentMethods(): Promise<PaymentMethodsResponse> {
     path: "/payment-methods",
     requestSchema: z.object({}),
     responseSchema: PaymentMethodsResponseSchema,
-  })
+  });
 
-  return api({}).catch(mapApiError)
+  return api({}).catch(mapApiError);
 }
 
 function listSalePayments(saleId: string): Promise<SalePaymentsResponse> {
@@ -31,22 +31,23 @@ function listSalePayments(saleId: string): Promise<SalePaymentsResponse> {
     path: `/sales/${saleId}/payments`,
     requestSchema: z.object({}),
     responseSchema: SalePaymentsResponseSchema,
-  })
+  });
 
-  return api({}).catch(mapApiError)
+  return api({}).catch(mapApiError);
 }
 
 export const paymentKeys = {
   all: ["payments"] as const,
   methods: () => [...paymentKeys.all, "methods"] as const,
-  salePayments: (saleId: string) => [...paymentKeys.all, "sale", saleId] as const,
-}
+  salePayments: (saleId: string) =>
+    [...paymentKeys.all, "sale", saleId] as const,
+};
 
 export function useListPaymentMethodsQuery(): UseQueryResult<PaymentMethodsResponse> {
   return useQuery({
     queryKey: paymentKeys.methods(),
     queryFn: listPaymentMethods,
-  })
+  });
 }
 
 export function useListSalePaymentsQuery(
@@ -56,5 +57,5 @@ export function useListSalePaymentsQuery(
     queryKey: paymentKeys.salePayments(saleId),
     queryFn: () => listSalePayments(saleId),
     enabled: !!saleId,
-  })
+  });
 }

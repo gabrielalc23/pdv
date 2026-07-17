@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from "zod";
 
 export const CheckoutPaymentInputSchema = z.object({
   paymentMethodId: z.string(),
@@ -6,11 +6,11 @@ export const CheckoutPaymentInputSchema = z.object({
   receivedAmount: z.string().nullable().optional(),
   installments: z.number().int().nullable().optional(),
   externalReference: z.string().nullable().optional(),
-})
+});
 
 export const CheckoutInputSchema = z.object({
   payments: z.array(CheckoutPaymentInputSchema),
-})
+});
 
 export const CheckoutSaleResponseSchema = z.object({
   id: z.string(),
@@ -26,7 +26,7 @@ export const CheckoutSaleResponseSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   idempotencyKey: z.string(),
-})
+});
 
 export const CheckoutPaymentResponseSchema = z.object({
   id: z.string(),
@@ -44,7 +44,7 @@ export const CheckoutPaymentResponseSchema = z.object({
   paidAt: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-})
+});
 
 export const CheckoutFiscalDocumentResponseSchema = z.object({
   id: z.string(),
@@ -64,10 +64,10 @@ export const CheckoutFiscalDocumentResponseSchema = z.object({
   cancelledAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
-})
+});
 
 export const CheckoutResponseSchema = z.object({
   sale: CheckoutSaleResponseSchema,
   payments: z.array(CheckoutPaymentResponseSchema),
   fiscalDocument: CheckoutFiscalDocumentResponseSchema,
-})
+});

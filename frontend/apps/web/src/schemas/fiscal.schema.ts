@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from "zod";
 
 export const FiscalDocumentResponseSchema = z.object({
   id: z.string(),
@@ -19,4 +19,4 @@ export const FiscalDocumentResponseSchema = z.object({
   cancelledAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
-})
+});

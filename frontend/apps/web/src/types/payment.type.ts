@@ -5,6 +5,6 @@ export type PaymentMethodKind =
   | "CREDIT_CARD"
   | "VOUCHER"
   | "STORE_CREDIT"
-  | "OTHER"
+  | "OTHER";
 
-export type PaymentStatus = "PENDING" | "APPROVED" | "DECLINED" | "CANCELLED"
+export type PaymentStatus = "PENDING" | "APPROVED" | "DECLINED" | "CANCELLED";

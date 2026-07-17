@@ -1,1 +1,1 @@
-export type InventoryDirection = "IN" | "OUT"
+export type InventoryDirection = "IN" | "OUT";

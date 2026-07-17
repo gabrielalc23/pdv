@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from "zod";
 
 export const PaymentMethodResponseSchema = z.object({
   id: z.string(),
@@ -12,11 +12,11 @@ export const PaymentMethodResponseSchema = z.object({
   feePercentage: z.string(),
   createdAt: z.string(),
   updatedAt: z.string(),
-})
+});
 
 export const PaymentMethodsResponseSchema = z.object({
   data: z.array(PaymentMethodResponseSchema),
-})
+});
 
 export const SalePaymentResponseSchema = z.object({
   id: z.string(),
@@ -33,8 +33,8 @@ export const SalePaymentResponseSchema = z.object({
   paidAt: z.string().optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
-})
+});
 
 export const SalePaymentsResponseSchema = z.object({
   data: z.array(SalePaymentResponseSchema),
-})
+});
