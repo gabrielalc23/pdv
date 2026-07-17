@@ -1,6 +1,6 @@
-import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
+import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function TabsRoot({
   className,
@@ -14,5 +14,5 @@ export function TabsRoot({
       className={cn("group/tabs flex gap-2 data-horizontal:flex-col", className)}
       {...props}
     />
-  )
+  );
 }

@@ -1,2 +1,2 @@
-export * from "./either.factory"
-export * from "./either.type"
+export * from "./either.factory";
+export * from "./either.type";

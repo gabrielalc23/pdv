@@ -1,6 +1,6 @@
-import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
+import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function SheetDescription({ className, ...props }: SheetPrimitive.Description.Props) {
   return (
@@ -9,5 +9,5 @@ export function SheetDescription({ className, ...props }: SheetPrimitive.Descrip
       className={cn("text-sm text-muted-foreground", className)}
       {...props}
     />
-  )
+  );
 }

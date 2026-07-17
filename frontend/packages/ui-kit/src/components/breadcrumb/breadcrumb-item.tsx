@@ -1,13 +1,13 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
-export function BreadcrumbItem({ className, ...props }: React.ComponentProps<"li">) {
+export function BreadcrumbItem({ className, ...props }: React.LiHTMLAttributes<HTMLLIElement>) {
   return (
     <li
       data-slot="breadcrumb-item"
       className={cn("inline-flex items-center gap-1", className)}
       {...props}
     />
-  )
+  );
 }

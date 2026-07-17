@@ -1,4 +1,4 @@
-import { AppError } from "./app.error"
+import { AppError } from "./app.error";
 
 export class UnauthorizedError extends AppError {
   public constructor(message: string = "Authentication is required", cause?: unknown) {
@@ -7,6 +7,6 @@ export class UnauthorizedError extends AppError {
       message,
       status: 401,
       cause,
-    })
+    });
   }
 }

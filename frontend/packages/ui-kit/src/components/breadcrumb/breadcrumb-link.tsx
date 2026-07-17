@@ -1,7 +1,7 @@
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function BreadcrumbLink({ className, render, ...props }: useRender.ComponentProps<"a">) {
   return useRender({
@@ -16,5 +16,5 @@ export function BreadcrumbLink({ className, render, ...props }: useRender.Compon
     state: {
       slot: "breadcrumb-link",
     },
-  })
+  });
 }

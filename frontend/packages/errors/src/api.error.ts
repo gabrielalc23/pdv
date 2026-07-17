@@ -1,4 +1,4 @@
-import { AppError } from "./app.error"
+import { AppError } from "./app.error";
 
 export class ApiError extends AppError {
   public constructor(
@@ -8,6 +8,6 @@ export class ApiError extends AppError {
     field?: string | undefined,
     cause?: unknown,
   ) {
-    super({ code, message, status, field, cause })
+    super({ code, message, status, field, cause });
   }
 }

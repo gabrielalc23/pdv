@@ -1,8 +1,8 @@
-import * as React from "react"
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
+import type * as React from "react";
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarMenuSubButton({
   render,
@@ -12,8 +12,8 @@ export default function SidebarMenuSubButton({
   ...props
 }: useRender.ComponentProps<"a"> &
   React.ComponentProps<"a"> & {
-    size?: "sm" | "md"
-    isActive?: boolean
+    size?: "sm" | "md";
+    isActive?: boolean;
   }) {
   return useRender({
     defaultTagName: "a",
@@ -33,5 +33,5 @@ export default function SidebarMenuSubButton({
       size,
       active: isActive,
     },
-  })
+  });
 }

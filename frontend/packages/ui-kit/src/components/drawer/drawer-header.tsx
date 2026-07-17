@@ -1,6 +1,6 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function DrawerHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -12,5 +12,5 @@ export function DrawerHeader({ className, ...props }: React.ComponentProps<"div"
       )}
       {...props}
     />
-  )
+  );
 }

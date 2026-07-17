@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarGroupContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -8,5 +8,5 @@ export default function SidebarGroupContent({ className, ...props }: React.Compo
       className={cn("w-full text-sm", className)}
       {...props}
     />
-  )
+  );
 }

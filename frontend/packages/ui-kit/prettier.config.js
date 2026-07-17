@@ -1,7 +1,3 @@
-export default {
-  endOfLine: "lf",
-  printWidth: 100,
-  semi: false,
-  singleQuote: false,
-  trailingComma: "all",
-}
+import config from "@pdv/prettier";
+
+export default config;

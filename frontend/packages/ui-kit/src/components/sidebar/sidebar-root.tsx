@@ -1,10 +1,10 @@
-import * as React from "react"
+import * as React from "react";
 
-import { Sheet } from "#components/sheet"
-import { cn } from "#lib/utils"
+import { Sheet } from "#components/sheet";
+import { cn } from "#lib/utils";
 
-import { SIDEBAR_WIDTH_MOBILE } from "./sidebar-constants"
-import { useSidebar } from "./sidebar-context"
+import { SIDEBAR_WIDTH_MOBILE } from "./sidebar-constants";
+import { useSidebar } from "./sidebar-context";
 
 export default function SidebarRoot({
   side = "left",
@@ -15,11 +15,11 @@ export default function SidebarRoot({
   dir,
   ...props
 }: React.ComponentProps<"div"> & {
-  side?: "left" | "right"
-  variant?: "sidebar" | "floating" | "inset"
-  collapsible?: "offcanvas" | "icon" | "none"
+  side?: "left" | "right";
+  variant?: "sidebar" | "floating" | "inset";
+  collapsible?: "offcanvas" | "icon" | "none";
 }) {
-  const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const { isMobile, state, openMobile: isOpenMobile, setOpenMobile } = useSidebar();
 
   if (collapsible === "none") {
     return (
@@ -33,12 +33,12 @@ export default function SidebarRoot({
       >
         {children}
       </div>
-    )
+    );
   }
 
   if (isMobile) {
     return (
-      <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
+      <Sheet open={isOpenMobile} onOpenChange={setOpenMobile} {...props}>
         <Sheet.Content
           dir={dir}
           data-sidebar="sidebar"
@@ -59,7 +59,7 @@ export default function SidebarRoot({
           <div className="flex h-full w-full flex-col">{children}</div>
         </Sheet.Content>
       </Sheet>
-    )
+    );
   }
 
   return (
@@ -99,11 +99,11 @@ export default function SidebarRoot({
         <div
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
-          className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
+          className="flex size-full flex-col bg-sidebar group-data-[variant=floating]:rounded-md group-data-[variant=floating]:shadow-sm group-data-[variant=floating]:ring-1 group-data-[variant=floating]:ring-sidebar-border"
         >
           {children}
         </div>
       </div>
     </div>
-  )
+  );
 }

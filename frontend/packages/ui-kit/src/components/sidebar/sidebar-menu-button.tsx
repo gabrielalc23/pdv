@@ -1,12 +1,13 @@
-import * as React from "react"
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
-import { cva, type VariantProps } from "class-variance-authority"
+import * as React from "react";
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 
-import { Tooltip } from "#components/tooltip"
-import { cn } from "#lib/utils"
+import { Tooltip } from "#components/tooltip";
+import { cn } from "#lib/utils";
 
-import { useSidebar } from "./sidebar-context"
+import { useSidebar } from "./sidebar-context";
 
 const sidebarMenuButtonVariants = cva(
   "peer/menu-button group/menu-button flex w-full items-center gap-2 overflow-hidden rounded-md p-2 text-left text-sm ring-sidebar-ring outline-hidden transition-[width,height,padding] group-has-data-[sidebar=menu-action]/menu-item:pr-8 group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 active:bg-sidebar-accent active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-open:hover:bg-sidebar-accent data-open:hover:text-sidebar-accent-foreground data-active:bg-sidebar-accent data-active:font-medium data-active:text-sidebar-accent-foreground [&_svg]:size-4 [&_svg]:shrink-0 [&>span:last-child]:truncate",
@@ -28,7 +29,7 @@ const sidebarMenuButtonVariants = cva(
       size: "default",
     },
   },
-)
+);
 
 export default function SidebarMenuButton({
   render,
@@ -40,10 +41,10 @@ export default function SidebarMenuButton({
   ...props
 }: useRender.ComponentProps<"button"> &
   React.ComponentProps<"button"> & {
-    isActive?: boolean
-    tooltip?: string | React.ComponentProps<typeof Tooltip.Content>
+    isActive?: boolean;
+    tooltip?: string | React.ComponentProps<typeof Tooltip.Content>;
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
-  const { isMobile, state } = useSidebar()
+  const { isMobile, state } = useSidebar();
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(
@@ -59,16 +60,16 @@ export default function SidebarMenuButton({
       size,
       active: isActive,
     },
-  })
+  });
 
   if (!tooltip) {
-    return comp
+    return comp;
   }
 
   if (typeof tooltip === "string") {
     tooltip = {
       children: tooltip,
-    }
+    };
   }
 
   return (
@@ -81,5 +82,5 @@ export default function SidebarMenuButton({
         {...tooltip}
       />
     </Tooltip>
-  )
+  );
 }

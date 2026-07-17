@@ -1,7 +1,7 @@
-import * as React from "react"
-import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer"
+import * as React from "react";
+import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 
-import { DrawerContext } from "./drawer-context"
+import { DrawerContext } from "./drawer-context";
 
 export function DrawerRoot({
   modal = true,
@@ -10,13 +10,13 @@ export function DrawerRoot({
   swipeDirection = "down",
   ...props
 }: DrawerPrimitive.Root.Props & {
-  showSwipeHandle?: boolean
+  showSwipeHandle?: boolean;
 }) {
-  const hasSnapPoints = snapPoints != null && snapPoints.length > 0
+  const hasSnapPoints = snapPoints != null && snapPoints.length > 0;
   const contextValue = React.useMemo(
     () => ({ hasSnapPoints, modal, showSwipeHandle, swipeDirection }),
     [hasSnapPoints, modal, showSwipeHandle, swipeDirection],
-  )
+  );
 
   return (
     <DrawerContext.Provider value={contextValue}>
@@ -28,5 +28,5 @@ export function DrawerRoot({
         {...props}
       />
     </DrawerContext.Provider>
-  )
+  );
 }

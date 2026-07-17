@@ -5,11 +5,11 @@ Shared ESLint configuration factory for PDV TypeScript workspaces.
 ## Usage
 
 ```ts
-import { createWorkspaceEslintConfig } from "@pdv/eslint"
+import { createWorkspaceEslintConfig } from "@pdv/eslint";
 
 export default createWorkspaceEslintConfig({
   tsconfigRootDir: import.meta.dirname,
-})
+});
 ```
 
 The factory composes the TanStack ESLint configuration, configures type-aware

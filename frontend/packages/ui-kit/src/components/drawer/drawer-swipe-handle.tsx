@@ -1,6 +1,6 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function DrawerSwipeHandle({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -13,5 +13,5 @@ export function DrawerSwipeHandle({ className, ...props }: React.ComponentProps<
       )}
       {...props}
     />
-  )
+  );
 }

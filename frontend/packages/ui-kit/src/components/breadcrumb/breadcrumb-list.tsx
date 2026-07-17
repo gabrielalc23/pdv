@@ -1,8 +1,8 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
-export function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol">) {
+export function BreadcrumbList({ className, ...props }: React.OlHTMLAttributes<HTMLOListElement>) {
   return (
     <ol
       data-slot="breadcrumb-list"
@@ -12,5 +12,5 @@ export function BreadcrumbList({ className, ...props }: React.ComponentProps<"ol
       )}
       {...props}
     />
-  )
+  );
 }

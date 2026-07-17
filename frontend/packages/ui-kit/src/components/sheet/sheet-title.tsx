@@ -1,6 +1,6 @@
-import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
+import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) {
   return (
@@ -9,5 +9,5 @@ export function SheetTitle({ className, ...props }: SheetPrimitive.Title.Props) 
       className={cn("text-base font-medium text-foreground", className)}
       {...props}
     />
-  )
+  );
 }

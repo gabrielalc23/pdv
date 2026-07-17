@@ -1,19 +1,19 @@
-import * as React from "react"
+import * as React from "react";
 
-import { Skeleton } from "#components/skeleton"
-import { cn } from "#lib/utils"
+import { Skeleton } from "#components/skeleton";
+import { cn } from "#lib/utils";
 
 export default function SidebarMenuSkeleton({
   className,
   showIcon = false,
   ...props
 }: React.ComponentProps<"div"> & {
-  showIcon?: boolean
+  showIcon?: boolean;
 }) {
   // Random width between 50 to 90%.
   const [width] = React.useState(() => {
-    return `${Math.floor(Math.random() * 40) + 50}%`
-  })
+    return `${Math.floor(Math.random() * 40) + 50}%`;
+  });
 
   return (
     <div
@@ -33,5 +33,5 @@ export default function SidebarMenuSkeleton({
         }
       />
     </div>
-  )
+  );
 }

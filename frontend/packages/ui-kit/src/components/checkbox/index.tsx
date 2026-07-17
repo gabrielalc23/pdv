@@ -1,7 +1,7 @@
-import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox"
+import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox";
 
-import { cn } from "#lib/utils"
-import { CheckIcon } from "lucide-react"
+import { cn } from "#lib/utils";
+import { CheckIcon } from "lucide-react";
 
 function CheckboxRoot({ className, ...props }: CheckboxPrimitive.Root.Props) {
   return (
@@ -20,7 +20,7 @@ function CheckboxRoot({ className, ...props }: CheckboxPrimitive.Root.Props) {
         <CheckIcon />
       </CheckboxPrimitive.Indicator>
     </CheckboxPrimitive.Root>
-  )
+  );
 }
 
-export const Checkbox = CheckboxRoot
+export const Checkbox = CheckboxRoot;

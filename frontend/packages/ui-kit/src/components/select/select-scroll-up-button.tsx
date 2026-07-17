@@ -1,8 +1,8 @@
-import { Select as SelectPrimitive } from "@base-ui/react/select"
-import { ChevronUpIcon } from "lucide-react"
-import type * as React from "react"
+import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { ChevronUpIcon } from "lucide-react";
+import type * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function SelectScrollUpButton({
   className,
@@ -19,5 +19,5 @@ export function SelectScrollUpButton({
     >
       <ChevronUpIcon />
     </SelectPrimitive.ScrollUpArrow>
-  )
+  );
 }

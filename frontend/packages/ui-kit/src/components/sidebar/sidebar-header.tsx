@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -8,5 +8,5 @@ export default function SidebarHeader({ className, ...props }: React.ComponentPr
       className={cn("flex flex-col gap-2 p-2", className)}
       {...props}
     />
-  )
+  );
 }

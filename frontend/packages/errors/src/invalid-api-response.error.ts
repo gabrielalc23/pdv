@@ -1,4 +1,4 @@
-import { AppError } from "./app.error"
+import { AppError } from "./app.error";
 
 export class InvalidApiResponseError extends AppError {
   public constructor(path: string, cause?: unknown) {
@@ -7,6 +7,6 @@ export class InvalidApiResponseError extends AppError {
       message: `The API response for ${path} does not match the expected schema`,
       status: 502,
       cause,
-    })
+    });
   }
 }

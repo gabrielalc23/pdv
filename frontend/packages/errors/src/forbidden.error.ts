@@ -1,4 +1,4 @@
-import { AppError } from "./app.error"
+import { AppError } from "./app.error";
 
 export class ForbiddenError extends AppError {
   public constructor(
@@ -10,6 +10,6 @@ export class ForbiddenError extends AppError {
       message,
       status: 403,
       cause,
-    })
+    });
   }
 }

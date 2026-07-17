@@ -1,6 +1,6 @@
-import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
+import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
@@ -15,5 +15,5 @@ export function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
       )}
       {...props}
     />
-  )
+  );
 }

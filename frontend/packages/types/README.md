@@ -9,8 +9,8 @@ Shared TypeScript utility types used by PDV applications and packages.
 - `Either` types and factories
 
 ```ts
-import type { Nullable, Optional } from "@pdv/types"
-import { left, right } from "@pdv/types"
+import type { Nullable, Optional } from "@pdv/types";
+import { left, right } from "@pdv/types";
 ```
 
 ## Commands

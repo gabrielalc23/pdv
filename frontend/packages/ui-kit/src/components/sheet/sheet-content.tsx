@@ -1,11 +1,11 @@
-import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
-import { XIcon } from "lucide-react"
+import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
+import { XIcon } from "lucide-react";
 
-import { Button } from "#components/button"
-import { cn } from "#lib/utils"
+import { Button } from "#components/button";
+import { cn } from "#lib/utils";
 
-import { SheetOverlay } from "./sheet-overlay"
-import { SheetPortal } from "./sheet-portal"
+import { SheetOverlay } from "./sheet-overlay";
+import { SheetPortal } from "./sheet-portal";
 
 export function SheetContent({
   className,
@@ -14,8 +14,8 @@ export function SheetContent({
   showCloseButton = true,
   ...props
 }: SheetPrimitive.Popup.Props & {
-  side?: "top" | "right" | "bottom" | "left"
-  showCloseButton?: boolean
+  side?: "top" | "right" | "bottom" | "left";
+  showCloseButton?: boolean;
 }) {
   return (
     <SheetPortal>
@@ -41,5 +41,5 @@ export function SheetContent({
         )}
       </SheetPrimitive.Popup>
     </SheetPortal>
-  )
+  );
 }

@@ -1,9 +1,9 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
-import { MoreHorizontalIcon } from "lucide-react"
+import { cn } from "#lib/utils";
+import { MoreHorizontalIcon } from "lucide-react";
 
-export function BreadcrumbEllipsis({ className, ...props }: React.ComponentProps<"span">) {
+export function BreadcrumbEllipsis({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
       data-slot="breadcrumb-ellipsis"
@@ -15,5 +15,5 @@ export function BreadcrumbEllipsis({ className, ...props }: React.ComponentProps
       <MoreHorizontalIcon />
       <span className="sr-only">More</span>
     </span>
-  )
+  );
 }

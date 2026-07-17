@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function FieldDescription({ className, ...props }: React.ComponentProps<"p">) {
   return (
@@ -12,5 +12,5 @@ export default function FieldDescription({ className, ...props }: React.Componen
       )}
       {...props}
     />
-  )
+  );
 }

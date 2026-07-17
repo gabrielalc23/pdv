@@ -1,6 +1,6 @@
-import { Tabs as TabsPrimitive } from "@base-ui/react/tabs"
+import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) {
   return (
@@ -9,5 +9,5 @@ export function TabsContent({ className, ...props }: TabsPrimitive.Panel.Props) 
       className={cn("flex-1 text-sm outline-none", className)}
       {...props}
     />
-  )
+  );
 }

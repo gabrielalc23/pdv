@@ -1,6 +1,6 @@
-import { Select as SelectPrimitive } from "@base-ui/react/select"
+import { Select as SelectPrimitive } from "@base-ui/react/select";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function SelectValue({ className, ...props }: SelectPrimitive.Value.Props) {
   return (
@@ -9,5 +9,5 @@ export function SelectValue({ className, ...props }: SelectPrimitive.Value.Props
       className={cn("flex flex-1 text-left", className)}
       {...props}
     />
-  )
+  );
 }

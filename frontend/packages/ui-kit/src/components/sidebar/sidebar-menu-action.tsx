@@ -1,8 +1,8 @@
-import * as React from "react"
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
+import type * as React from "react";
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarMenuAction({
   className,
@@ -11,7 +11,7 @@ export default function SidebarMenuAction({
   ...props
 }: useRender.ComponentProps<"button"> &
   React.ComponentProps<"button"> & {
-    showOnHover?: boolean
+    showOnHover?: boolean;
   }) {
   return useRender({
     defaultTagName: "button",
@@ -31,5 +31,5 @@ export default function SidebarMenuAction({
       slot: "sidebar-menu-action",
       sidebar: "menu-action",
     },
-  })
+  });
 }

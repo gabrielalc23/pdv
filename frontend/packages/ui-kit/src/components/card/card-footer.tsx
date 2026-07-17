@@ -1,8 +1,8 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
-export function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
+export function CardFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       data-slot="card-footer"
@@ -12,5 +12,5 @@ export function CardFooter({ className, ...props }: React.ComponentProps<"div">)
       )}
       {...props}
     />
-  )
+  );
 }

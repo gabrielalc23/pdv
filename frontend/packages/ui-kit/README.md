@@ -8,8 +8,8 @@ are built with Base UI and styled for the workspace Tailwind setup.
 This package uses explicit subpath exports rather than a root component export.
 
 ```tsx
-import { Button } from "@pdv/ui-kit/components/button"
-import { Select } from "@pdv/ui-kit/components/select"
+import { Button } from "@pdv/ui-kit/components/button";
+import { Select } from "@pdv/ui-kit/components/select";
 
 export function PaymentMethodSelect() {
   return (
@@ -21,7 +21,7 @@ export function PaymentMethodSelect() {
         <Select.Item value="cash">Cash</Select.Item>
       </Select.Content>
     </Select>
-  )
+  );
 }
 ```
 
@@ -29,7 +29,7 @@ Import the package stylesheet once in the consuming application's global style
 entry point:
 
 ```ts
-import "@pdv/ui-kit/styles.css"
+import "@pdv/ui-kit/styles.css";
 ```
 
 ## Available Subpaths

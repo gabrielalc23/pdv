@@ -1,6 +1,6 @@
-import { Separator as SeparatorPrimitive } from "@base-ui/react/separator"
+import { Separator as SeparatorPrimitive } from "@base-ui/react/separator";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 function SeparatorRoot({
   className,
@@ -17,7 +17,7 @@ function SeparatorRoot({
       )}
       {...props}
     />
-  )
+  );
 }
 
-export const Separator = SeparatorRoot
+export const Separator = SeparatorRoot;

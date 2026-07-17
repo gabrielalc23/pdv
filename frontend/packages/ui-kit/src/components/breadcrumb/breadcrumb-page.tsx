@@ -1,8 +1,8 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
-export function BreadcrumbPage({ className, ...props }: React.ComponentProps<"span">) {
+export function BreadcrumbPage({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
   return (
     <span
       data-slot="breadcrumb-page"
@@ -12,5 +12,5 @@ export function BreadcrumbPage({ className, ...props }: React.ComponentProps<"sp
       className={cn("font-normal text-foreground", className)}
       {...props}
     />
-  )
+  );
 }

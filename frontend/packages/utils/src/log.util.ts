@@ -10,11 +10,11 @@
  */
 export function log(message: string): void {
   if (process.env.NODE_ENV === "development") {
-    console.log(message)
-    return
+    console.log(message);
+    return;
   }
 
   if (typeof navigator !== "undefined") {
-    navigator.sendBeacon("/api/log", message)
+    navigator.sendBeacon("/api/log", message);
   }
 }

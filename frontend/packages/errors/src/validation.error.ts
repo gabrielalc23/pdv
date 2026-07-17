@@ -1,14 +1,14 @@
-import { AppError } from "./app.error"
+import { AppError } from "./app.error";
 
 export interface ValidationErrorOptions {
-  message?: string
-  field?: string | undefined
-  details?: Record<string, unknown> | undefined
-  cause?: unknown
+  message?: string;
+  field?: string | undefined;
+  details?: Record<string, unknown> | undefined;
+  cause?: unknown;
 }
 
 export class ValidationError extends AppError {
-  public readonly details: Record<string, unknown> | undefined
+  public readonly details: Record<string, unknown> | undefined;
 
   public constructor({
     message = "The provided data is invalid",
@@ -22,8 +22,8 @@ export class ValidationError extends AppError {
       status: 422,
       field,
       cause,
-    })
+    });
 
-    this.details = details
+    this.details = details;
   }
 }

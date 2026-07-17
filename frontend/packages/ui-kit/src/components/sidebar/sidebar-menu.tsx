@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarMenu({ className, ...props }: React.ComponentProps<"ul">) {
   return (
@@ -8,5 +8,5 @@ export default function SidebarMenu({ className, ...props }: React.ComponentProp
       className={cn("flex w-full min-w-0 flex-col gap-0", className)}
       {...props}
     />
-  )
+  );
 }

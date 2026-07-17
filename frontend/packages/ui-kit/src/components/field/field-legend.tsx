@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function FieldLegend({
   className,
@@ -15,5 +15,5 @@ export default function FieldLegend({
       )}
       {...props}
     />
-  )
+  );
 }

@@ -1,11 +1,11 @@
-import { Select as SelectPrimitive } from "@base-ui/react/select"
-import { CheckIcon } from "lucide-react"
+import { Select as SelectPrimitive } from "@base-ui/react/select";
+import { CheckIcon } from "lucide-react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 type SelectItemProps = SelectPrimitive.Item.Props & {
-  showIndicator?: boolean
-}
+  showIndicator?: boolean;
+};
 
 export function SelectItem({
   className,
@@ -35,5 +35,5 @@ export function SelectItem({
         </SelectPrimitive.ItemIndicator>
       )}
     </SelectPrimitive.Item>
-  )
+  );
 }

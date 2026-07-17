@@ -1,9 +1,13 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
-import { ChevronRightIcon } from "lucide-react"
+import { cn } from "#lib/utils";
+import { ChevronRightIcon } from "lucide-react";
 
-export function BreadcrumbSeparator({ children, className, ...props }: React.ComponentProps<"li">) {
+export function BreadcrumbSeparator({
+  children,
+  className,
+  ...props
+}: React.LiHTMLAttributes<HTMLLIElement>) {
   return (
     <li
       data-slot="breadcrumb-separator"
@@ -14,5 +18,5 @@ export function BreadcrumbSeparator({ children, className, ...props }: React.Com
     >
       {children ?? <ChevronRightIcon />}
     </li>
-  )
+  );
 }

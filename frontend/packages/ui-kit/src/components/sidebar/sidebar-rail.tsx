@@ -1,9 +1,9 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
-import { useSidebar } from "./sidebar-context"
+import { useSidebar } from "./sidebar-context";
 
 export default function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
-  const { toggleSidebar } = useSidebar()
+  const { toggleSidebar } = useSidebar();
 
   return (
     <button
@@ -24,5 +24,5 @@ export default function SidebarRail({ className, ...props }: React.ComponentProp
       )}
       {...props}
     />
-  )
+  );
 }

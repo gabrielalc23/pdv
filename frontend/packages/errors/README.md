@@ -8,7 +8,7 @@ The root export provides `AppError` and specialized errors for conflict,
 forbidden, invalid API response, not found, unauthorized, and validation cases.
 
 ```ts
-import { NotFoundError, ValidationError } from "@pdv/errors"
+import { NotFoundError, ValidationError } from "@pdv/errors";
 ```
 
 ## Commands

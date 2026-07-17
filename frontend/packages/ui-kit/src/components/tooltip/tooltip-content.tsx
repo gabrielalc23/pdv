@@ -1,6 +1,6 @@
-import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip"
+import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function TooltipContent({
   className,
@@ -34,5 +34,5 @@ export function TooltipContent({
         </TooltipPrimitive.Popup>
       </TooltipPrimitive.Positioner>
     </TooltipPrimitive.Portal>
-  )
+  );
 }

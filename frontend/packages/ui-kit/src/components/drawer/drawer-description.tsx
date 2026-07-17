@@ -1,6 +1,6 @@
-import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer"
+import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function DrawerDescription({ className, ...props }: DrawerPrimitive.Description.Props) {
   return (
@@ -9,5 +9,5 @@ export function DrawerDescription({ className, ...props }: DrawerPrimitive.Descr
       className={cn("text-sm text-balance text-muted-foreground", className)}
       {...props}
     />
-  )
+  );
 }

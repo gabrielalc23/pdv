@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
   return (
@@ -11,5 +11,5 @@ export default function SidebarMenuSub({ className, ...props }: React.ComponentP
       )}
       {...props}
     />
-  )
+  );
 }

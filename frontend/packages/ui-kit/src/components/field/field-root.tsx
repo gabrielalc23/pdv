@@ -1,6 +1,7 @@
-import { cva, type VariantProps } from "class-variance-authority"
+import { cva } from "class-variance-authority";
+import type { VariantProps } from "class-variance-authority";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 const fieldVariants = cva("group/field flex w-full gap-2 data-[invalid=true]:text-destructive", {
   variants: {
@@ -15,7 +16,7 @@ const fieldVariants = cva("group/field flex w-full gap-2 data-[invalid=true]:tex
   defaultVariants: {
     orientation: "vertical",
   },
-})
+});
 
 export default function FieldRoot({
   className,
@@ -30,5 +31,5 @@ export default function FieldRoot({
       className={cn(fieldVariants({ orientation }), className)}
       {...props}
     />
-  )
+  );
 }

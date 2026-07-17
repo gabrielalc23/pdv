@@ -1,6 +1,6 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function DrawerFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -9,5 +9,5 @@ export function DrawerFooter({ className, ...props }: React.ComponentProps<"div"
       className={cn("mt-auto flex shrink-0 flex-col gap-2 p-4 pt-0", className)}
       {...props}
     />
-  )
+  );
 }

@@ -1,8 +1,8 @@
-import * as React from "react"
-import { mergeProps } from "@base-ui/react/merge-props"
-import { useRender } from "@base-ui/react/use-render"
+import type * as React from "react";
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarGroupAction({
   className,
@@ -25,5 +25,5 @@ export default function SidebarGroupAction({
       slot: "sidebar-group-action",
       sidebar: "group-action",
     },
-  })
+  });
 }

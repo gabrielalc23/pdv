@@ -7,6 +7,6 @@ export const HttpMethod = {
   DELETE: "DELETE",
   QUERY: "QUERY",
   OPTIONS: "OPTIONS",
-} as const
+} as const;
 
-export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod]
+export type HttpMethod = (typeof HttpMethod)[keyof typeof HttpMethod];

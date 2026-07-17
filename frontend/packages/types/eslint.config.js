@@ -1,5 +1,5 @@
-import { defineConfig } from "eslint/config"
-import { createWorkspaceEslintConfig } from "@pdv/eslint"
+import { defineConfig } from "eslint/config";
+import { createWorkspaceEslintConfig } from "@pdv/eslint";
 
 export default defineConfig([
   ...createWorkspaceEslintConfig({
@@ -11,4 +11,4 @@ export default defineConfig([
       "@typescript-eslint/naming-convention": "off",
     },
   },
-])
+]);

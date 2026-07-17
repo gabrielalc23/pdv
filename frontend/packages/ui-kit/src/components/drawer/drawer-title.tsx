@@ -1,6 +1,6 @@
-import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer"
+import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function DrawerTitle({ className, ...props }: DrawerPrimitive.Title.Props) {
   return (
@@ -9,5 +9,5 @@ export function DrawerTitle({ className, ...props }: DrawerPrimitive.Title.Props
       className={cn("text-base font-medium text-foreground", className)}
       {...props}
     />
-  )
+  );
 }

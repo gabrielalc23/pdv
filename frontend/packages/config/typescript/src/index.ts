@@ -1,1 +1,1 @@
-export const typescriptConfigPackage = "@pdv/config-typescript"
+export const typescriptConfigPackage = "@pdv/config-typescript";

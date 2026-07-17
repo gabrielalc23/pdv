@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarMenuSubItem({ className, ...props }: React.ComponentProps<"li">) {
   return (
@@ -8,5 +8,5 @@ export default function SidebarMenuSubItem({ className, ...props }: React.Compon
       className={cn("group/menu-sub-item relative", className)}
       {...props}
     />
-  )
+  );
 }

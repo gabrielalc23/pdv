@@ -1,12 +1,12 @@
-import { Separator } from "#components/separator"
-import { cn } from "#lib/utils"
+import { Separator } from "#components/separator";
+import { cn } from "#lib/utils";
 
 export default function FieldSeparator({
   children,
   className,
   ...props
 }: React.ComponentProps<"div"> & {
-  children?: React.ReactNode
+  children?: React.ReactNode;
 }) {
   return (
     <div
@@ -28,5 +28,5 @@ export default function FieldSeparator({
         </span>
       )}
     </div>
-  )
+  );
 }

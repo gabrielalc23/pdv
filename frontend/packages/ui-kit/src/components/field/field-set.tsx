@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function FieldSet({ className, ...props }: React.ComponentProps<"fieldset">) {
   return (
@@ -10,5 +10,5 @@ export default function FieldSet({ className, ...props }: React.ComponentProps<"
       )}
       {...props}
     />
-  )
+  );
 }

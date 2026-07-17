@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -11,5 +11,5 @@ export default function SidebarContent({ className, ...props }: React.ComponentP
       )}
       {...props}
     />
-  )
+  );
 }

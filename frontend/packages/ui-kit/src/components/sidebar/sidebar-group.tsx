@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function SidebarGroup({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -8,5 +8,5 @@ export default function SidebarGroup({ className, ...props }: React.ComponentPro
       className={cn("relative flex w-full min-w-0 flex-col p-2", className)}
       {...props}
     />
-  )
+  );
 }

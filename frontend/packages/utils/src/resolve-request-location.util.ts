@@ -1,22 +1,22 @@
-export type ApiRequestLocation = "data" | "none" | "params"
+export type ApiRequestLocation = "data" | "none" | "params";
 
 export function resolveRequestLocation(
   method: string,
   requestLocation?: ApiRequestLocation,
 ): ApiRequestLocation {
   if (requestLocation) {
-    return requestLocation
+    return requestLocation;
   }
 
   switch (method) {
     case "GET":
     case "HEAD":
-      return "params"
+      return "params";
 
     case "OPTIONS":
-      return "none"
+      return "none";
 
     default:
-      return "data"
+      return "data";
   }
 }

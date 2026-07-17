@@ -1,6 +1,6 @@
-import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer"
+import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function DrawerOverlay({ className, ...props }: DrawerPrimitive.Backdrop.Props) {
   return (
@@ -12,5 +12,5 @@ export function DrawerOverlay({ className, ...props }: DrawerPrimitive.Backdrop.
       )}
       {...props}
     />
-  )
+  );
 }

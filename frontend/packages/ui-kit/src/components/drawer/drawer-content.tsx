@@ -1,15 +1,15 @@
-import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer"
+import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
-import { DrawerOverlay } from "./drawer-overlay"
-import { DrawerPortal } from "./drawer-portal"
-import { DrawerSwipeHandle } from "./drawer-swipe-handle"
-import { useDrawer } from "./use-drawer"
+import { DrawerOverlay } from "./drawer-overlay";
+import { DrawerPortal } from "./drawer-portal";
+import { DrawerSwipeHandle } from "./drawer-swipe-handle";
+import { useDrawer } from "./use-drawer";
 
 export function DrawerContent({ className, children, ...props }: DrawerPrimitive.Popup.Props) {
-  const { hasSnapPoints, modal, showSwipeHandle, swipeDirection } = useDrawer()
-  const swipeAxis = swipeDirection === "down" || swipeDirection === "up" ? "y" : "x"
+  const { hasSnapPoints, modal, showSwipeHandle, swipeDirection } = useDrawer();
+  const swipeAxis = swipeDirection === "down" || swipeDirection === "up" ? "y" : "x";
 
   return (
     <DrawerPortal data-slot="drawer-portal">
@@ -64,5 +64,5 @@ export function DrawerContent({ className, children, ...props }: DrawerPrimitive
         </DrawerPrimitive.Popup>
       </DrawerPrimitive.Viewport>
     </DrawerPortal>
-  )
+  );
 }

@@ -1,4 +1,4 @@
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export default function FieldTitle({ className, ...props }: React.ComponentProps<"div">) {
   return (
@@ -10,5 +10,5 @@ export default function FieldTitle({ className, ...props }: React.ComponentProps
       )}
       {...props}
     />
-  )
+  );
 }

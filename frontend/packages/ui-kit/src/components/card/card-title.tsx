@@ -1,8 +1,8 @@
-import * as React from "react"
+import * as React from "react";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
-export function CardTitle({ className, ...props }: React.ComponentProps<"div">) {
+export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       data-slot="card-title"
@@ -12,5 +12,5 @@ export function CardTitle({ className, ...props }: React.ComponentProps<"div">) 
       )}
       {...props}
     />
-  )
+  );
 }

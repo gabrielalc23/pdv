@@ -1,6 +1,6 @@
-import { Dialog as SheetPrimitive } from "@base-ui/react/dialog"
+import { Dialog as SheetPrimitive } from "@base-ui/react/dialog";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Props) {
   return (
@@ -12,5 +12,5 @@ export function SheetOverlay({ className, ...props }: SheetPrimitive.Backdrop.Pr
       )}
       {...props}
     />
-  )
+  );
 }

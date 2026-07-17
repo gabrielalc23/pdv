@@ -1,5 +1,5 @@
-import { Separator } from "#components/separator"
-import { cn } from "#lib/utils"
+import { Separator } from "#components/separator";
+import { cn } from "#lib/utils";
 
 export default function SidebarSeparator({
   className,
@@ -12,5 +12,5 @@ export default function SidebarSeparator({
       className={cn("mx-2 w-auto bg-sidebar-border", className)}
       {...props}
     />
-  )
+  );
 }

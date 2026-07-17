@@ -1,7 +1,7 @@
-import { Select as SelectPrimitive } from "@base-ui/react/select"
+import { Select as SelectPrimitive } from "@base-ui/react/select";
 
-export function SelectRoot<Value, Multiple extends boolean | undefined = false>(
-  props: SelectPrimitive.Root.Props<Value, Multiple>,
+export function SelectRoot<TValue, TMultiple extends boolean | undefined = false>(
+  props: SelectPrimitive.Root.Props<TValue, TMultiple>,
 ) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />
+  return <SelectPrimitive.Root data-slot="select" {...props} />;
 }

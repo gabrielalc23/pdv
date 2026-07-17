@@ -8,7 +8,7 @@ The root export includes class-name composition, logging helpers, and request
 location resolution utilities.
 
 ```ts
-import { cn, resolveRequestLocation } from "@pdv/utils"
+import { cn, resolveRequestLocation } from "@pdv/utils";
 ```
 
 The package expects compatible `clsx` and `tailwind-merge` peer dependencies.

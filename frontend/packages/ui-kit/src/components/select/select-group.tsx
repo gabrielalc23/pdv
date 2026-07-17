@@ -1,6 +1,6 @@
-import { Select as SelectPrimitive } from "@base-ui/react/select"
+import { Select as SelectPrimitive } from "@base-ui/react/select";
 
-import { cn } from "#lib/utils"
+import { cn } from "#lib/utils";
 
 export function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (
@@ -9,5 +9,5 @@ export function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props
       className={cn("scroll-my-1 p-1", className)}
       {...props}
     />
-  )
+  );
 }

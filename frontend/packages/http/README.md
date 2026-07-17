@@ -8,7 +8,7 @@ The package exposes Axios instances, `HttpMethod`, and `createApiCall` for
 validated API calls.
 
 ```ts
-import { createApiCall, instance } from "@pdv/http"
+import { createApiCall, instance } from "@pdv/http";
 ```
 
 The default instance uses `NEXT_PUBLIC_API_URL` as its base URL and falls back
