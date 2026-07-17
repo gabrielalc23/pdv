@@ -10,16 +10,18 @@ import (
 )
 
 type CatalogProductData struct {
-	ID        pgtype.UUID
-	SKU       string
-	Barcode   pgtype.Text
-	Name      string
-	Price     pgtype.Numeric
-	Quantity  pgtype.Numeric
-	IsActive  bool
-	InStock   bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+	ID           pgtype.UUID
+	SKU          string
+	Barcode      pgtype.Text
+	Name         string
+	CategoryID   pgtype.UUID
+	CategoryName pgtype.Text
+	Price        pgtype.Numeric
+	Quantity     pgtype.Numeric
+	IsActive     bool
+	InStock      bool
+	CreatedAt    pgtype.Timestamptz
+	UpdatedAt    pgtype.Timestamptz
 }
 
 func ToCatalogProductResponse(data CatalogProductData) (CatalogProductResponse, error) {
@@ -38,63 +40,81 @@ func ToCatalogProductResponse(data CatalogProductData) (CatalogProductResponse, 
 		value := data.Barcode.String
 		barcode = &value
 	}
+	var categoryID *string
+	if data.CategoryID.Valid {
+		value := data.CategoryID.String()
+		categoryID = &value
+	}
+	var categoryName *string
+	if data.CategoryName.Valid {
+		value := data.CategoryName.String
+		categoryName = &value
+	}
 
 	return CatalogProductResponse{
-		ID:        data.ID.String(),
-		SKU:       data.SKU,
-		Barcode:   barcode,
-		Name:      data.Name,
-		Price:     price,
-		Quantity:  quantity,
-		IsActive:  data.IsActive,
-		InStock:   data.InStock,
-		CreatedAt: timestampOrZero(data.CreatedAt),
-		UpdatedAt: timestampOrZero(data.UpdatedAt),
+		ID:           data.ID.String(),
+		SKU:          data.SKU,
+		Barcode:      barcode,
+		Name:         data.Name,
+		CategoryID:   categoryID,
+		CategoryName: categoryName,
+		Price:        price,
+		Quantity:     quantity,
+		IsActive:     data.IsActive,
+		InStock:      data.InStock,
+		CreatedAt:    timestampOrZero(data.CreatedAt),
+		UpdatedAt:    timestampOrZero(data.UpdatedAt),
 	}, nil
 }
 
 func toCatalogProductDataFromListRow(row database.ListCatalogProductsRow) CatalogProductData {
 	return CatalogProductData{
-		ID:        row.ID,
-		SKU:       row.SKU,
-		Barcode:   row.Barcode,
-		Name:      row.Name,
-		Price:     row.Price,
-		Quantity:  row.Quantity,
-		IsActive:  row.IsActive,
-		InStock:   row.InStock,
-		CreatedAt: row.CreatedAt,
-		UpdatedAt: row.UpdatedAt,
+		ID:           row.ID,
+		SKU:          row.SKU,
+		Barcode:      row.Barcode,
+		Name:         row.Name,
+		CategoryID:   row.CategoryID,
+		CategoryName: row.CategoryName,
+		Price:        row.Price,
+		Quantity:     row.Quantity,
+		IsActive:     row.IsActive,
+		InStock:      row.InStock,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
 	}
 }
 
 func toCatalogProductDataFromIDRow(row database.GetCatalogProductByIDRow) CatalogProductData {
 	return CatalogProductData{
-		ID:        row.ID,
-		SKU:       row.SKU,
-		Barcode:   row.Barcode,
-		Name:      row.Name,
-		Price:     row.Price,
-		Quantity:  row.Quantity,
-		IsActive:  row.IsActive,
-		InStock:   row.InStock,
-		CreatedAt: row.CreatedAt,
-		UpdatedAt: row.UpdatedAt,
+		ID:           row.ID,
+		SKU:          row.SKU,
+		Barcode:      row.Barcode,
+		Name:         row.Name,
+		CategoryID:   row.CategoryID,
+		CategoryName: row.CategoryName,
+		Price:        row.Price,
+		Quantity:     row.Quantity,
+		IsActive:     row.IsActive,
+		InStock:      row.InStock,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
 	}
 }
 
 func toCatalogProductDataFromBarcodeRow(row database.GetCatalogProductByBarcodeRow) CatalogProductData {
 	return CatalogProductData{
-		ID:        row.ID,
-		SKU:       row.SKU,
-		Barcode:   row.Barcode,
-		Name:      row.Name,
-		Price:     row.Price,
-		Quantity:  row.Quantity,
-		IsActive:  row.IsActive,
-		InStock:   row.InStock,
-		CreatedAt: row.CreatedAt,
-		UpdatedAt: row.UpdatedAt,
+		ID:           row.ID,
+		SKU:          row.SKU,
+		Barcode:      row.Barcode,
+		Name:         row.Name,
+		CategoryID:   row.CategoryID,
+		CategoryName: row.CategoryName,
+		Price:        row.Price,
+		Quantity:     row.Quantity,
+		IsActive:     row.IsActive,
+		InStock:      row.InStock,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
 	}
 }
 

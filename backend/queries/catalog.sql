@@ -4,6 +4,8 @@ SELECT
     p.sku,
     p.barcode,
     p.name,
+    p.category_id,
+    c.name AS category_name,
     p.price,
     COALESCE(i.quantity, CAST(0 AS NUMERIC(15, 3))) AS quantity,
     p.is_active,
@@ -12,12 +14,17 @@ SELECT
     p.updated_at
 FROM products p
 LEFT JOIN inventory i ON i.product_id = p.id
+LEFT JOIN categories c ON c.id = p.category_id
 WHERE
     (
         CAST(sqlc.narg(search) AS TEXT) IS NULL
         OR p.name ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
         OR p.sku ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
         OR p.barcode ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
+    )
+    AND (
+        CAST(sqlc.narg(category_id) AS UUID) IS NULL
+        OR p.category_id = CAST(sqlc.narg(category_id) AS UUID)
     )
     AND (NOT CAST(sqlc.arg(active_only) AS BOOLEAN) OR p.is_active = TRUE)
     AND (
@@ -39,6 +46,10 @@ WHERE
         OR p.sku ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
         OR p.barcode ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
     )
+    AND (
+        CAST(sqlc.narg(category_id) AS UUID) IS NULL
+        OR p.category_id = CAST(sqlc.narg(category_id) AS UUID)
+    )
     AND (NOT CAST(sqlc.arg(active_only) AS BOOLEAN) OR p.is_active = TRUE)
     AND (
         NOT CAST(sqlc.arg(in_stock_only) AS BOOLEAN)
@@ -51,6 +62,8 @@ SELECT
     p.sku,
     p.barcode,
     p.name,
+    p.category_id,
+    c.name AS category_name,
     p.price,
     COALESCE(i.quantity, CAST(0 AS NUMERIC(15, 3))) AS quantity,
     p.is_active,
@@ -59,6 +72,7 @@ SELECT
     p.updated_at
 FROM products p
 LEFT JOIN inventory i ON i.product_id = p.id
+LEFT JOIN categories c ON c.id = p.category_id
 WHERE p.id = sqlc.arg(id)
 LIMIT 1;
 
@@ -68,6 +82,8 @@ SELECT
     p.sku,
     p.barcode,
     p.name,
+    p.category_id,
+    c.name AS category_name,
     p.price,
     COALESCE(i.quantity, CAST(0 AS NUMERIC(15, 3))) AS quantity,
     p.is_active,
@@ -76,5 +92,6 @@ SELECT
     p.updated_at
 FROM products p
 LEFT JOIN inventory i ON i.product_id = p.id
+LEFT JOIN categories c ON c.id = p.category_id
 WHERE p.barcode = sqlc.arg(barcode)
 LIMIT 1;

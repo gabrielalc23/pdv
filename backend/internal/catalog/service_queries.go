@@ -7,6 +7,7 @@ import (
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogListResponse, error) {
@@ -20,9 +21,17 @@ func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogList
 	if !input.ActiveOnlySet && !input.ActiveOnly {
 		activeOnly = true
 	}
+	categoryID := pgtype.UUID{}
+	if input.CategoryID != "" {
+		categoryID, err = parseUUID(input.CategoryID, "categoryId")
+		if err != nil {
+			return CatalogListResponse{}, err
+		}
+	}
 
 	total, err := s.store.CountCatalogProducts(ctx, database.CountCatalogProductsParams{
 		Search:      search,
+		CategoryID:  categoryID,
 		ActiveOnly:  activeOnly,
 		InStockOnly: input.InStockOnly,
 	})
@@ -32,6 +41,7 @@ func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogList
 
 	rows, err := s.store.ListCatalogProducts(ctx, database.ListCatalogProductsParams{
 		Search:      search,
+		CategoryID:  categoryID,
 		ActiveOnly:  activeOnly,
 		InStockOnly: input.InStockOnly,
 		PageOffset:  int32((page - 1) * pageSize),

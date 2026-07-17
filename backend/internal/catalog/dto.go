@@ -9,19 +9,22 @@ type ListCatalogInput struct {
 	ActiveOnly    bool
 	InStockOnly   bool
 	ActiveOnlySet bool
+	CategoryID    string
 }
 
 type CatalogProductResponse struct {
-	ID        string    `json:"id"`
-	SKU       string    `json:"sku"`
-	Barcode   *string   `json:"barcode"`
-	Name      string    `json:"name"`
-	Price     string    `json:"price"`
-	Quantity  string    `json:"quantity"`
-	IsActive  bool      `json:"isActive"`
-	InStock   bool      `json:"inStock"`
-	CreatedAt time.Time `json:"createdAt"`
-	UpdatedAt time.Time `json:"updatedAt"`
+	ID           string    `json:"id"`
+	SKU          string    `json:"sku"`
+	Barcode      *string   `json:"barcode"`
+	Name         string    `json:"name"`
+	CategoryID   *string   `json:"categoryId"`
+	CategoryName *string   `json:"categoryName"`
+	Price        string    `json:"price"`
+	Quantity     string    `json:"quantity"`
+	IsActive     bool      `json:"isActive"`
+	InStock      bool      `json:"inStock"`
+	CreatedAt    time.Time `json:"createdAt"`
+	UpdatedAt    time.Time `json:"updatedAt"`
 }
 
 type PaginationResponse struct {
