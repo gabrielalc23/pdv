@@ -253,7 +253,7 @@ func mustListen() net.Listener {
 	return lis
 }
 
-func startServer(store *database.Store, addr string) *http.Server {
+func startServer(store *database.PostgresStore, addr string) *http.Server {
 	router := apphttp.NewRouter(apphttp.Dependencies{
 		HealthHandler: func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -280,7 +280,7 @@ func startServer(store *database.Store, addr string) *http.Server {
 
 	fiscalProvider := &fiscal.MockProvider{}
 
-	checkoutService := checkout.NewService(checkout.NewTxManager(store), fiscalProvider, store)
+	checkoutService := checkout.NewService(checkout.NewTxManager(store), fiscalProvider)
 	checkoutHandler := checkout.NewHandler(checkoutService)
 	checkout.RegisterRoutes(router, checkoutHandler)
 

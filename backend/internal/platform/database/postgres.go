@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -11,12 +10,12 @@ import (
 
 var ErrNilPool = errors.New("database pool is nil")
 
-type Store struct {
+type PostgresStore struct {
 	Pool    *pgxpool.Pool
 	Queries *Queries
 }
 
-func Open(ctx context.Context, dsn string) (*Store, error) {
+func Open(ctx context.Context, dsn string) (*PostgresStore, error) {
 	pool, err := pgxpool.New(ctx, dsn)
 	if err != nil {
 		return nil, err
@@ -30,24 +29,24 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 	return NewStore(pool), nil
 }
 
-func NewStore(pool *pgxpool.Pool) *Store {
+func NewStore(pool *pgxpool.Pool) *PostgresStore {
 	if pool == nil {
-		return &Store{}
+		return &PostgresStore{}
 	}
 
-	return &Store{
+	return &PostgresStore{
 		Pool:    pool,
 		Queries: New(pool),
 	}
 }
 
-func (s *Store) Close() {
+func (s *PostgresStore) Close() {
 	if s != nil && s.Pool != nil {
 		s.Pool.Close()
 	}
 }
 
-func (s *Store) BeginTx(ctx context.Context, opts pgx.TxOptions) (*Tx, error) {
+func (s *PostgresStore) BeginTx(ctx context.Context, opts pgx.TxOptions) (*Tx, error) {
 	if s == nil || s.Pool == nil {
 		return nil, ErrNilPool
 	}
@@ -61,19 +60,4 @@ func (s *Store) BeginTx(ctx context.Context, opts pgx.TxOptions) (*Tx, error) {
 		tx:      tx,
 		Queries: s.Queries.WithTx(tx),
 	}, nil
-}
-
-// RefreshReceiptViews refreshes the materialized views that back the receipt
-// read model so they reflect payments committed by the most recent checkout.
-// It must be called outside of a transaction. CONCURRENTLY avoids blocking
-// concurrent readers of the receipt endpoints.
-func (s *Store) RefreshReceiptViews(ctx context.Context) error {
-	if s == nil || s.Pool == nil {
-		return ErrNilPool
-	}
-
-	if _, err := s.Pool.Exec(ctx, "REFRESH MATERIALIZED VIEW CONCURRENTLY mv_receipt_payments"); err != nil {
-		return fmt.Errorf("refresh receipt materialized views: %w", err)
-	}
-	return nil
 }

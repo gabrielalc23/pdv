@@ -11,37 +11,50 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countCatalogProducts = `-- name: CountCatalogProducts :one
+const countCatalogProductsForStore = `-- name: CountCatalogProductsForStore :one
 SELECT COUNT(*)
 FROM products p
-LEFT JOIN inventory i ON i.product_id = p.id
-WHERE
-    (
-        CAST($1 AS TEXT) IS NULL
-        OR p.name ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR p.sku ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR p.barcode ILIKE '%' || CAST($1 AS TEXT) || '%'
-    )
-    AND (
-        CAST($2 AS UUID) IS NULL
-        OR p.category_id = CAST($2 AS UUID)
-    )
-    AND (NOT CAST($3 AS BOOLEAN) OR p.is_active = TRUE)
-    AND (
-        NOT CAST($4 AS BOOLEAN)
-        OR COALESCE(i.quantity, CAST(0 AS NUMERIC(15, 3))) > 0
-    )
+INNER JOIN stores s
+        ON s.organization_id = p.organization_id
+       AND s.id = $1
+LEFT JOIN inventory i
+       ON i.organization_id = p.organization_id
+      AND i.store_id = s.id
+      AND i.product_id = p.id
+LEFT JOIN categories c
+       ON c.organization_id = p.organization_id
+      AND c.id = p.category_id
+WHERE p.organization_id = $2
+  AND (
+      CAST($3 AS TEXT) IS NULL
+      OR p.name ILIKE '%' || CAST($3 AS TEXT) || '%'
+      OR p.sku ILIKE '%' || CAST($3 AS TEXT) || '%'
+      OR p.barcode ILIKE '%' || CAST($3 AS TEXT) || '%'
+  )
+  AND (
+      CAST($4 AS UUID) IS NULL
+      OR p.category_id = CAST($4 AS UUID)
+  )
+  AND (NOT CAST($5 AS BOOLEAN) OR p.is_active = TRUE)
+  AND (
+      NOT CAST($6 AS BOOLEAN)
+      OR COALESCE(i.quantity, CAST(0 AS NUMERIC(15, 3))) > 0
+  )
 `
 
-type CountCatalogProductsParams struct {
-	Search      pgtype.Text
-	CategoryID  pgtype.UUID
-	ActiveOnly  bool
-	InStockOnly bool
+type CountCatalogProductsForStoreParams struct {
+	StoreID        pgtype.UUID
+	OrganizationID pgtype.UUID
+	Search         pgtype.Text
+	CategoryID     pgtype.UUID
+	ActiveOnly     bool
+	InStockOnly    bool
 }
 
-func (q *Queries) CountCatalogProducts(ctx context.Context, arg CountCatalogProductsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countCatalogProducts,
+func (q *Queries) CountCatalogProductsForStore(ctx context.Context, arg CountCatalogProductsForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countCatalogProductsForStore,
+		arg.StoreID,
+		arg.OrganizationID,
 		arg.Search,
 		arg.CategoryID,
 		arg.ActiveOnly,
@@ -52,8 +65,10 @@ func (q *Queries) CountCatalogProducts(ctx context.Context, arg CountCatalogProd
 	return count, err
 }
 
-const getCatalogProductByBarcode = `-- name: GetCatalogProductByBarcode :one
+const getCatalogProductByBarcodeForStore = `-- name: GetCatalogProductByBarcodeForStore :one
 SELECT
+    p.organization_id,
+    s.id AS store_id,
     p.id,
     p.sku,
     p.barcode,
@@ -67,31 +82,50 @@ SELECT
     p.created_at,
     p.updated_at
 FROM products p
-LEFT JOIN inventory i ON i.product_id = p.id
-LEFT JOIN categories c ON c.id = p.category_id
-WHERE p.barcode = $1
+INNER JOIN stores s
+        ON s.organization_id = p.organization_id
+       AND s.id = $1
+LEFT JOIN inventory i
+       ON i.organization_id = p.organization_id
+      AND i.store_id = s.id
+      AND i.product_id = p.id
+LEFT JOIN categories c
+       ON c.organization_id = p.organization_id
+      AND c.id = p.category_id
+WHERE p.organization_id = $2
+  AND p.barcode = $3
 LIMIT 1
 `
 
-type GetCatalogProductByBarcodeRow struct {
-	ID           pgtype.UUID
-	SKU          string
-	Barcode      pgtype.Text
-	Name         string
-	CategoryID   pgtype.UUID
-	CategoryName pgtype.Text
-	Price        pgtype.Numeric
-	Quantity     pgtype.Numeric
-	IsActive     bool
-	InStock      bool
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+type GetCatalogProductByBarcodeForStoreParams struct {
+	StoreID        pgtype.UUID
+	OrganizationID pgtype.UUID
+	Barcode        pgtype.Text
 }
 
-func (q *Queries) GetCatalogProductByBarcode(ctx context.Context, barcode pgtype.Text) (GetCatalogProductByBarcodeRow, error) {
-	row := q.db.QueryRow(ctx, getCatalogProductByBarcode, barcode)
-	var i GetCatalogProductByBarcodeRow
+type GetCatalogProductByBarcodeForStoreRow struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	CategoryName   pgtype.Text
+	Price          pgtype.Numeric
+	Quantity       pgtype.Numeric
+	IsActive       bool
+	InStock        bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetCatalogProductByBarcodeForStore(ctx context.Context, arg GetCatalogProductByBarcodeForStoreParams) (GetCatalogProductByBarcodeForStoreRow, error) {
+	row := q.db.QueryRow(ctx, getCatalogProductByBarcodeForStore, arg.StoreID, arg.OrganizationID, arg.Barcode)
+	var i GetCatalogProductByBarcodeForStoreRow
 	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,
@@ -108,8 +142,10 @@ func (q *Queries) GetCatalogProductByBarcode(ctx context.Context, barcode pgtype
 	return i, err
 }
 
-const getCatalogProductByID = `-- name: GetCatalogProductByID :one
+const getCatalogProductByIDForStore = `-- name: GetCatalogProductByIDForStore :one
 SELECT
+    p.organization_id,
+    s.id AS store_id,
     p.id,
     p.sku,
     p.barcode,
@@ -123,31 +159,50 @@ SELECT
     p.created_at,
     p.updated_at
 FROM products p
-LEFT JOIN inventory i ON i.product_id = p.id
-LEFT JOIN categories c ON c.id = p.category_id
-WHERE p.id = $1
+INNER JOIN stores s
+        ON s.organization_id = p.organization_id
+       AND s.id = $1
+LEFT JOIN inventory i
+       ON i.organization_id = p.organization_id
+      AND i.store_id = s.id
+      AND i.product_id = p.id
+LEFT JOIN categories c
+       ON c.organization_id = p.organization_id
+      AND c.id = p.category_id
+WHERE p.organization_id = $2
+  AND p.id = $3
 LIMIT 1
 `
 
-type GetCatalogProductByIDRow struct {
-	ID           pgtype.UUID
-	SKU          string
-	Barcode      pgtype.Text
-	Name         string
-	CategoryID   pgtype.UUID
-	CategoryName pgtype.Text
-	Price        pgtype.Numeric
-	Quantity     pgtype.Numeric
-	IsActive     bool
-	InStock      bool
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+type GetCatalogProductByIDForStoreParams struct {
+	StoreID        pgtype.UUID
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) GetCatalogProductByID(ctx context.Context, id pgtype.UUID) (GetCatalogProductByIDRow, error) {
-	row := q.db.QueryRow(ctx, getCatalogProductByID, id)
-	var i GetCatalogProductByIDRow
+type GetCatalogProductByIDForStoreRow struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	CategoryName   pgtype.Text
+	Price          pgtype.Numeric
+	Quantity       pgtype.Numeric
+	IsActive       bool
+	InStock        bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetCatalogProductByIDForStore(ctx context.Context, arg GetCatalogProductByIDForStoreParams) (GetCatalogProductByIDForStoreRow, error) {
+	row := q.db.QueryRow(ctx, getCatalogProductByIDForStore, arg.StoreID, arg.OrganizationID, arg.ID)
+	var i GetCatalogProductByIDForStoreRow
 	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,
@@ -164,8 +219,10 @@ func (q *Queries) GetCatalogProductByID(ctx context.Context, id pgtype.UUID) (Ge
 	return i, err
 }
 
-const listCatalogProducts = `-- name: ListCatalogProducts :many
+const listCatalogProductsForStore = `-- name: ListCatalogProductsForStore :many
 SELECT
+    p.organization_id,
+    s.id AS store_id,
     p.id,
     p.sku,
     p.barcode,
@@ -179,55 +236,69 @@ SELECT
     p.created_at,
     p.updated_at
 FROM products p
-LEFT JOIN inventory i ON i.product_id = p.id
-LEFT JOIN categories c ON c.id = p.category_id
-WHERE
-    (
-        CAST($1 AS TEXT) IS NULL
-        OR p.name ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR p.sku ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR p.barcode ILIKE '%' || CAST($1 AS TEXT) || '%'
-    )
-    AND (
-        CAST($2 AS UUID) IS NULL
-        OR p.category_id = CAST($2 AS UUID)
-    )
-    AND (NOT CAST($3 AS BOOLEAN) OR p.is_active = TRUE)
-    AND (
-        NOT CAST($4 AS BOOLEAN)
-        OR COALESCE(i.quantity, CAST(0 AS NUMERIC(15, 3))) > 0
-    )
+INNER JOIN stores s
+        ON s.organization_id = p.organization_id
+       AND s.id = $1
+LEFT JOIN inventory i
+       ON i.organization_id = p.organization_id
+      AND i.store_id = s.id
+      AND i.product_id = p.id
+LEFT JOIN categories c
+       ON c.organization_id = p.organization_id
+      AND c.id = p.category_id
+WHERE p.organization_id = $2
+  AND (
+      CAST($3 AS TEXT) IS NULL
+      OR p.name ILIKE '%' || CAST($3 AS TEXT) || '%'
+      OR p.sku ILIKE '%' || CAST($3 AS TEXT) || '%'
+      OR p.barcode ILIKE '%' || CAST($3 AS TEXT) || '%'
+  )
+  AND (
+      CAST($4 AS UUID) IS NULL
+      OR p.category_id = CAST($4 AS UUID)
+  )
+  AND (NOT CAST($5 AS BOOLEAN) OR p.is_active = TRUE)
+  AND (
+      NOT CAST($6 AS BOOLEAN)
+      OR COALESCE(i.quantity, CAST(0 AS NUMERIC(15, 3))) > 0
+  )
 ORDER BY p.name ASC, p.id ASC
-LIMIT $6
-OFFSET $5
+LIMIT $8
+OFFSET $7
 `
 
-type ListCatalogProductsParams struct {
-	Search      pgtype.Text
-	CategoryID  pgtype.UUID
-	ActiveOnly  bool
-	InStockOnly bool
-	PageOffset  int32
-	PageSize    int32
+type ListCatalogProductsForStoreParams struct {
+	StoreID        pgtype.UUID
+	OrganizationID pgtype.UUID
+	Search         pgtype.Text
+	CategoryID     pgtype.UUID
+	ActiveOnly     bool
+	InStockOnly    bool
+	PageOffset     int32
+	PageSize       int32
 }
 
-type ListCatalogProductsRow struct {
-	ID           pgtype.UUID
-	SKU          string
-	Barcode      pgtype.Text
-	Name         string
-	CategoryID   pgtype.UUID
-	CategoryName pgtype.Text
-	Price        pgtype.Numeric
-	Quantity     pgtype.Numeric
-	IsActive     bool
-	InStock      bool
-	CreatedAt    pgtype.Timestamptz
-	UpdatedAt    pgtype.Timestamptz
+type ListCatalogProductsForStoreRow struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	CategoryName   pgtype.Text
+	Price          pgtype.Numeric
+	Quantity       pgtype.Numeric
+	IsActive       bool
+	InStock        bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
-func (q *Queries) ListCatalogProducts(ctx context.Context, arg ListCatalogProductsParams) ([]ListCatalogProductsRow, error) {
-	rows, err := q.db.Query(ctx, listCatalogProducts,
+func (q *Queries) ListCatalogProductsForStore(ctx context.Context, arg ListCatalogProductsForStoreParams) ([]ListCatalogProductsForStoreRow, error) {
+	rows, err := q.db.Query(ctx, listCatalogProductsForStore,
+		arg.StoreID,
+		arg.OrganizationID,
 		arg.Search,
 		arg.CategoryID,
 		arg.ActiveOnly,
@@ -239,10 +310,12 @@ func (q *Queries) ListCatalogProducts(ctx context.Context, arg ListCatalogProduc
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListCatalogProductsRow{}
+	items := []ListCatalogProductsForStoreRow{}
 	for rows.Next() {
-		var i ListCatalogProductsRow
+		var i ListCatalogProductsForStoreRow
 		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.StoreID,
 			&i.ID,
 			&i.SKU,
 			&i.Barcode,

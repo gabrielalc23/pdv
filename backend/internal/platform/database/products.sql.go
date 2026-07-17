@@ -11,13 +11,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const activateProduct = `-- name: ActivateProduct :one
+const activateProductForOrganization = `-- name: ActivateProductForOrganization :one
 UPDATE products
 SET
     is_active = TRUE,
     updated_at = NOW()
-WHERE id = $1
+WHERE organization_id = $1
+  AND id = $2
 RETURNING
+    organization_id,
     id,
     sku,
     barcode,
@@ -30,10 +32,30 @@ RETURNING
     updated_at
 `
 
-func (q *Queries) ActivateProduct(ctx context.Context, id pgtype.UUID) (Product, error) {
-	row := q.db.QueryRow(ctx, activateProduct, id)
-	var i Product
+type ActivateProductForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+type ActivateProductForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ActivateProductForOrganization(ctx context.Context, arg ActivateProductForOrganizationParams) (ActivateProductForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, activateProductForOrganization, arg.OrganizationID, arg.ID)
+	var i ActivateProductForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,
@@ -48,38 +70,45 @@ func (q *Queries) ActivateProduct(ctx context.Context, id pgtype.UUID) (Product,
 	return i, err
 }
 
-const countProducts = `-- name: CountProducts :one
+const countProductsForOrganization = `-- name: CountProductsForOrganization :one
 SELECT COUNT(*)
 FROM products
-WHERE
-    (
-        CAST($1 AS TEXT) IS NULL
-        OR name ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR sku ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR barcode ILIKE '%' || CAST($1 AS TEXT) || '%'
-    )
-    AND (
-        CAST($2 AS UUID) IS NULL
-        OR category_id = CAST($2 AS UUID)
-    )
-    AND (NOT $3 OR is_active = TRUE)
+WHERE organization_id = $1
+  AND (
+      CAST($2 AS TEXT) IS NULL
+      OR name ILIKE '%' || CAST($2 AS TEXT) || '%'
+      OR sku ILIKE '%' || CAST($2 AS TEXT) || '%'
+      OR barcode ILIKE '%' || CAST($2 AS TEXT) || '%'
+  )
+  AND (
+      CAST($3 AS UUID) IS NULL
+      OR category_id = CAST($3 AS UUID)
+  )
+  AND (NOT CAST($4 AS BOOLEAN) OR is_active = TRUE)
 `
 
-type CountProductsParams struct {
-	Search     pgtype.Text
-	CategoryID pgtype.UUID
-	ActiveOnly interface{}
+type CountProductsForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Search         pgtype.Text
+	CategoryID     pgtype.UUID
+	ActiveOnly     bool
 }
 
-func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countProducts, arg.Search, arg.CategoryID, arg.ActiveOnly)
+func (q *Queries) CountProductsForOrganization(ctx context.Context, arg CountProductsForOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countProductsForOrganization,
+		arg.OrganizationID,
+		arg.Search,
+		arg.CategoryID,
+		arg.ActiveOnly,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
-const createProduct = `-- name: CreateProduct :one
+const createProductForOrganization = `-- name: CreateProductForOrganization :one
 INSERT INTO products (
+    organization_id,
     sku,
     barcode,
     name,
@@ -95,9 +124,11 @@ VALUES (
     $4,
     $5,
     $6,
-    $7
+    $7,
+    $8
 )
 RETURNING
+    organization_id,
     id,
     sku,
     barcode,
@@ -110,18 +141,34 @@ RETURNING
     updated_at
 `
 
-type CreateProductParams struct {
-	SKU        string
-	Barcode    pgtype.Text
-	Name       string
-	CategoryID pgtype.UUID
-	Price      pgtype.Numeric
-	Cost       pgtype.Numeric
-	IsActive   bool
+type CreateProductForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
 }
 
-func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
-	row := q.db.QueryRow(ctx, createProduct,
+type CreateProductForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) CreateProductForOrganization(ctx context.Context, arg CreateProductForOrganizationParams) (CreateProductForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, createProductForOrganization,
+		arg.OrganizationID,
 		arg.SKU,
 		arg.Barcode,
 		arg.Name,
@@ -130,8 +177,9 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.Cost,
 		arg.IsActive,
 	)
-	var i Product
+	var i CreateProductForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,
@@ -146,13 +194,15 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 	return i, err
 }
 
-const deactivateProduct = `-- name: DeactivateProduct :one
+const deactivateProductForOrganization = `-- name: DeactivateProductForOrganization :one
 UPDATE products
 SET
     is_active = FALSE,
     updated_at = NOW()
-WHERE id = $1
+WHERE organization_id = $1
+  AND id = $2
 RETURNING
+    organization_id,
     id,
     sku,
     barcode,
@@ -165,10 +215,30 @@ RETURNING
     updated_at
 `
 
-func (q *Queries) DeactivateProduct(ctx context.Context, id pgtype.UUID) (Product, error) {
-	row := q.db.QueryRow(ctx, deactivateProduct, id)
-	var i Product
+type DeactivateProductForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+type DeactivateProductForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) DeactivateProductForOrganization(ctx context.Context, arg DeactivateProductForOrganizationParams) (DeactivateProductForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, deactivateProductForOrganization, arg.OrganizationID, arg.ID)
+	var i DeactivateProductForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,
@@ -183,8 +253,9 @@ func (q *Queries) DeactivateProduct(ctx context.Context, id pgtype.UUID) (Produc
 	return i, err
 }
 
-const getProductByBarcode = `-- name: GetProductByBarcode :one
+const getProductByBarcodeForOrganization = `-- name: GetProductByBarcodeForOrganization :one
 SELECT
+    organization_id,
     id,
     sku,
     barcode,
@@ -196,14 +267,35 @@ SELECT
     created_at,
     updated_at
 FROM products
-WHERE barcode = $1
+WHERE organization_id = $1
+  AND barcode = $2
 LIMIT 1
 `
 
-func (q *Queries) GetProductByBarcode(ctx context.Context, barcode pgtype.Text) (Product, error) {
-	row := q.db.QueryRow(ctx, getProductByBarcode, barcode)
-	var i Product
+type GetProductByBarcodeForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Barcode        pgtype.Text
+}
+
+type GetProductByBarcodeForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetProductByBarcodeForOrganization(ctx context.Context, arg GetProductByBarcodeForOrganizationParams) (GetProductByBarcodeForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getProductByBarcodeForOrganization, arg.OrganizationID, arg.Barcode)
+	var i GetProductByBarcodeForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,
@@ -218,8 +310,9 @@ func (q *Queries) GetProductByBarcode(ctx context.Context, barcode pgtype.Text) 
 	return i, err
 }
 
-const getProductByID = `-- name: GetProductByID :one
+const getProductByIDForOrganization = `-- name: GetProductByIDForOrganization :one
 SELECT
+    organization_id,
     id,
     sku,
     barcode,
@@ -231,14 +324,35 @@ SELECT
     created_at,
     updated_at
 FROM products
-WHERE id = $1
+WHERE organization_id = $1
+  AND id = $2
 LIMIT 1
 `
 
-func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (Product, error) {
-	row := q.db.QueryRow(ctx, getProductByID, id)
-	var i Product
+type GetProductByIDForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+type GetProductByIDForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetProductByIDForOrganization(ctx context.Context, arg GetProductByIDForOrganizationParams) (GetProductByIDForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getProductByIDForOrganization, arg.OrganizationID, arg.ID)
+	var i GetProductByIDForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,
@@ -253,27 +367,56 @@ func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (Product, 
 	return i, err
 }
 
-const getProductBySKU = `-- name: GetProductBySKU :one
+const getProductByIDForStore = `-- name: GetProductByIDForStore :one
 SELECT
-    id,
-    sku,
-    barcode,
-    name,
-    category_id,
-    price,
-    cost,
-    is_active,
-    created_at,
-    updated_at
-FROM products
-WHERE sku = $1
+    p.organization_id,
+    s.id AS store_id,
+    p.id,
+    p.sku,
+    p.barcode,
+    p.name,
+    p.category_id,
+    p.price,
+    p.cost,
+    p.is_active,
+    p.created_at,
+    p.updated_at
+FROM products p
+INNER JOIN stores s
+        ON s.organization_id = p.organization_id
+       AND s.id = $1
+WHERE p.organization_id = $2
+  AND p.id = $3
 LIMIT 1
 `
 
-func (q *Queries) GetProductBySKU(ctx context.Context, sku string) (Product, error) {
-	row := q.db.QueryRow(ctx, getProductBySKU, sku)
-	var i Product
+type GetProductByIDForStoreParams struct {
+	StoreID        pgtype.UUID
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+type GetProductByIDForStoreRow struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetProductByIDForStore(ctx context.Context, arg GetProductByIDForStoreParams) (GetProductByIDForStoreRow, error) {
+	row := q.db.QueryRow(ctx, getProductByIDForStore, arg.StoreID, arg.OrganizationID, arg.ID)
+	var i GetProductByIDForStoreRow
 	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,
@@ -288,8 +431,9 @@ func (q *Queries) GetProductBySKU(ctx context.Context, sku string) (Product, err
 	return i, err
 }
 
-const listProducts = `-- name: ListProducts :many
+const getProductBySKUForOrganization = `-- name: GetProductBySKUForOrganization :one
 SELECT
+    organization_id,
     id,
     sku,
     barcode,
@@ -301,33 +445,106 @@ SELECT
     created_at,
     updated_at
 FROM products
-WHERE
-    (
-        CAST($1 AS TEXT) IS NULL
-        OR name ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR sku ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR barcode ILIKE '%' || CAST($1 AS TEXT) || '%'
-    )
-    AND (
-        CAST($2 AS UUID) IS NULL
-        OR category_id = CAST($2 AS UUID)
-    )
-    AND (NOT $3 OR is_active = TRUE)
+WHERE organization_id = $1
+  AND sku = $2
+LIMIT 1
+`
+
+type GetProductBySKUForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	SKU            string
+}
+
+type GetProductBySKUForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetProductBySKUForOrganization(ctx context.Context, arg GetProductBySKUForOrganizationParams) (GetProductBySKUForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getProductBySKUForOrganization, arg.OrganizationID, arg.SKU)
+	var i GetProductBySKUForOrganizationRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ID,
+		&i.SKU,
+		&i.Barcode,
+		&i.Name,
+		&i.CategoryID,
+		&i.Price,
+		&i.Cost,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listProductsForOrganization = `-- name: ListProductsForOrganization :many
+SELECT
+    organization_id,
+    id,
+    sku,
+    barcode,
+    name,
+    category_id,
+    price,
+    cost,
+    is_active,
+    created_at,
+    updated_at
+FROM products
+WHERE organization_id = $1
+  AND (
+      CAST($2 AS TEXT) IS NULL
+      OR name ILIKE '%' || CAST($2 AS TEXT) || '%'
+      OR sku ILIKE '%' || CAST($2 AS TEXT) || '%'
+      OR barcode ILIKE '%' || CAST($2 AS TEXT) || '%'
+  )
+  AND (
+      CAST($3 AS UUID) IS NULL
+      OR category_id = CAST($3 AS UUID)
+  )
+  AND (NOT CAST($4 AS BOOLEAN) OR is_active = TRUE)
 ORDER BY name ASC, id ASC
-LIMIT $5
-OFFSET $4
+LIMIT $6
+OFFSET $5
 `
 
-type ListProductsParams struct {
-	Search     pgtype.Text
-	CategoryID pgtype.UUID
-	ActiveOnly interface{}
-	PageOffset int32
-	PageSize   int32
+type ListProductsForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Search         pgtype.Text
+	CategoryID     pgtype.UUID
+	ActiveOnly     bool
+	PageOffset     int32
+	PageSize       int32
 }
 
-func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
-	rows, err := q.db.Query(ctx, listProducts,
+type ListProductsForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListProductsForOrganization(ctx context.Context, arg ListProductsForOrganizationParams) ([]ListProductsForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listProductsForOrganization,
+		arg.OrganizationID,
 		arg.Search,
 		arg.CategoryID,
 		arg.ActiveOnly,
@@ -338,10 +555,11 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Product{}
+	items := []ListProductsForOrganizationRow{}
 	for rows.Next() {
-		var i Product
+		var i ListProductsForOrganizationRow
 		if err := rows.Scan(
+			&i.OrganizationID,
 			&i.ID,
 			&i.SKU,
 			&i.Barcode,
@@ -363,7 +581,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 	return items, nil
 }
 
-const updateProduct = `-- name: UpdateProduct :one
+const updateProductForOrganization = `-- name: UpdateProductForOrganization :one
 UPDATE products
 SET
     sku = $1,
@@ -373,8 +591,10 @@ SET
     price = $5,
     cost = $6,
     updated_at = NOW()
-WHERE id = $7
+WHERE organization_id = $7
+  AND id = $8
 RETURNING
+    organization_id,
     id,
     sku,
     barcode,
@@ -387,28 +607,45 @@ RETURNING
     updated_at
 `
 
-type UpdateProductParams struct {
-	SKU        string
-	Barcode    pgtype.Text
-	Name       string
-	CategoryID pgtype.UUID
-	Price      pgtype.Numeric
-	Cost       pgtype.Numeric
-	ID         pgtype.UUID
+type UpdateProductForOrganizationParams struct {
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error) {
-	row := q.db.QueryRow(ctx, updateProduct,
+type UpdateProductForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	CategoryID     pgtype.UUID
+	Price          pgtype.Numeric
+	Cost           pgtype.Numeric
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateProductForOrganization(ctx context.Context, arg UpdateProductForOrganizationParams) (UpdateProductForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, updateProductForOrganization,
 		arg.SKU,
 		arg.Barcode,
 		arg.Name,
 		arg.CategoryID,
 		arg.Price,
 		arg.Cost,
+		arg.OrganizationID,
 		arg.ID,
 	)
-	var i Product
+	var i UpdateProductForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.SKU,
 		&i.Barcode,

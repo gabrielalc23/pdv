@@ -30,10 +30,10 @@ type TxManager interface {
 }
 
 type storeTxManager struct {
-	store *database.Store
+	store *database.PostgresStore
 }
 
-func NewTxManager(store *database.Store) TxManager {
+func NewTxManager(store *database.PostgresStore) TxManager {
 	return storeTxManager{store: store}
 }
 

@@ -11,9 +11,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const createFiscalDocument = `-- name: CreateFiscalDocument :one
+const countFiscalDocumentCallbacksByDocumentIDForStore = `-- name: CountFiscalDocumentCallbacksByDocumentIDForStore :one
+SELECT COUNT(*)
+FROM fiscal_document_callbacks AS callback
+WHERE callback.organization_id = $1
+  AND callback.store_id = $2
+  AND callback.fiscal_document_id = $3
+`
+
+type CountFiscalDocumentCallbacksByDocumentIDForStoreParams struct {
+	OrganizationID   pgtype.UUID
+	StoreID          pgtype.UUID
+	FiscalDocumentID pgtype.UUID
+}
+
+func (q *Queries) CountFiscalDocumentCallbacksByDocumentIDForStore(ctx context.Context, arg CountFiscalDocumentCallbacksByDocumentIDForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countFiscalDocumentCallbacksByDocumentIDForStore, arg.OrganizationID, arg.StoreID, arg.FiscalDocumentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createFiscalDocumentForStore = `-- name: CreateFiscalDocumentForStore :one
 WITH inserted AS (
     INSERT INTO fiscal_documents (
+        organization_id,
+        store_id,
         sale_id,
         series,
         number,
@@ -39,11 +62,16 @@ WITH inserted AS (
         $9,
         $10,
         $11,
-        $12
+        $12,
+        $13,
+        $14
     )
-    ON CONFLICT (sale_id) DO NOTHING
+    ON CONFLICT (organization_id, store_id, sale_id) DO UPDATE
+    SET sale_id = EXCLUDED.sale_id
     RETURNING
         id,
+        organization_id,
+        store_id,
         sale_id,
         status,
         environment,
@@ -62,52 +90,39 @@ WITH inserted AS (
         created_at,
         updated_at
 )
-SELECT
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
-FROM inserted
+SELECT id, organization_id, store_id, sale_id, status, environment, document_model, series, number, access_key, protocol, provider, external_reference, xml, error_code, error_message, issued_at, cancelled_at, created_at, updated_at FROM inserted
 UNION ALL
 SELECT
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
-FROM fiscal_documents
-WHERE sale_id = $1
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
+FROM fiscal_documents AS document
+WHERE document.organization_id = $1
+  AND document.store_id = $2
+  AND document.sale_id = $3
 LIMIT 1
 `
 
-type CreateFiscalDocumentParams struct {
+type CreateFiscalDocumentForStoreParams struct {
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
 	SaleID            pgtype.UUID
 	Series            pgtype.Int4
 	Number            pgtype.Int8
@@ -122,8 +137,10 @@ type CreateFiscalDocumentParams struct {
 	CancelledAt       pgtype.Timestamptz
 }
 
-type CreateFiscalDocumentRow struct {
+type CreateFiscalDocumentForStoreRow struct {
 	ID                pgtype.UUID
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
 	SaleID            pgtype.UUID
 	Status            FiscalDocumentStatus
 	Environment       FiscalEnvironment
@@ -143,8 +160,10 @@ type CreateFiscalDocumentRow struct {
 	UpdatedAt         pgtype.Timestamptz
 }
 
-func (q *Queries) CreateFiscalDocument(ctx context.Context, arg CreateFiscalDocumentParams) (CreateFiscalDocumentRow, error) {
-	row := q.db.QueryRow(ctx, createFiscalDocument,
+func (q *Queries) CreateFiscalDocumentForStore(ctx context.Context, arg CreateFiscalDocumentForStoreParams) (CreateFiscalDocumentForStoreRow, error) {
+	row := q.db.QueryRow(ctx, createFiscalDocumentForStore,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.SaleID,
 		arg.Series,
 		arg.Number,
@@ -158,9 +177,11 @@ func (q *Queries) CreateFiscalDocument(ctx context.Context, arg CreateFiscalDocu
 		arg.IssuedAt,
 		arg.CancelledAt,
 	)
-	var i CreateFiscalDocumentRow
+	var i CreateFiscalDocumentForStoreRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -182,36 +203,48 @@ func (q *Queries) CreateFiscalDocument(ctx context.Context, arg CreateFiscalDocu
 	return i, err
 }
 
-const getFiscalDocumentByID = `-- name: GetFiscalDocumentByID :one
+const getFiscalDocumentByIDForStore = `-- name: GetFiscalDocumentByIDForStore :one
 SELECT
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
-FROM fiscal_documents
-WHERE id = $1
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
+FROM fiscal_documents AS document
+WHERE document.organization_id = $1
+  AND document.store_id = $2
+  AND document.id = $3
 LIMIT 1
 `
 
-func (q *Queries) GetFiscalDocumentByID(ctx context.Context, id pgtype.UUID) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, getFiscalDocumentByID, id)
+type GetFiscalDocumentByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) GetFiscalDocumentByIDForStore(ctx context.Context, arg GetFiscalDocumentByIDForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, getFiscalDocumentByIDForStore, arg.OrganizationID, arg.StoreID, arg.ID)
 	var i FiscalDocument
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -233,36 +266,48 @@ func (q *Queries) GetFiscalDocumentByID(ctx context.Context, id pgtype.UUID) (Fi
 	return i, err
 }
 
-const getFiscalDocumentBySaleID = `-- name: GetFiscalDocumentBySaleID :one
+const getFiscalDocumentBySaleIDForStore = `-- name: GetFiscalDocumentBySaleIDForStore :one
 SELECT
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
-FROM fiscal_documents
-WHERE sale_id = $1
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
+FROM fiscal_documents AS document
+WHERE document.organization_id = $1
+  AND document.store_id = $2
+  AND document.sale_id = $3
 LIMIT 1
 `
 
-func (q *Queries) GetFiscalDocumentBySaleID(ctx context.Context, saleID pgtype.UUID) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, getFiscalDocumentBySaleID, saleID)
+type GetFiscalDocumentBySaleIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+}
+
+func (q *Queries) GetFiscalDocumentBySaleIDForStore(ctx context.Context, arg GetFiscalDocumentBySaleIDForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, getFiscalDocumentBySaleIDForStore, arg.OrganizationID, arg.StoreID, arg.SaleID)
 	var i FiscalDocument
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -284,24 +329,34 @@ func (q *Queries) GetFiscalDocumentBySaleID(ctx context.Context, saleID pgtype.U
 	return i, err
 }
 
-const listFiscalDocumentCallbacksByDocumentID = `-- name: ListFiscalDocumentCallbacksByDocumentID :many
+const listFiscalDocumentCallbacksByDocumentIDForStore = `-- name: ListFiscalDocumentCallbacksByDocumentIDForStore :many
 SELECT
-    id,
-    fiscal_document_id,
-    provider,
-    callback_key,
-    payload,
-    received_at,
-    processed_at,
-    created_at,
-    updated_at
-FROM fiscal_document_callbacks
-WHERE fiscal_document_id = $1
-ORDER BY received_at DESC
+    callback.id,
+    callback.organization_id,
+    callback.store_id,
+    callback.fiscal_document_id,
+    callback.provider,
+    callback.callback_key,
+    callback.payload,
+    callback.received_at,
+    callback.processed_at,
+    callback.created_at,
+    callback.updated_at
+FROM fiscal_document_callbacks AS callback
+WHERE callback.organization_id = $1
+  AND callback.store_id = $2
+  AND callback.fiscal_document_id = $3
+ORDER BY callback.received_at DESC, callback.id DESC
 `
 
-func (q *Queries) ListFiscalDocumentCallbacksByDocumentID(ctx context.Context, fiscalDocumentID pgtype.UUID) ([]FiscalDocumentCallback, error) {
-	rows, err := q.db.Query(ctx, listFiscalDocumentCallbacksByDocumentID, fiscalDocumentID)
+type ListFiscalDocumentCallbacksByDocumentIDForStoreParams struct {
+	OrganizationID   pgtype.UUID
+	StoreID          pgtype.UUID
+	FiscalDocumentID pgtype.UUID
+}
+
+func (q *Queries) ListFiscalDocumentCallbacksByDocumentIDForStore(ctx context.Context, arg ListFiscalDocumentCallbacksByDocumentIDForStoreParams) ([]FiscalDocumentCallback, error) {
+	rows, err := q.db.Query(ctx, listFiscalDocumentCallbacksByDocumentIDForStore, arg.OrganizationID, arg.StoreID, arg.FiscalDocumentID)
 	if err != nil {
 		return nil, err
 	}
@@ -311,6 +366,8 @@ func (q *Queries) ListFiscalDocumentCallbacksByDocumentID(ctx context.Context, f
 		var i FiscalDocumentCallback
 		if err := rows.Scan(
 			&i.ID,
+			&i.OrganizationID,
+			&i.StoreID,
 			&i.FiscalDocumentID,
 			&i.Provider,
 			&i.CallbackKey,
@@ -330,36 +387,48 @@ func (q *Queries) ListFiscalDocumentCallbacksByDocumentID(ctx context.Context, f
 	return items, nil
 }
 
-const lockFiscalDocumentByID = `-- name: LockFiscalDocumentByID :one
+const lockFiscalDocumentByIDForStore = `-- name: LockFiscalDocumentByIDForStore :one
 SELECT
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
-FROM fiscal_documents
-WHERE id = $1
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
+FROM fiscal_documents AS document
+WHERE document.organization_id = $1
+  AND document.store_id = $2
+  AND document.id = $3
 FOR UPDATE
 `
 
-func (q *Queries) LockFiscalDocumentByID(ctx context.Context, id pgtype.UUID) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, lockFiscalDocumentByID, id)
+type LockFiscalDocumentByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) LockFiscalDocumentByIDForStore(ctx context.Context, arg LockFiscalDocumentByIDForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, lockFiscalDocumentByIDForStore, arg.OrganizationID, arg.StoreID, arg.ID)
 	var i FiscalDocument
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -381,36 +450,48 @@ func (q *Queries) LockFiscalDocumentByID(ctx context.Context, id pgtype.UUID) (F
 	return i, err
 }
 
-const lockFiscalDocumentBySaleID = `-- name: LockFiscalDocumentBySaleID :one
+const lockFiscalDocumentBySaleIDForStore = `-- name: LockFiscalDocumentBySaleIDForStore :one
 SELECT
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
-FROM fiscal_documents
-WHERE sale_id = $1
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
+FROM fiscal_documents AS document
+WHERE document.organization_id = $1
+  AND document.store_id = $2
+  AND document.sale_id = $3
 FOR UPDATE
 `
 
-func (q *Queries) LockFiscalDocumentBySaleID(ctx context.Context, saleID pgtype.UUID) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, lockFiscalDocumentBySaleID, saleID)
+type LockFiscalDocumentBySaleIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+}
+
+func (q *Queries) LockFiscalDocumentBySaleIDForStore(ctx context.Context, arg LockFiscalDocumentBySaleIDForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, lockFiscalDocumentBySaleIDForStore, arg.OrganizationID, arg.StoreID, arg.SaleID)
 	var i FiscalDocument
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -432,111 +513,39 @@ func (q *Queries) LockFiscalDocumentBySaleID(ctx context.Context, saleID pgtype.
 	return i, err
 }
 
-const markFiscalDocumentAuthorized = `-- name: MarkFiscalDocumentAuthorized :one
-UPDATE fiscal_documents
-SET
-    status = 'AUTHORIZED',
-    access_key = $1,
-    protocol = $2,
-    provider = $3,
-    external_reference = $4,
-    xml = $5,
-    issued_at = COALESCE($6, NOW()),
-    error_code = NULL,
-    error_message = NULL
-WHERE id = $7
-  AND status IN ('PENDING', 'PROCESSING')
-RETURNING
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
+const lockFiscalDocumentCallbackByIDForStore = `-- name: LockFiscalDocumentCallbackByIDForStore :one
+SELECT
+    callback.id,
+    callback.organization_id,
+    callback.store_id,
+    callback.fiscal_document_id,
+    callback.provider,
+    callback.callback_key,
+    callback.payload,
+    callback.received_at,
+    callback.processed_at,
+    callback.created_at,
+    callback.updated_at
+FROM fiscal_document_callbacks AS callback
+WHERE callback.organization_id = $1
+  AND callback.store_id = $2
+  AND callback.id = $3
+FOR UPDATE
 `
 
-type MarkFiscalDocumentAuthorizedParams struct {
-	AccessKey         pgtype.Text
-	Protocol          pgtype.Text
-	Provider          pgtype.Text
-	ExternalReference pgtype.Text
-	XML               pgtype.Text
-	IssuedAt          pgtype.Timestamptz
-	ID                pgtype.UUID
+type LockFiscalDocumentCallbackByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) MarkFiscalDocumentAuthorized(ctx context.Context, arg MarkFiscalDocumentAuthorizedParams) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, markFiscalDocumentAuthorized,
-		arg.AccessKey,
-		arg.Protocol,
-		arg.Provider,
-		arg.ExternalReference,
-		arg.XML,
-		arg.IssuedAt,
-		arg.ID,
-	)
-	var i FiscalDocument
-	err := row.Scan(
-		&i.ID,
-		&i.SaleID,
-		&i.Status,
-		&i.Environment,
-		&i.DocumentModel,
-		&i.Series,
-		&i.Number,
-		&i.AccessKey,
-		&i.Protocol,
-		&i.Provider,
-		&i.ExternalReference,
-		&i.XML,
-		&i.ErrorCode,
-		&i.ErrorMessage,
-		&i.IssuedAt,
-		&i.CancelledAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const markFiscalDocumentCallbackProcessed = `-- name: MarkFiscalDocumentCallbackProcessed :one
-UPDATE fiscal_document_callbacks
-SET processed_at = COALESCE($1, NOW())
-WHERE id = $2
-RETURNING
-    id,
-    fiscal_document_id,
-    provider,
-    callback_key,
-    payload,
-    received_at,
-    processed_at,
-    created_at,
-    updated_at
-`
-
-type MarkFiscalDocumentCallbackProcessedParams struct {
-	ProcessedAt pgtype.Timestamptz
-	ID          pgtype.UUID
-}
-
-func (q *Queries) MarkFiscalDocumentCallbackProcessed(ctx context.Context, arg MarkFiscalDocumentCallbackProcessedParams) (FiscalDocumentCallback, error) {
-	row := q.db.QueryRow(ctx, markFiscalDocumentCallbackProcessed, arg.ProcessedAt, arg.ID)
+func (q *Queries) LockFiscalDocumentCallbackByIDForStore(ctx context.Context, arg LockFiscalDocumentCallbackByIDForStoreParams) (FiscalDocumentCallback, error) {
+	row := q.db.QueryRow(ctx, lockFiscalDocumentCallbackByIDForStore, arg.OrganizationID, arg.StoreID, arg.ID)
 	var i FiscalDocumentCallback
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.FiscalDocumentID,
 		&i.Provider,
 		&i.CallbackKey,
@@ -549,44 +558,74 @@ func (q *Queries) MarkFiscalDocumentCallbackProcessed(ctx context.Context, arg M
 	return i, err
 }
 
-const markFiscalDocumentCancelled = `-- name: MarkFiscalDocumentCancelled :one
-UPDATE fiscal_documents
+const markFiscalDocumentAuthorizedForStore = `-- name: MarkFiscalDocumentAuthorizedForStore :one
+UPDATE fiscal_documents AS document
 SET
-    status = 'CANCELLED',
-    cancelled_at = COALESCE($1, NOW())
-WHERE id = $2
-  AND status IN ('PENDING', 'PROCESSING', 'AUTHORIZED', 'REJECTED', 'ERROR')
+    status = 'AUTHORIZED',
+    access_key = $1,
+    protocol = $2,
+    provider = $3,
+    external_reference = $4,
+    xml = $5,
+    issued_at = COALESCE($6, NOW()),
+    error_code = NULL,
+    error_message = NULL
+WHERE document.organization_id = $7
+  AND document.store_id = $8
+  AND document.id = $9
+  AND document.status IN ('PENDING', 'PROCESSING')
 RETURNING
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
 `
 
-type MarkFiscalDocumentCancelledParams struct {
-	CancelledAt pgtype.Timestamptz
-	ID          pgtype.UUID
+type MarkFiscalDocumentAuthorizedForStoreParams struct {
+	AccessKey         pgtype.Text
+	Protocol          pgtype.Text
+	Provider          pgtype.Text
+	ExternalReference pgtype.Text
+	XML               pgtype.Text
+	IssuedAt          pgtype.Timestamptz
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
+	ID                pgtype.UUID
 }
 
-func (q *Queries) MarkFiscalDocumentCancelled(ctx context.Context, arg MarkFiscalDocumentCancelledParams) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, markFiscalDocumentCancelled, arg.CancelledAt, arg.ID)
+func (q *Queries) MarkFiscalDocumentAuthorizedForStore(ctx context.Context, arg MarkFiscalDocumentAuthorizedForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, markFiscalDocumentAuthorizedForStore,
+		arg.AccessKey,
+		arg.Protocol,
+		arg.Provider,
+		arg.ExternalReference,
+		arg.XML,
+		arg.IssuedAt,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ID,
+	)
 	var i FiscalDocument
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -608,46 +647,186 @@ func (q *Queries) MarkFiscalDocumentCancelled(ctx context.Context, arg MarkFisca
 	return i, err
 }
 
-const markFiscalDocumentError = `-- name: MarkFiscalDocumentError :one
-UPDATE fiscal_documents
+const markFiscalDocumentCallbackProcessedForStore = `-- name: MarkFiscalDocumentCallbackProcessedForStore :one
+UPDATE fiscal_document_callbacks AS callback
+SET processed_at = COALESCE($1, NOW())
+WHERE callback.organization_id = $2
+  AND callback.store_id = $3
+  AND callback.id = $4
+RETURNING
+    callback.id,
+    callback.organization_id,
+    callback.store_id,
+    callback.fiscal_document_id,
+    callback.provider,
+    callback.callback_key,
+    callback.payload,
+    callback.received_at,
+    callback.processed_at,
+    callback.created_at,
+    callback.updated_at
+`
+
+type MarkFiscalDocumentCallbackProcessedForStoreParams struct {
+	ProcessedAt    pgtype.Timestamptz
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) MarkFiscalDocumentCallbackProcessedForStore(ctx context.Context, arg MarkFiscalDocumentCallbackProcessedForStoreParams) (FiscalDocumentCallback, error) {
+	row := q.db.QueryRow(ctx, markFiscalDocumentCallbackProcessedForStore,
+		arg.ProcessedAt,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ID,
+	)
+	var i FiscalDocumentCallback
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
+		&i.FiscalDocumentID,
+		&i.Provider,
+		&i.CallbackKey,
+		&i.Payload,
+		&i.ReceivedAt,
+		&i.ProcessedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markFiscalDocumentCancelledForStore = `-- name: MarkFiscalDocumentCancelledForStore :one
+UPDATE fiscal_documents AS document
+SET
+    status = 'CANCELLED',
+    cancelled_at = COALESCE($1, NOW())
+WHERE document.organization_id = $2
+  AND document.store_id = $3
+  AND document.id = $4
+  AND document.status IN ('PENDING', 'PROCESSING', 'AUTHORIZED', 'REJECTED', 'ERROR')
+  AND document.access_key IS NOT NULL
+  AND document.protocol IS NOT NULL
+  AND document.issued_at IS NOT NULL
+RETURNING
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
+`
+
+type MarkFiscalDocumentCancelledForStoreParams struct {
+	CancelledAt    pgtype.Timestamptz
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) MarkFiscalDocumentCancelledForStore(ctx context.Context, arg MarkFiscalDocumentCancelledForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, markFiscalDocumentCancelledForStore,
+		arg.CancelledAt,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ID,
+	)
+	var i FiscalDocument
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
+		&i.SaleID,
+		&i.Status,
+		&i.Environment,
+		&i.DocumentModel,
+		&i.Series,
+		&i.Number,
+		&i.AccessKey,
+		&i.Protocol,
+		&i.Provider,
+		&i.ExternalReference,
+		&i.XML,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.IssuedAt,
+		&i.CancelledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const markFiscalDocumentErrorForStore = `-- name: MarkFiscalDocumentErrorForStore :one
+UPDATE fiscal_documents AS document
 SET
     status = 'ERROR',
     error_code = $1,
     error_message = $2
-WHERE id = $3
-  AND status IN ('PENDING', 'PROCESSING', 'REJECTED')
+WHERE document.organization_id = $3
+  AND document.store_id = $4
+  AND document.id = $5
+  AND document.status IN ('PENDING', 'PROCESSING', 'REJECTED')
 RETURNING
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
 `
 
-type MarkFiscalDocumentErrorParams struct {
-	ErrorCode    pgtype.Text
-	ErrorMessage pgtype.Text
-	ID           pgtype.UUID
+type MarkFiscalDocumentErrorForStoreParams struct {
+	ErrorCode      pgtype.Text
+	ErrorMessage   pgtype.Text
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) MarkFiscalDocumentError(ctx context.Context, arg MarkFiscalDocumentErrorParams) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, markFiscalDocumentError, arg.ErrorCode, arg.ErrorMessage, arg.ID)
+func (q *Queries) MarkFiscalDocumentErrorForStore(ctx context.Context, arg MarkFiscalDocumentErrorForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, markFiscalDocumentErrorForStore,
+		arg.ErrorCode,
+		arg.ErrorMessage,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ID,
+	)
 	var i FiscalDocument
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -669,37 +848,49 @@ func (q *Queries) MarkFiscalDocumentError(ctx context.Context, arg MarkFiscalDoc
 	return i, err
 }
 
-const markFiscalDocumentProcessing = `-- name: MarkFiscalDocumentProcessing :one
-UPDATE fiscal_documents
+const markFiscalDocumentProcessingForStore = `-- name: MarkFiscalDocumentProcessingForStore :one
+UPDATE fiscal_documents AS document
 SET status = 'PROCESSING'
-WHERE id = $1
-  AND status = 'PENDING'
+WHERE document.organization_id = $1
+  AND document.store_id = $2
+  AND document.id = $3
+  AND document.status IN ('PENDING', 'REJECTED', 'ERROR')
 RETURNING
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
 `
 
-func (q *Queries) MarkFiscalDocumentProcessing(ctx context.Context, id pgtype.UUID) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, markFiscalDocumentProcessing, id)
+type MarkFiscalDocumentProcessingForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) MarkFiscalDocumentProcessingForStore(ctx context.Context, arg MarkFiscalDocumentProcessingForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, markFiscalDocumentProcessingForStore, arg.OrganizationID, arg.StoreID, arg.ID)
 	var i FiscalDocument
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -721,46 +912,60 @@ func (q *Queries) MarkFiscalDocumentProcessing(ctx context.Context, id pgtype.UU
 	return i, err
 }
 
-const markFiscalDocumentRejected = `-- name: MarkFiscalDocumentRejected :one
-UPDATE fiscal_documents
+const markFiscalDocumentRejectedForStore = `-- name: MarkFiscalDocumentRejectedForStore :one
+UPDATE fiscal_documents AS document
 SET
     status = 'REJECTED',
     error_code = $1,
     error_message = $2
-WHERE id = $3
-  AND status IN ('PENDING', 'PROCESSING', 'ERROR')
+WHERE document.organization_id = $3
+  AND document.store_id = $4
+  AND document.id = $5
+  AND document.status IN ('PENDING', 'PROCESSING', 'ERROR')
 RETURNING
-    id,
-    sale_id,
-    status,
-    environment,
-    document_model,
-    series,
-    number,
-    access_key,
-    protocol,
-    provider,
-    external_reference,
-    xml,
-    error_code,
-    error_message,
-    issued_at,
-    cancelled_at,
-    created_at,
-    updated_at
+    document.id,
+    document.organization_id,
+    document.store_id,
+    document.sale_id,
+    document.status,
+    document.environment,
+    document.document_model,
+    document.series,
+    document.number,
+    document.access_key,
+    document.protocol,
+    document.provider,
+    document.external_reference,
+    document.xml,
+    document.error_code,
+    document.error_message,
+    document.issued_at,
+    document.cancelled_at,
+    document.created_at,
+    document.updated_at
 `
 
-type MarkFiscalDocumentRejectedParams struct {
-	ErrorCode    pgtype.Text
-	ErrorMessage pgtype.Text
-	ID           pgtype.UUID
+type MarkFiscalDocumentRejectedForStoreParams struct {
+	ErrorCode      pgtype.Text
+	ErrorMessage   pgtype.Text
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) MarkFiscalDocumentRejected(ctx context.Context, arg MarkFiscalDocumentRejectedParams) (FiscalDocument, error) {
-	row := q.db.QueryRow(ctx, markFiscalDocumentRejected, arg.ErrorCode, arg.ErrorMessage, arg.ID)
+func (q *Queries) MarkFiscalDocumentRejectedForStore(ctx context.Context, arg MarkFiscalDocumentRejectedForStoreParams) (FiscalDocument, error) {
+	row := q.db.QueryRow(ctx, markFiscalDocumentRejectedForStore,
+		arg.ErrorCode,
+		arg.ErrorMessage,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ID,
+	)
 	var i FiscalDocument
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.Status,
 		&i.Environment,
@@ -782,42 +987,38 @@ func (q *Queries) MarkFiscalDocumentRejected(ctx context.Context, arg MarkFiscal
 	return i, err
 }
 
-const upsertFiscalDocumentCallback = `-- name: UpsertFiscalDocumentCallback :one
-WITH inserted AS (
-    INSERT INTO fiscal_document_callbacks (
-        fiscal_document_id,
-        provider,
-        callback_key,
-        payload,
-        received_at,
-        processed_at
-    )
-    VALUES (
-        $1,
-        $2,
-        $3,
-        $4,
-        COALESCE($5, NOW()),
-        $6
-    )
-    ON CONFLICT (provider, callback_key) DO UPDATE
-    SET
-        payload = EXCLUDED.payload,
-        processed_at = COALESCE(fiscal_document_callbacks.processed_at, EXCLUDED.processed_at),
-        updated_at = NOW()
-    RETURNING
-        id,
-        fiscal_document_id,
-        provider,
-        callback_key,
-        payload,
-        received_at,
-        processed_at,
-        created_at,
-        updated_at
+const upsertFiscalDocumentCallbackForStore = `-- name: UpsertFiscalDocumentCallbackForStore :one
+INSERT INTO fiscal_document_callbacks (
+    organization_id,
+    store_id,
+    fiscal_document_id,
+    provider,
+    callback_key,
+    payload,
+    received_at,
+    processed_at
 )
-SELECT
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+        COALESCE(CAST($7 AS TIMESTAMPTZ), NOW()),
+    $8
+)
+ON CONFLICT (provider, callback_key) DO UPDATE
+SET
+    payload = EXCLUDED.payload,
+    processed_at = COALESCE(fiscal_document_callbacks.processed_at, EXCLUDED.processed_at)
+WHERE fiscal_document_callbacks.organization_id = EXCLUDED.organization_id
+  AND fiscal_document_callbacks.store_id = EXCLUDED.store_id
+  AND fiscal_document_callbacks.fiscal_document_id = EXCLUDED.fiscal_document_id
+RETURNING
     id,
+    organization_id,
+    store_id,
     fiscal_document_id,
     provider,
     callback_key,
@@ -826,33 +1027,23 @@ SELECT
     processed_at,
     created_at,
     updated_at
-FROM inserted
-LIMIT 1
 `
 
-type UpsertFiscalDocumentCallbackParams struct {
-	FiscalDocumentID pgtype.UUID
-	Provider         string
-	CallbackKey      string
-	Payload          string
-	ReceivedAt       interface{}
-	ProcessedAt      pgtype.Timestamptz
-}
-
-type UpsertFiscalDocumentCallbackRow struct {
-	ID               pgtype.UUID
+type UpsertFiscalDocumentCallbackForStoreParams struct {
+	OrganizationID   pgtype.UUID
+	StoreID          pgtype.UUID
 	FiscalDocumentID pgtype.UUID
 	Provider         string
 	CallbackKey      string
 	Payload          string
 	ReceivedAt       pgtype.Timestamptz
 	ProcessedAt      pgtype.Timestamptz
-	CreatedAt        pgtype.Timestamptz
-	UpdatedAt        pgtype.Timestamptz
 }
 
-func (q *Queries) UpsertFiscalDocumentCallback(ctx context.Context, arg UpsertFiscalDocumentCallbackParams) (UpsertFiscalDocumentCallbackRow, error) {
-	row := q.db.QueryRow(ctx, upsertFiscalDocumentCallback,
+func (q *Queries) UpsertFiscalDocumentCallbackForStore(ctx context.Context, arg UpsertFiscalDocumentCallbackForStoreParams) (FiscalDocumentCallback, error) {
+	row := q.db.QueryRow(ctx, upsertFiscalDocumentCallbackForStore,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.FiscalDocumentID,
 		arg.Provider,
 		arg.CallbackKey,
@@ -860,9 +1051,11 @@ func (q *Queries) UpsertFiscalDocumentCallback(ctx context.Context, arg UpsertFi
 		arg.ReceivedAt,
 		arg.ProcessedAt,
 	)
-	var i UpsertFiscalDocumentCallbackRow
+	var i FiscalDocumentCallback
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.FiscalDocumentID,
 		&i.Provider,
 		&i.CallbackKey,

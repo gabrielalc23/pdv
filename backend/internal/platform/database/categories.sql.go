@@ -11,17 +11,43 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const activateCategory = `-- name: ActivateCategory :one
+const activateCategoryForOrganization = `-- name: ActivateCategoryForOrganization :one
 UPDATE categories
-SET is_active = TRUE, updated_at = NOW()
-WHERE id = $1
-RETURNING id, name, slug, is_active, created_at, updated_at
+SET
+    is_active = TRUE,
+    updated_at = NOW()
+WHERE organization_id = $1
+  AND id = $2
+RETURNING
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 `
 
-func (q *Queries) ActivateCategory(ctx context.Context, id pgtype.UUID) (Category, error) {
-	row := q.db.QueryRow(ctx, activateCategory, id)
-	var i Category
+type ActivateCategoryForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+type ActivateCategoryForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Slug           string
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ActivateCategoryForOrganization(ctx context.Context, arg ActivateCategoryForOrganizationParams) (ActivateCategoryForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, activateCategoryForOrganization, arg.OrganizationID, arg.ID)
+	var i ActivateCategoryForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -32,21 +58,50 @@ func (q *Queries) ActivateCategory(ctx context.Context, id pgtype.UUID) (Categor
 	return i, err
 }
 
-const createCategory = `-- name: CreateCategory :one
-INSERT INTO categories (name, slug, is_active)
-VALUES ($1, $2, TRUE)
-RETURNING id, name, slug, is_active, created_at, updated_at
+const createCategoryForOrganization = `-- name: CreateCategoryForOrganization :one
+INSERT INTO categories (
+    organization_id,
+    name,
+    slug,
+    is_active
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    TRUE
+)
+RETURNING
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 `
 
-type CreateCategoryParams struct {
-	Name string
-	Slug string
+type CreateCategoryForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Name           string
+	Slug           string
 }
 
-func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) (Category, error) {
-	row := q.db.QueryRow(ctx, createCategory, arg.Name, arg.Slug)
-	var i Category
+type CreateCategoryForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Slug           string
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) CreateCategoryForOrganization(ctx context.Context, arg CreateCategoryForOrganizationParams) (CreateCategoryForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, createCategoryForOrganization, arg.OrganizationID, arg.Name, arg.Slug)
+	var i CreateCategoryForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -57,17 +112,43 @@ func (q *Queries) CreateCategory(ctx context.Context, arg CreateCategoryParams) 
 	return i, err
 }
 
-const deactivateCategory = `-- name: DeactivateCategory :one
+const deactivateCategoryForOrganization = `-- name: DeactivateCategoryForOrganization :one
 UPDATE categories
-SET is_active = FALSE, updated_at = NOW()
-WHERE id = $1
-RETURNING id, name, slug, is_active, created_at, updated_at
+SET
+    is_active = FALSE,
+    updated_at = NOW()
+WHERE organization_id = $1
+  AND id = $2
+RETURNING
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 `
 
-func (q *Queries) DeactivateCategory(ctx context.Context, id pgtype.UUID) (Category, error) {
-	row := q.db.QueryRow(ctx, deactivateCategory, id)
-	var i Category
+type DeactivateCategoryForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+type DeactivateCategoryForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Slug           string
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) DeactivateCategoryForOrganization(ctx context.Context, arg DeactivateCategoryForOrganizationParams) (DeactivateCategoryForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, deactivateCategoryForOrganization, arg.OrganizationID, arg.ID)
+	var i DeactivateCategoryForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -78,17 +159,41 @@ func (q *Queries) DeactivateCategory(ctx context.Context, id pgtype.UUID) (Categ
 	return i, err
 }
 
-const getCategoryByID = `-- name: GetCategoryByID :one
-SELECT id, name, slug, is_active, created_at, updated_at
+const getCategoryByIDForOrganization = `-- name: GetCategoryByIDForOrganization :one
+SELECT
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 FROM categories
-WHERE id = $1
+WHERE organization_id = $1
+  AND id = $2
 LIMIT 1
 `
 
-func (q *Queries) GetCategoryByID(ctx context.Context, id pgtype.UUID) (Category, error) {
-	row := q.db.QueryRow(ctx, getCategoryByID, id)
-	var i Category
+type GetCategoryByIDForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+type GetCategoryByIDForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Slug           string
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetCategoryByIDForOrganization(ctx context.Context, arg GetCategoryByIDForOrganizationParams) (GetCategoryByIDForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getCategoryByIDForOrganization, arg.OrganizationID, arg.ID)
+	var i GetCategoryByIDForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -99,17 +204,41 @@ func (q *Queries) GetCategoryByID(ctx context.Context, id pgtype.UUID) (Category
 	return i, err
 }
 
-const getCategoryByName = `-- name: GetCategoryByName :one
-SELECT id, name, slug, is_active, created_at, updated_at
+const getCategoryByNameForOrganization = `-- name: GetCategoryByNameForOrganization :one
+SELECT
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 FROM categories
-WHERE name = $1
+WHERE organization_id = $1
+  AND name = $2
 LIMIT 1
 `
 
-func (q *Queries) GetCategoryByName(ctx context.Context, name string) (Category, error) {
-	row := q.db.QueryRow(ctx, getCategoryByName, name)
-	var i Category
+type GetCategoryByNameForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Name           string
+}
+
+type GetCategoryByNameForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Slug           string
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetCategoryByNameForOrganization(ctx context.Context, arg GetCategoryByNameForOrganizationParams) (GetCategoryByNameForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getCategoryByNameForOrganization, arg.OrganizationID, arg.Name)
+	var i GetCategoryByNameForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -120,17 +249,41 @@ func (q *Queries) GetCategoryByName(ctx context.Context, name string) (Category,
 	return i, err
 }
 
-const getCategoryBySlug = `-- name: GetCategoryBySlug :one
-SELECT id, name, slug, is_active, created_at, updated_at
+const getCategoryBySlugForOrganization = `-- name: GetCategoryBySlugForOrganization :one
+SELECT
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 FROM categories
-WHERE slug = $1
+WHERE organization_id = $1
+  AND slug = $2
 LIMIT 1
 `
 
-func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Category, error) {
-	row := q.db.QueryRow(ctx, getCategoryBySlug, slug)
-	var i Category
+type GetCategoryBySlugForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Slug           string
+}
+
+type GetCategoryBySlugForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Slug           string
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) GetCategoryBySlugForOrganization(ctx context.Context, arg GetCategoryBySlugForOrganizationParams) (GetCategoryBySlugForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getCategoryBySlugForOrganization, arg.OrganizationID, arg.Slug)
+	var i GetCategoryBySlugForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.Name,
 		&i.Slug,
@@ -141,33 +294,52 @@ func (q *Queries) GetCategoryBySlug(ctx context.Context, slug string) (Category,
 	return i, err
 }
 
-const listCategories = `-- name: ListCategories :many
-SELECT id, name, slug, is_active, created_at, updated_at
+const listCategoriesForOrganization = `-- name: ListCategoriesForOrganization :many
+SELECT
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 FROM categories
-WHERE
-    (
-        CAST($1 AS TEXT) IS NULL
-        OR name ILIKE '%' || CAST($1 AS TEXT) || '%'
-    )
-    AND (NOT CAST($2 AS BOOLEAN) OR is_active = TRUE)
+WHERE organization_id = $1
+  AND (
+      CAST($2 AS TEXT) IS NULL
+      OR name ILIKE '%' || CAST($2 AS TEXT) || '%'
+  )
+  AND (NOT CAST($3 AS BOOLEAN) OR is_active = TRUE)
 ORDER BY name ASC, id ASC
 `
 
-type ListCategoriesParams struct {
-	Search     pgtype.Text
-	ActiveOnly bool
+type ListCategoriesForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Search         pgtype.Text
+	ActiveOnly     bool
 }
 
-func (q *Queries) ListCategories(ctx context.Context, arg ListCategoriesParams) ([]Category, error) {
-	rows, err := q.db.Query(ctx, listCategories, arg.Search, arg.ActiveOnly)
+type ListCategoriesForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Slug           string
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListCategoriesForOrganization(ctx context.Context, arg ListCategoriesForOrganizationParams) ([]ListCategoriesForOrganizationRow, error) {
+	rows, err := q.db.Query(ctx, listCategoriesForOrganization, arg.OrganizationID, arg.Search, arg.ActiveOnly)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Category{}
+	items := []ListCategoriesForOrganizationRow{}
 	for rows.Next() {
-		var i Category
+		var i ListCategoriesForOrganizationRow
 		if err := rows.Scan(
+			&i.OrganizationID,
 			&i.ID,
 			&i.Name,
 			&i.Slug,
@@ -185,26 +357,51 @@ func (q *Queries) ListCategories(ctx context.Context, arg ListCategoriesParams) 
 	return items, nil
 }
 
-const updateCategory = `-- name: UpdateCategory :one
+const updateCategoryForOrganization = `-- name: UpdateCategoryForOrganization :one
 UPDATE categories
 SET
     name = $1,
     slug = $2,
     updated_at = NOW()
-WHERE id = $3
-RETURNING id, name, slug, is_active, created_at, updated_at
+WHERE organization_id = $3
+  AND id = $4
+RETURNING
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 `
 
-type UpdateCategoryParams struct {
-	Name string
-	Slug string
-	ID   pgtype.UUID
+type UpdateCategoryForOrganizationParams struct {
+	Name           string
+	Slug           string
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) UpdateCategory(ctx context.Context, arg UpdateCategoryParams) (Category, error) {
-	row := q.db.QueryRow(ctx, updateCategory, arg.Name, arg.Slug, arg.ID)
-	var i Category
+type UpdateCategoryForOrganizationRow struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+	Name           string
+	Slug           string
+	IsActive       bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateCategoryForOrganization(ctx context.Context, arg UpdateCategoryForOrganizationParams) (UpdateCategoryForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, updateCategoryForOrganization,
+		arg.Name,
+		arg.Slug,
+		arg.OrganizationID,
+		arg.ID,
+	)
+	var i UpdateCategoryForOrganizationRow
 	err := row.Scan(
+		&i.OrganizationID,
 		&i.ID,
 		&i.Name,
 		&i.Slug,

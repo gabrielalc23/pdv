@@ -92,7 +92,7 @@ func TestCheckoutCompletesSaleWithPaymentsInventoryAndFiscalSuccess(t *testing.T
 		},
 	}
 
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, provider, nil)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, provider)
 
 	resp, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
 		Payments: []checkout.CheckoutPaymentInput{{
@@ -191,7 +191,7 @@ func TestCheckoutSupportsSplitPayments(t *testing.T) {
 		},
 	}
 
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }}, nil)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
 
 	resp, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
 		Payments: []checkout.CheckoutPaymentInput{
@@ -228,7 +228,7 @@ func TestCheckoutRejectsZeroAndNegativeAmounts(t *testing.T) {
 		},
 	}
 
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, nil, nil)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, nil)
 
 	cases := []string{"0.00", "-1.00"}
 	for _, amount := range cases {
@@ -303,7 +303,7 @@ func TestCheckoutAggregatesRepeatedProductsAndProcessesInventoryDeterministicall
 		},
 	}
 
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }}, nil)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
 
 	_, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
 		Payments: []checkout.CheckoutPaymentInput{{
@@ -400,7 +400,7 @@ func TestCheckoutValidatesPayments(t *testing.T) {
 					return tc.method, nil
 				},
 			}
-			svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, nil, nil)
+			svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, nil)
 
 			_, err := svc.Checkout(context.Background(), sale.id.String(), tc.input)
 			if !errors.Is(err, tc.wantErr) {
@@ -458,7 +458,7 @@ func TestCheckoutRollsBackWhenSecondProductFails(t *testing.T) {
 	}
 
 	txManager := &checkoutFakeTxManager{tx: tx}
-	svc := checkout.NewService(txManager, nil, nil)
+	svc := checkout.NewService(txManager, nil)
 
 	_, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
 		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "60.00"}},
@@ -515,7 +515,7 @@ func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 		},
 	}
 
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }}, nil)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
 
 	first, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
 		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
@@ -576,7 +576,7 @@ func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 		},
 	}
 
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Fail: true}, nil)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Fail: true})
 
 	resp, err := svc.Checkout(context.Background(), sale.id.String(), checkout.CheckoutInput{
 		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
@@ -593,7 +593,7 @@ func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 }
 
 func TestNormalizeCheckoutInputRequiresPayments(t *testing.T) {
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: &checkoutFakeTxQueries{}}, nil, nil)
+	svc := checkout.NewService(&checkoutFakeTxManager{tx: &checkoutFakeTxQueries{}}, nil)
 	_, err := svc.ValidatePayments(context.Background(), &checkoutFakeTxQueries{}, mustNumeric("100.00"), nil)
 	if !errors.Is(err, checkout.ErrPaymentsRequired) {
 		t.Fatalf("expected checkout.ErrPaymentsRequired, got %v", err)

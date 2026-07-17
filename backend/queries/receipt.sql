@@ -1,18 +1,29 @@
--- name: ListReceiptPaymentsBySaleID :many
+-- name: ListReceiptPaymentsBySaleIDForStore :many
 SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    payment_method_name,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    created_at,
-    updated_at
-FROM mv_receipt_payments
-WHERE sale_id = $1
-ORDER BY created_at, id;
+    receipt.organization_id,
+    receipt.store_id,
+    receipt.id,
+    receipt.sale_id,
+    receipt.payment_method_id,
+    receipt.payment_method_name,
+    receipt.status,
+    receipt.amount,
+    receipt.received_amount,
+    receipt.change_amount,
+    receipt.installments,
+    receipt.external_reference,
+    receipt.paid_at,
+    receipt.created_at,
+    receipt.updated_at
+FROM receipt_payments AS receipt
+WHERE receipt.organization_id = sqlc.arg(organization_id)
+  AND receipt.store_id = sqlc.arg(store_id)
+  AND receipt.sale_id = sqlc.arg(sale_id)
+ORDER BY receipt.created_at, receipt.id;
+
+-- name: CountReceiptPaymentsBySaleIDForStore :one
+SELECT COUNT(*)
+FROM receipt_payments AS receipt
+WHERE receipt.organization_id = sqlc.arg(organization_id)
+  AND receipt.store_id = sqlc.arg(store_id)
+  AND receipt.sale_id = sqlc.arg(sale_id);

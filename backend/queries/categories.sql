@@ -1,54 +1,130 @@
--- name: CreateCategory :one
-INSERT INTO categories (name, slug, is_active)
-VALUES (sqlc.arg(name), sqlc.arg(slug), TRUE)
-RETURNING id, name, slug, is_active, created_at, updated_at;
+-- name: CreateCategoryForOrganization :one
+INSERT INTO categories (
+    organization_id,
+    name,
+    slug,
+    is_active
+)
+VALUES (
+    sqlc.arg(organization_id),
+    sqlc.arg(name),
+    sqlc.arg(slug),
+    TRUE
+)
+RETURNING
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at;
 
--- name: GetCategoryByID :one
-SELECT id, name, slug, is_active, created_at, updated_at
+-- name: GetCategoryByIDForOrganization :one
+SELECT
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 FROM categories
-WHERE id = sqlc.arg(id)
+WHERE organization_id = sqlc.arg(organization_id)
+  AND id = sqlc.arg(id)
 LIMIT 1;
 
--- name: GetCategoryByName :one
-SELECT id, name, slug, is_active, created_at, updated_at
+-- name: GetCategoryByNameForOrganization :one
+SELECT
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 FROM categories
-WHERE name = sqlc.arg(name)
+WHERE organization_id = sqlc.arg(organization_id)
+  AND name = sqlc.arg(name)
 LIMIT 1;
 
--- name: GetCategoryBySlug :one
-SELECT id, name, slug, is_active, created_at, updated_at
+-- name: GetCategoryBySlugForOrganization :one
+SELECT
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 FROM categories
-WHERE slug = sqlc.arg(slug)
+WHERE organization_id = sqlc.arg(organization_id)
+  AND slug = sqlc.arg(slug)
 LIMIT 1;
 
--- name: ListCategories :many
-SELECT id, name, slug, is_active, created_at, updated_at
+-- name: ListCategoriesForOrganization :many
+SELECT
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at
 FROM categories
-WHERE
-    (
-        CAST(sqlc.narg(search) AS TEXT) IS NULL
-        OR name ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
-    )
-    AND (NOT CAST(sqlc.arg(active_only) AS BOOLEAN) OR is_active = TRUE)
+WHERE organization_id = sqlc.arg(organization_id)
+  AND (
+      CAST(sqlc.narg(search) AS TEXT) IS NULL
+      OR name ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
+  )
+  AND (NOT CAST(sqlc.arg(active_only) AS BOOLEAN) OR is_active = TRUE)
 ORDER BY name ASC, id ASC;
 
--- name: UpdateCategory :one
+-- name: UpdateCategoryForOrganization :one
 UPDATE categories
 SET
     name = sqlc.arg(name),
     slug = sqlc.arg(slug),
     updated_at = NOW()
-WHERE id = sqlc.arg(id)
-RETURNING id, name, slug, is_active, created_at, updated_at;
+WHERE organization_id = sqlc.arg(organization_id)
+  AND id = sqlc.arg(id)
+RETURNING
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at;
 
--- name: ActivateCategory :one
+-- name: ActivateCategoryForOrganization :one
 UPDATE categories
-SET is_active = TRUE, updated_at = NOW()
-WHERE id = sqlc.arg(id)
-RETURNING id, name, slug, is_active, created_at, updated_at;
+SET
+    is_active = TRUE,
+    updated_at = NOW()
+WHERE organization_id = sqlc.arg(organization_id)
+  AND id = sqlc.arg(id)
+RETURNING
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at;
 
--- name: DeactivateCategory :one
+-- name: DeactivateCategoryForOrganization :one
 UPDATE categories
-SET is_active = FALSE, updated_at = NOW()
-WHERE id = sqlc.arg(id)
-RETURNING id, name, slug, is_active, created_at, updated_at;
+SET
+    is_active = FALSE,
+    updated_at = NOW()
+WHERE organization_id = sqlc.arg(organization_id)
+  AND id = sqlc.arg(id)
+RETURNING
+    organization_id,
+    id,
+    name,
+    slug,
+    is_active,
+    created_at,
+    updated_at;

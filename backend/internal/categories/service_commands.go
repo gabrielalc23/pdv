@@ -137,9 +137,9 @@ func translatePersistenceError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		switch pgErr.ConstraintName {
-		case "categories_name_unique":
+		case "categories_organization_id_name_unique":
 			return ErrCategoryNameExists
-		case "categories_slug_unique":
+		case "categories_organization_id_slug_unique":
 			return ErrCategorySlugExists
 		}
 	}

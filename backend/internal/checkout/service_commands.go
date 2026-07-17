@@ -121,12 +121,6 @@ func (s *Service) Checkout(ctx context.Context, rawSaleID string, input Checkout
 	}
 	state.fiscalDocument = authorized
 
-	if s.store != nil {
-		if err := s.store.RefreshReceiptViews(ctx); err != nil {
-			return CheckoutResponse{}, fmt.Errorf("refresh receipt views: %w", err)
-		}
-	}
-
 	return toCheckoutResponse(state)
 }
 
@@ -384,7 +378,7 @@ func applyInventoryChanges(ctx context.Context, tx TxQueries, saleID pgtype.UUID
 			ReferenceType:    "sale",
 			ReferenceID:      saleID,
 		}); err != nil {
-			if isUniqueViolation(err) {
+			if isUniqueViolation(err, "inventory_movements_reference_unique") {
 				return ErrSaleAlreadyCompleted
 			}
 			return fmt.Errorf("create inventory movement: %w", err)

@@ -63,7 +63,7 @@ func translateSaleMutationError(err error) error {
 			}
 		case "23514":
 			switch pgErr.ConstraintName {
-			case "sales_status_timestamps_consistency", "sales_total_consistency":
+			case "sales_status_timestamps_consistency", "sales_total_consistency", "sales_status_transition_check":
 				return ErrSaleNotOpen
 			case "sale_items_discount_not_greater_than_gross":
 				return ErrSaleNotOpen
