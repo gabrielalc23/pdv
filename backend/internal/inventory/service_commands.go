@@ -39,15 +39,15 @@ func (s *Service) CreateEntry(ctx context.Context, scope tenancy.ActorScope, inp
 		}
 
 		movement, err := tx.CreateInventoryMovement(ctx, scope, database.CreateInventoryMovementForStoreParams{
-			ProductID:        normalized.ProductID,
+			ProductID:         normalized.ProductID,
 			ActorMembershipID: scope.ActorMembershipID,
-			MovementType:     database.InventoryMovementTypePURCHASE,
-			Quantity:         normalized.Quantity,
-			PreviousQuantity: inventory.PreviousQuantity,
-			CurrentQuantity:  inventory.CurrentQuantity,
-			Reason:           normalized.Reason,
-			ReferenceType:    normalized.ReferenceType,
-			ReferenceID:      normalized.ReferenceID,
+			MovementType:      database.InventoryMovementTypePURCHASE,
+			Quantity:          normalized.Quantity,
+			PreviousQuantity:  inventory.PreviousQuantity,
+			CurrentQuantity:   inventory.CurrentQuantity,
+			Reason:            normalized.Reason,
+			ReferenceType:     normalized.ReferenceType,
+			ReferenceID:       normalized.ReferenceID,
 		})
 		if err != nil {
 			if isUniqueViolation(err, "inventory_movements_reference_unique") {
@@ -99,15 +99,15 @@ func (s *Service) CreateAdjustment(ctx context.Context, scope tenancy.ActorScope
 		}
 
 		movement, err := tx.CreateInventoryMovement(ctx, scope, database.CreateInventoryMovementForStoreParams{
-			ProductID:        normalized.ProductID,
+			ProductID:         normalized.ProductID,
 			ActorMembershipID: scope.ActorMembershipID,
-			MovementType:     movementType,
-			Quantity:         normalized.Quantity,
-			PreviousQuantity: snapshot.PreviousQuantity,
-			CurrentQuantity:  snapshot.CurrentQuantity,
-			Reason:           normalized.Reason,
-			ReferenceType:    normalized.ReferenceType,
-			ReferenceID:      normalized.ReferenceID,
+			MovementType:      movementType,
+			Quantity:          normalized.Quantity,
+			PreviousQuantity:  snapshot.PreviousQuantity,
+			CurrentQuantity:   snapshot.CurrentQuantity,
+			Reason:            normalized.Reason,
+			ReferenceType:     normalized.ReferenceType,
+			ReferenceID:       normalized.ReferenceID,
 		})
 		if err != nil {
 			if isUniqueViolation(err, "inventory_movements_reference_unique") {

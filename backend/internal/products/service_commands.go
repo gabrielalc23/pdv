@@ -162,5 +162,3 @@ func (s *Service) Deactivate(ctx context.Context, scope tenancy.OrganizationScop
 
 	return toProductResponse(productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt))
 }
-
-

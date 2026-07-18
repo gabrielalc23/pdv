@@ -3,8 +3,8 @@ package checkout
 import (
 	"net/http"
 
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/go-chi/chi/v5"
 )
 

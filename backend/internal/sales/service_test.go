@@ -993,20 +993,20 @@ type saleFixtureValues struct {
 
 func saleRowFixture(status database.SaleStatus) saleFixtureValues {
 	f := saleFixtureValues{
-		ID:                      mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a1"),
-		OrganizationID:          testOrgID,
-		StoreID:                 testStoreID,
-		Number:                  42,
-		Status:                  status,
-		Subtotal:                mustNumeric("0.00"),
-		Discount:                mustNumeric("0.00"),
-		Addition:                mustNumeric("0.00"),
-		Total:                   mustNumeric("0.00"),
-		OpenedByMembershipID:    testMembershipID,
-		OpenedAt:                mustTime("2026-07-15T10:00:00Z"),
-		CreatedAt:               mustTime("2026-07-15T10:00:00Z"),
-		UpdatedAt:               mustTime("2026-07-15T10:00:00Z"),
-		IdempotencyKey:          "sale-1",
+		ID:                   mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a1"),
+		OrganizationID:       testOrgID,
+		StoreID:              testStoreID,
+		Number:               42,
+		Status:               status,
+		Subtotal:             mustNumeric("0.00"),
+		Discount:             mustNumeric("0.00"),
+		Addition:             mustNumeric("0.00"),
+		Total:                mustNumeric("0.00"),
+		OpenedByMembershipID: testMembershipID,
+		OpenedAt:             mustTime("2026-07-15T10:00:00Z"),
+		CreatedAt:            mustTime("2026-07-15T10:00:00Z"),
+		UpdatedAt:            mustTime("2026-07-15T10:00:00Z"),
+		IdempotencyKey:       "sale-1",
 	}
 
 	switch status {
@@ -1077,18 +1077,18 @@ func (f saleFixtureValues) create() database.CreateSaleForStoreRow {
 
 func saleItemFixture(id pgtype.UUID, quantity, discount, total string) database.SaleItem {
 	return database.SaleItem{
-		ID:          id,
+		ID:             id,
 		OrganizationID: testOrgID,
 		StoreID:        testStoreID,
-		SaleID:      saleWithItemsFixture(database.SaleStatusOPEN).ID,
-		ProductID:   productFixture(true).ID,
-		ProductName: productFixture(true).Name,
-		ProductSKU:  productFixture(true).SKU,
-		UnitPrice:   productFixture(true).Price,
-		Quantity:    mustNumeric(quantity),
-		Discount:    mustNumeric(discount),
-		Total:       mustNumeric(total),
-		CreatedAt:   mustTime("2026-07-15T10:00:00Z"),
+		SaleID:         saleWithItemsFixture(database.SaleStatusOPEN).ID,
+		ProductID:      productFixture(true).ID,
+		ProductName:    productFixture(true).Name,
+		ProductSKU:     productFixture(true).SKU,
+		UnitPrice:      productFixture(true).Price,
+		Quantity:       mustNumeric(quantity),
+		Discount:       mustNumeric(discount),
+		Total:          mustNumeric(total),
+		CreatedAt:      mustTime("2026-07-15T10:00:00Z"),
 	}
 }
 

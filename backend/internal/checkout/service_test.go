@@ -771,19 +771,19 @@ func newCheckoutSaleFixture() checkoutSaleFixture {
 
 func (f checkoutSaleFixture) lock(status database.SaleStatus) database.Sale {
 	row := database.Sale{
-		ID:                 f.id,
-		OrganizationID:     testScope.OrganizationID,
-		StoreID:            testScope.StoreID,
-		Number:             f.number,
-		Status:             status,
-		Subtotal:           f.subtotal,
-		Discount:           f.discount,
-		Addition:           f.addition,
-		Total:              f.total,
-		OpenedAt:           f.openedAt,
-		CreatedAt:          f.createdAt,
-		UpdatedAt:          f.updatedAt,
-		IdempotencyKey:     f.idempotencyKey,
+		ID:             f.id,
+		OrganizationID: testScope.OrganizationID,
+		StoreID:        testScope.StoreID,
+		Number:         f.number,
+		Status:         status,
+		Subtotal:       f.subtotal,
+		Discount:       f.discount,
+		Addition:       f.addition,
+		Total:          f.total,
+		OpenedAt:       f.openedAt,
+		CreatedAt:      f.createdAt,
+		UpdatedAt:      f.updatedAt,
+		IdempotencyKey: f.idempotencyKey,
 	}
 	if status == database.SaleStatusCOMPLETED {
 		row.CompletedAt = timestamptz(f.createdAt.Time.Add(1 * time.Minute))
@@ -796,19 +796,19 @@ func (f checkoutSaleFixture) lock(status database.SaleStatus) database.Sale {
 
 func (f checkoutSaleFixture) complete(status database.SaleStatus) database.Sale {
 	row := database.Sale{
-		ID:                 f.id,
-		OrganizationID:     testScope.OrganizationID,
-		StoreID:            testScope.StoreID,
-		Number:             f.number,
-		Status:             status,
-		Subtotal:           f.subtotal,
-		Discount:           f.discount,
-		Addition:           f.addition,
-		Total:              f.total,
-		OpenedAt:           f.openedAt,
-		CreatedAt:          f.createdAt,
-		UpdatedAt:          f.updatedAt,
-		IdempotencyKey:     f.idempotencyKey,
+		ID:             f.id,
+		OrganizationID: testScope.OrganizationID,
+		StoreID:        testScope.StoreID,
+		Number:         f.number,
+		Status:         status,
+		Subtotal:       f.subtotal,
+		Discount:       f.discount,
+		Addition:       f.addition,
+		Total:          f.total,
+		OpenedAt:       f.openedAt,
+		CreatedAt:      f.createdAt,
+		UpdatedAt:      f.updatedAt,
+		IdempotencyKey: f.idempotencyKey,
 	}
 	if status == database.SaleStatusCOMPLETED {
 		row.CompletedAt = timestamptz(f.createdAt.Time.Add(1 * time.Minute))
@@ -821,18 +821,18 @@ func (f checkoutSaleFixture) complete(status database.SaleStatus) database.Sale 
 
 func checkoutItemFixture(productID pgtype.UUID, unitPrice, quantity, discount, total string) database.SaleItem {
 	return database.SaleItem{
-		ID:              mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b800"),
-		OrganizationID:  testScope.OrganizationID,
-		StoreID:         testScope.StoreID,
-		SaleID:          mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
-		ProductID:       productID,
-		ProductName:     "Produto",
-		ProductSKU:      "SKU-001",
-		UnitPrice:       mustNumeric(unitPrice),
-		Quantity:        mustNumeric(quantity),
-		Discount:        mustNumeric(discount),
-		Total:           mustNumeric(total),
-		CreatedAt:       timestamptz(time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)),
+		ID:             mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b800"),
+		OrganizationID: testScope.OrganizationID,
+		StoreID:        testScope.StoreID,
+		SaleID:         mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
+		ProductID:      productID,
+		ProductName:    "Produto",
+		ProductSKU:     "SKU-001",
+		UnitPrice:      mustNumeric(unitPrice),
+		Quantity:       mustNumeric(quantity),
+		Discount:       mustNumeric(discount),
+		Total:          mustNumeric(total),
+		CreatedAt:      timestamptz(time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)),
 	}
 }
 
@@ -882,18 +882,18 @@ func decreaseInventoryRowFixture(productID pgtype.UUID, previous, current string
 
 func inventoryMovementFixture(productID pgtype.UUID, movementType database.InventoryMovementType, quantity, previous, current string) database.CreateInventoryMovementForStoreRow {
 	return database.CreateInventoryMovementForStoreRow{
-		OrganizationID:    testScope.OrganizationID,
-		StoreID:           testScope.StoreID,
-		ID:                mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8b0"),
-		ProductID:         productID,
-		MovementType:      movementType,
-		Quantity:          mustNumeric(quantity),
-		PreviousQuantity:  mustNumeric(previous),
-		CurrentQuantity:   mustNumeric(current),
-		Reason:            pgtype.Text{},
-		ReferenceType:     "sale",
-		ReferenceID:       mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
-		CreatedAt:         timestamptz(time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)),
+		OrganizationID:   testScope.OrganizationID,
+		StoreID:          testScope.StoreID,
+		ID:               mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8b0"),
+		ProductID:        productID,
+		MovementType:     movementType,
+		Quantity:         mustNumeric(quantity),
+		PreviousQuantity: mustNumeric(previous),
+		CurrentQuantity:  mustNumeric(current),
+		Reason:           pgtype.Text{},
+		ReferenceType:    "sale",
+		ReferenceID:      mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
+		CreatedAt:        timestamptz(time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)),
 	}
 }
 
@@ -939,15 +939,15 @@ func approvePaymentRowFixture(saleID, methodID pgtype.UUID, amount, received, ch
 
 func fiscalDocumentCreateFixture(saleID, id pgtype.UUID) database.CreateFiscalDocumentForStoreRow {
 	return database.CreateFiscalDocumentForStoreRow{
-		ID:                id,
-		OrganizationID:    testScope.OrganizationID,
-		StoreID:           testScope.StoreID,
-		SaleID:            saleID,
-		Status:            database.FiscalDocumentStatusPENDING,
-		Environment:       database.FiscalEnvironmentHOMOLOGATION,
-		DocumentModel:     65,
-		CreatedAt:         timestamptz(time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)),
-		UpdatedAt:         timestamptz(time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)),
+		ID:             id,
+		OrganizationID: testScope.OrganizationID,
+		StoreID:        testScope.StoreID,
+		SaleID:         saleID,
+		Status:         database.FiscalDocumentStatusPENDING,
+		Environment:    database.FiscalEnvironmentHOMOLOGATION,
+		DocumentModel:  65,
+		CreatedAt:      timestamptz(time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)),
+		UpdatedAt:      timestamptz(time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)),
 	}
 }
 

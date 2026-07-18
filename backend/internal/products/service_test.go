@@ -69,15 +69,15 @@ func assertProductResponse(t *testing.T, resp products.ProductResponse) {
 }
 
 type fakeStore struct {
-	createProductFn     func(context.Context, tenancy.OrganizationScope, database.CreateProductForOrganizationParams) (database.CreateProductForOrganizationRow, error)
-	getProductByIDFn    func(context.Context, tenancy.OrganizationScope, pgtype.UUID) (database.GetProductByIDForOrganizationRow, error)
-	getProductBySKUFn   func(context.Context, tenancy.OrganizationScope, string) (database.GetProductBySKUForOrganizationRow, error)
+	createProductFn       func(context.Context, tenancy.OrganizationScope, database.CreateProductForOrganizationParams) (database.CreateProductForOrganizationRow, error)
+	getProductByIDFn      func(context.Context, tenancy.OrganizationScope, pgtype.UUID) (database.GetProductByIDForOrganizationRow, error)
+	getProductBySKUFn     func(context.Context, tenancy.OrganizationScope, string) (database.GetProductBySKUForOrganizationRow, error)
 	getProductByBarcodeFn func(context.Context, tenancy.OrganizationScope, pgtype.Text) (database.GetProductByBarcodeForOrganizationRow, error)
-	listProductsFn      func(context.Context, tenancy.OrganizationScope, database.ListProductsForOrganizationParams) ([]database.ListProductsForOrganizationRow, error)
-	countProductsFn     func(context.Context, tenancy.OrganizationScope, database.CountProductsForOrganizationParams) (int64, error)
-	updateProductFn     func(context.Context, tenancy.OrganizationScope, database.UpdateProductForOrganizationParams) (database.UpdateProductForOrganizationRow, error)
-	activateProductFn   func(context.Context, tenancy.OrganizationScope, pgtype.UUID) (database.ActivateProductForOrganizationRow, error)
-	deactivateProductFn func(context.Context, tenancy.OrganizationScope, pgtype.UUID) (database.DeactivateProductForOrganizationRow, error)
+	listProductsFn        func(context.Context, tenancy.OrganizationScope, database.ListProductsForOrganizationParams) ([]database.ListProductsForOrganizationRow, error)
+	countProductsFn       func(context.Context, tenancy.OrganizationScope, database.CountProductsForOrganizationParams) (int64, error)
+	updateProductFn       func(context.Context, tenancy.OrganizationScope, database.UpdateProductForOrganizationParams) (database.UpdateProductForOrganizationRow, error)
+	activateProductFn     func(context.Context, tenancy.OrganizationScope, pgtype.UUID) (database.ActivateProductForOrganizationRow, error)
+	deactivateProductFn   func(context.Context, tenancy.OrganizationScope, pgtype.UUID) (database.DeactivateProductForOrganizationRow, error)
 }
 
 func (s *fakeStore) CreateProduct(ctx context.Context, scope tenancy.OrganizationScope, params database.CreateProductForOrganizationParams) (database.CreateProductForOrganizationRow, error) {

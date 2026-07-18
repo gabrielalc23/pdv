@@ -14,9 +14,9 @@ import (
 )
 
 var (
-	orgID  = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b801")
-	storeID = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b802")
-	orgScope = tenancy.OrganizationScope{OrganizationID: orgID}
+	orgID      = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b801")
+	storeID    = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b802")
+	orgScope   = tenancy.OrganizationScope{OrganizationID: orgID}
 	storeScope = tenancy.StoreScope{OrganizationID: orgID, StoreID: storeID}
 )
 
