@@ -18,6 +18,8 @@ import (
 	"github.com/gabrielalc23/pdv/internal/payments"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
+	"github.com/go-chi/chi/v5"
 	"github.com/gabrielalc23/pdv/internal/products"
 	"github.com/gabrielalc23/pdv/internal/receipt"
 	"github.com/gabrielalc23/pdv/internal/sales"
@@ -46,43 +48,59 @@ func main() {
 		},
 	})
 
-	productService := products.NewService(store.Queries)
-	productHandler := products.NewHandler(productService)
-	products.RegisterRoutes(router, productHandler)
+	resolver := tenancy.NewContextResolver()
 
-	categoryService := categories.NewService(store.Queries)
-	categoryHandler := categories.NewHandler(categoryService)
-	categories.RegisterRoutes(router, categoryHandler)
+	router.Group(func(r chi.Router) {
+		r.Use(tenancy.Middleware)
 
-	inventoryService := inventory.NewService(store.Queries, inventory.NewTxManager(store))
-	inventoryHandler := inventory.NewHandler(inventoryService)
-	inventory.RegisterRoutes(router, inventoryHandler)
+		productStore := products.NewStore(store.Queries)
+		productService := products.NewService(productStore)
+		productHandler := products.NewHandler(productService, resolver)
+		products.RegisterRoutes(r, productHandler)
 
-	catalogService := catalog.NewService(store.Queries)
-	catalogHandler := catalog.NewHandler(catalogService)
-	catalog.RegisterRoutes(router, catalogHandler)
+		categoryStore := categories.NewStore(store.Queries)
+		categoryService := categories.NewService(categoryStore)
+		categoryHandler := categories.NewHandler(categoryService, resolver)
+		categories.RegisterRoutes(r, categoryHandler)
 
-	salesService := sales.NewService(store.Queries, sales.NewTxManager(store))
-	salesHandler := sales.NewHandler(salesService)
-	sales.RegisterRoutes(router, salesHandler)
+		inventoryReadStore := inventory.NewReadStore(store.Queries)
+		inventoryTxManager := inventory.NewTxManager(store)
+		inventoryService := inventory.NewService(inventoryReadStore, inventoryTxManager)
+		inventoryHandler := inventory.NewHandler(inventoryService, resolver)
+		inventory.RegisterRoutes(r, inventoryHandler)
 
-	fiscalProvider := &fiscal.MockProvider{}
+		catalogStore := catalog.NewStore(store.Queries)
+		catalogService := catalog.NewService(catalogStore)
+		catalogHandler := catalog.NewHandler(catalogService, resolver)
+		catalog.RegisterRoutes(r, catalogHandler)
 
-	checkoutService := checkout.NewService(checkout.NewTxManager(store), fiscalProvider)
-	checkoutHandler := checkout.NewHandler(checkoutService)
-	checkout.RegisterRoutes(router, checkoutHandler)
+		salesReadStore := sales.NewReadStore(store.Queries)
+		salesTxManager := sales.NewTxManager(store)
+		salesService := sales.NewService(salesReadStore, salesTxManager)
+		salesHandler := sales.NewHandler(salesService, resolver)
+		sales.RegisterRoutes(r, salesHandler)
 
-	paymentsService := payments.NewService(store.Queries)
-	paymentsHandler := payments.NewHandler(paymentsService)
-	payments.RegisterRoutes(router, paymentsHandler)
+		fiscalProvider := &fiscal.MockProvider{}
 
-	fiscalService := fiscal.NewService(store.Queries, fiscalProvider)
-	fiscalHandler := fiscal.NewHandler(fiscalService)
-	fiscal.RegisterRoutes(router, fiscalHandler)
+		checkoutTxManager := checkout.NewTxManager(store)
+		checkoutService := checkout.NewService(checkoutTxManager, fiscalProvider)
+		checkoutHandler := checkout.NewHandler(checkoutService, resolver)
+		checkout.RegisterRoutes(r, checkoutHandler)
 
-	receiptService := receipt.NewService(store.Queries)
-	receiptHandler := receipt.NewHandler(receiptService)
-	receipt.RegisterRoutes(router, receiptHandler)
+		paymentsStore := payments.NewStore(store.Queries)
+		paymentsService := payments.NewService(paymentsStore)
+		paymentsHandler := payments.NewHandler(paymentsService, resolver)
+		payments.RegisterRoutes(r, paymentsHandler)
+
+		fiscalService := fiscal.NewService(fiscal.NewStore(store.Queries), fiscalProvider)
+		fiscalHandler := fiscal.NewHandler(fiscalService, resolver)
+		fiscal.RegisterRoutes(r, fiscalHandler)
+
+		receiptStore := receipt.NewStore(store.Queries)
+		receiptService := receipt.NewService(receiptStore)
+		receiptHandler := receipt.NewHandler(receiptService, resolver)
+		receipt.RegisterRoutes(r, receiptHandler)
+	})
 
 	server := &http.Server{
 		Addr:    cfg.Address,

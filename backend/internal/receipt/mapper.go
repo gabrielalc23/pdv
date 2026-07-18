@@ -2,6 +2,7 @@ package receipt
 
 import (
 	"fmt"
+	"math/big"
 	"strings"
 	"time"
 
@@ -9,96 +10,276 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func toReceiptResponse(sale database.GetSaleByIDRow, items []database.SaleItem, payments []database.MvReceiptPayment, fiscalDoc database.FiscalDocument) (ReceiptResponse, error) {
-	saleResponse, err := toReceiptSaleResponse(sale)
+func toReceiptResponse(
+	sale database.Sale,
+	items []database.SaleItem,
+	payments []database.ReceiptPayment,
+	fiscalDoc database.FiscalDocument,
+) (ReceiptResponse, error) {
+	saleResp, err := toReceiptSaleResponse(sale)
 	if err != nil {
 		return ReceiptResponse{}, err
 	}
 
 	itemResponses := make([]ReceiptItemResponse, 0, len(items))
 	for _, item := range items {
-		response, err := toReceiptItemResponse(item)
+		unitPrice, err := numericToMoneyString(item.UnitPrice)
 		if err != nil {
-			return ReceiptResponse{}, err
+			return ReceiptResponse{}, fmt.Errorf("format unit price: %w", err)
 		}
-		itemResponses = append(itemResponses, response)
+
+		quantity, err := numericToQuantityString(item.Quantity)
+		if err != nil {
+			return ReceiptResponse{}, fmt.Errorf("format quantity: %w", err)
+		}
+
+		discount, err := numericToMoneyString(item.Discount)
+		if err != nil {
+			return ReceiptResponse{}, fmt.Errorf("format item discount: %w", err)
+		}
+
+		itemTotal, err := numericToMoneyString(item.Total)
+		if err != nil {
+			return ReceiptResponse{}, fmt.Errorf("format item total: %w", err)
+		}
+
+		itemSubtotal, err := multiplyMoneyQuantity(item.UnitPrice, item.Quantity)
+		if err != nil {
+			return ReceiptResponse{}, fmt.Errorf("calculate item subtotal: %w", err)
+		}
+		subtotal, err := numericToMoneyString(itemSubtotal)
+		if err != nil {
+			return ReceiptResponse{}, fmt.Errorf("format item subtotal: %w", err)
+		}
+
+		itemResponses = append(itemResponses, ReceiptItemResponse{
+			ProductID: item.ProductID.String(),
+			SKU:       item.ProductSKU,
+			Name:      item.ProductName,
+			UnitPrice: unitPrice,
+			Quantity:  quantity,
+			Subtotal:  subtotal,
+			Discount:  discount,
+			Total:     itemTotal,
+			CreatedAt: timestampOrZero(item.CreatedAt),
+		})
 	}
 
 	paymentResponses := make([]ReceiptPaymentResponse, 0, len(payments))
-	for _, payment := range payments {
-		response, err := toReceiptPaymentResponse(payment)
+	for _, p := range payments {
+		amount, err := numericToMoneyString(p.Amount)
 		if err != nil {
-			return ReceiptResponse{}, err
+			return ReceiptResponse{}, fmt.Errorf("format payment amount: %w", err)
 		}
-		paymentResponses = append(paymentResponses, response)
+
+		paymentResponses = append(paymentResponses, ReceiptPaymentResponse{
+			Method:       p.PaymentMethodName,
+			Amount:       amount,
+			Status:       string(p.Status),
+			Installments: p.Installments,
+		})
 	}
 
-	fiscalResponse := toReceiptFiscalResponse(fiscalDoc)
+	fiscalResp := toReceiptFiscalResponse(fiscalDoc)
+
 	return ReceiptResponse{
-		Sale:           saleResponse,
+		Sale:           saleResp,
 		Items:          itemResponses,
 		Payments:       paymentResponses,
-		FiscalDocument: &fiscalResponse,
+		FiscalDocument: &fiscalResp,
 	}, nil
 }
 
-func moneyToString(value pgtype.Numeric) (string, error) {
-	if !value.Valid {
-		return "", fmt.Errorf("numeric value is null")
-	}
-
-	raw, err := value.Value()
+func toReceiptSaleResponse(sale database.Sale) (ReceiptSaleResponse, error) {
+	subtotal, err := numericToMoneyString(sale.Subtotal)
 	if err != nil {
-		return "", err
+		return ReceiptSaleResponse{}, fmt.Errorf("format subtotal: %w", err)
 	}
 
-	text, ok := raw.(string)
-	if !ok {
-		return "", fmt.Errorf("unexpected numeric driver value %T", raw)
+	discount, err := numericToMoneyString(sale.Discount)
+	if err != nil {
+		return ReceiptSaleResponse{}, fmt.Errorf("format discount: %w", err)
 	}
 
-	whole, fraction, hasFraction := strings.Cut(text, ".")
-	if !hasFraction {
-		return whole + ".00", nil
+	addition, err := numericToMoneyString(sale.Addition)
+	if err != nil {
+		return ReceiptSaleResponse{}, fmt.Errorf("format addition: %w", err)
 	}
-	if len(fraction) > 2 {
-		return "", fmt.Errorf("money value has more than two decimal places")
+
+	total, err := numericToMoneyString(sale.Total)
+	if err != nil {
+		return ReceiptSaleResponse{}, fmt.Errorf("format total: %w", err)
 	}
-	if len(fraction) == 1 {
-		fraction += "0"
-	}
-	if len(fraction) == 0 {
-		fraction = "00"
-	}
-	return whole + "." + fraction, nil
+
+	return ReceiptSaleResponse{
+		ID:             sale.ID.String(),
+		Number:         sale.Number,
+		Status:         string(sale.Status),
+		Subtotal:       subtotal,
+		Discount:       discount,
+		Addition:       addition,
+		Total:          total,
+		OpenedAt:       timestampOrZero(sale.OpenedAt),
+		CompletedAt:    timestampOrZero(sale.CompletedAt),
+		CancelledAt:    timestampOrZero(sale.CancelledAt),
+		CreatedAt:      timestampOrZero(sale.CreatedAt),
+		UpdatedAt:      timestampOrZero(sale.UpdatedAt),
+		IdempotencyKey: sale.IdempotencyKey,
+	}, nil
 }
 
-func quantityToString(value pgtype.Numeric) (string, error) {
-	if !value.Valid {
-		return "", fmt.Errorf("numeric value is null")
-	}
+func toReceiptFiscalResponse(doc database.FiscalDocument) ReceiptFiscalResponse {
+	accessKey := nullString(doc.AccessKey)
+	protocol := nullString(doc.Protocol)
+	provider := nullString(doc.Provider)
+	externalReference := nullString(doc.ExternalReference)
+	errorCode := nullString(doc.ErrorCode)
+	errorMessage := nullString(doc.ErrorMessage)
+	issuedAt := nullTime(doc.IssuedAt)
 
-	raw, err := value.Value()
+	return ReceiptFiscalResponse{
+		Status:            string(doc.Status),
+		AccessKey:         accessKey,
+		Protocol:          protocol,
+		Provider:          provider,
+		ExternalReference: externalReference,
+		ErrorCode:         errorCode,
+		ErrorMessage:      errorMessage,
+		IssuedAt:          issuedAt,
+	}
+}
+
+func numericToMoneyString(value pgtype.Numeric) (string, error) {
+	intVal, err := numericToScaledInt(value, 2)
 	if err != nil {
 		return "", err
 	}
+	return scaledIntToString(intVal, 2), nil
+}
 
-	text, ok := raw.(string)
-	if !ok {
-		return "", fmt.Errorf("unexpected numeric driver value %T", raw)
+func numericToQuantityString(value pgtype.Numeric) (string, error) {
+	intVal, err := numericToScaledInt(value, 3)
+	if err != nil {
+		return "", err
+	}
+	return scaledIntToString(intVal, 3), nil
+}
+
+func numericToScaledInt(value pgtype.Numeric, scale int32) (*big.Int, error) {
+	if !value.Valid {
+		return nil, fmt.Errorf("numeric value is null")
 	}
 
-	whole, fraction, hasFraction := strings.Cut(text, ".")
-	if !hasFraction {
-		return whole + ".000", nil
+	if value.Int == nil {
+		return big.NewInt(0), nil
 	}
-	if len(fraction) > 3 {
-		return "", fmt.Errorf("quantity value has more than three decimal places")
+
+	if value.NaN {
+		return nil, fmt.Errorf("numeric value is NaN")
 	}
-	for len(fraction) < 3 {
-		fraction += "0"
+
+	if value.InfinityModifier != 0 {
+		return nil, fmt.Errorf("numeric value is infinite")
 	}
-	return whole + "." + fraction, nil
+
+	intVal := new(big.Int).Set(value.Int)
+	targetExp := -scale
+
+	switch {
+	case value.Exp == targetExp:
+		return intVal, nil
+	case value.Exp > targetExp:
+		pow := pow10(int(value.Exp - targetExp))
+		return intVal.Mul(intVal, pow), nil
+	default:
+		divisor := pow10(int(targetExp - value.Exp))
+		quotient, remainder := new(big.Int).QuoRem(intVal, divisor, new(big.Int))
+		if remainder.Sign() != 0 {
+			twiceRemainder := new(big.Int).Lsh(remainder, 1)
+			if twiceRemainder.Cmp(divisor) >= 0 {
+				quotient.Add(quotient, big.NewInt(1))
+			}
+		}
+		return quotient, nil
+	}
+}
+
+func scaledIntToString(value *big.Int, scale int32) string {
+	if value == nil {
+		value = big.NewInt(0)
+	}
+
+	sign := ""
+	if value.Sign() < 0 {
+		sign = "-"
+		value = new(big.Int).Abs(value)
+	}
+
+	if scale == 0 {
+		return sign + value.String()
+	}
+
+	digits := value.String()
+	if len(digits) <= int(scale) {
+		digits = strings.Repeat("0", int(scale)-len(digits)+1) + digits
+	}
+
+	cut := len(digits) - int(scale)
+	return sign + digits[:cut] + "." + digits[cut:]
+}
+
+func pow10(exp int) *big.Int {
+	if exp <= 0 {
+		return big.NewInt(1)
+	}
+
+	return new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(exp)), nil)
+}
+
+func multiplyMoneyQuantity(unitPrice, quantity pgtype.Numeric) (pgtype.Numeric, error) {
+	if !unitPrice.Valid || !quantity.Valid {
+		return pgtype.Numeric{}, fmt.Errorf("numeric value is null")
+	}
+	if unitPrice.Int == nil || quantity.Int == nil {
+		return numericFromScaledInt(nil, 2), nil
+	}
+	product := new(big.Int).Mul(new(big.Int).Set(unitPrice.Int), new(big.Int).Set(quantity.Int))
+	exp := unitPrice.Exp + quantity.Exp
+	return roundNumeric(product, exp, 2), nil
+}
+
+func numericFromScaledInt(value *big.Int, scale int32) pgtype.Numeric {
+	if value == nil {
+		value = big.NewInt(0)
+	}
+	return pgtype.Numeric{Int: new(big.Int).Set(value), Exp: -scale, Valid: true}
+}
+
+func roundNumeric(intVal *big.Int, exp int32, scale int32) pgtype.Numeric {
+	if intVal == nil {
+		intVal = big.NewInt(0)
+	}
+	targetExp := -scale
+	coeff := new(big.Int).Set(intVal)
+
+	switch {
+	case exp == targetExp:
+		return numericFromScaledInt(coeff, scale)
+	case exp > targetExp:
+		pow := pow10(int(exp - targetExp))
+		coeff.Mul(coeff, pow)
+		return numericFromScaledInt(coeff, scale)
+	default:
+		divisor := pow10(int(targetExp - exp))
+		quotient, remainder := new(big.Int).QuoRem(coeff, divisor, new(big.Int))
+		if remainder.Sign() != 0 {
+			twiceRemainder := new(big.Int).Lsh(remainder, 1)
+			if twiceRemainder.Cmp(divisor) >= 0 {
+				quotient.Add(quotient, big.NewInt(1))
+			}
+		}
+		return numericFromScaledInt(quotient, scale)
+	}
 }
 
 func timestampOrZero(value pgtype.Timestamptz) time.Time {
@@ -108,165 +289,17 @@ func timestampOrZero(value pgtype.Timestamptz) time.Time {
 	return value.Time.UTC()
 }
 
-func toReceiptSaleResponse(row database.GetSaleByIDRow) (ReceiptSaleResponse, error) {
-	subtotal, err := moneyToString(row.Subtotal)
-	if err != nil {
-		return ReceiptSaleResponse{}, fmt.Errorf("format subtotal: %w", err)
+func nullString(value pgtype.Text) *string {
+	if !value.Valid {
+		return nil
 	}
-	discount, err := moneyToString(row.Discount)
-	if err != nil {
-		return ReceiptSaleResponse{}, fmt.Errorf("format discount: %w", err)
-	}
-	addition, err := moneyToString(row.Addition)
-	if err != nil {
-		return ReceiptSaleResponse{}, fmt.Errorf("format addition: %w", err)
-	}
-	total, err := moneyToString(row.Total)
-	if err != nil {
-		return ReceiptSaleResponse{}, fmt.Errorf("format total: %w", err)
-	}
-
-	return ReceiptSaleResponse{
-		ID:             row.ID.String(),
-		Number:         row.Number,
-		Status:         string(row.Status),
-		Subtotal:       subtotal,
-		Discount:       discount,
-		Addition:       addition,
-		Total:          total,
-		OpenedAt:       timestampOrZero(row.OpenedAt),
-		CompletedAt:    timestampOrZero(row.CompletedAt),
-		CancelledAt:    timestampOrZero(row.CancelledAt),
-		CreatedAt:      timestampOrZero(row.CreatedAt),
-		UpdatedAt:      timestampOrZero(row.UpdatedAt),
-		IdempotencyKey: row.IdempotencyKey,
-	}, nil
+	return &value.String
 }
 
-func toReceiptItemResponse(row database.SaleItem) (ReceiptItemResponse, error) {
-	unitPrice, err := moneyToString(row.UnitPrice)
-	if err != nil {
-		return ReceiptItemResponse{}, fmt.Errorf("format unit price: %w", err)
+func nullTime(value pgtype.Timestamptz) *time.Time {
+	if !value.Valid {
+		return nil
 	}
-	quantity, err := quantityToString(row.Quantity)
-	if err != nil {
-		return ReceiptItemResponse{}, fmt.Errorf("format quantity: %w", err)
-	}
-	subtotal, err := multiplyMoneyQuantity(row.UnitPrice, row.Quantity)
-	if err != nil {
-		return ReceiptItemResponse{}, fmt.Errorf("calculate subtotal: %w", err)
-	}
-	subtotalValue, err := moneyToString(subtotal)
-	if err != nil {
-		return ReceiptItemResponse{}, fmt.Errorf("format subtotal: %w", err)
-	}
-	discount, err := moneyToString(row.Discount)
-	if err != nil {
-		return ReceiptItemResponse{}, fmt.Errorf("format discount: %w", err)
-	}
-	total, err := moneyToString(row.Total)
-	if err != nil {
-		return ReceiptItemResponse{}, fmt.Errorf("format total: %w", err)
-	}
-
-	return ReceiptItemResponse{
-		ProductID: row.ProductID.String(),
-		SKU:       row.ProductSKU,
-		Name:      row.ProductName,
-		UnitPrice: unitPrice,
-		Quantity:  quantity,
-		Subtotal:  subtotalValue,
-		Discount:  discount,
-		Total:     total,
-		CreatedAt: timestampOrZero(row.CreatedAt),
-	}, nil
-}
-
-func toReceiptPaymentResponse(row database.MvReceiptPayment) (ReceiptPaymentResponse, error) {
-	amount, err := moneyToString(row.Amount)
-	if err != nil {
-		return ReceiptPaymentResponse{}, fmt.Errorf("format amount: %w", err)
-	}
-
-	var receivedAmount *string
-	if row.ReceivedAmount.Valid {
-		value, err := moneyToString(row.ReceivedAmount)
-		if err != nil {
-			return ReceiptPaymentResponse{}, fmt.Errorf("format received amount: %w", err)
-		}
-		receivedAmount = &value
-	}
-
-	var changeAmount *string
-	if row.ChangeAmount.Valid {
-		value, err := moneyToString(row.ChangeAmount)
-		if err != nil {
-			return ReceiptPaymentResponse{}, fmt.Errorf("format change amount: %w", err)
-		}
-		changeAmount = &value
-	}
-
-	var externalReference *string
-	if row.ExternalReference.Valid {
-		value := row.ExternalReference.String
-		externalReference = &value
-	}
-
-	return ReceiptPaymentResponse{
-		Method:            row.PaymentMethodName,
-		Amount:            amount,
-		Status:            string(row.Status),
-		Installments:      row.Installments,
-		ReceivedAmount:    receivedAmount,
-		ChangeAmount:      changeAmount,
-		ExternalReference: externalReference,
-	}, nil
-}
-
-func toReceiptFiscalResponse(row database.FiscalDocument) ReceiptFiscalResponse {
-	var accessKey *string
-	if row.AccessKey.Valid {
-		value := row.AccessKey.String
-		accessKey = &value
-	}
-	var protocol *string
-	if row.Protocol.Valid {
-		value := row.Protocol.String
-		protocol = &value
-	}
-	var provider *string
-	if row.Provider.Valid {
-		value := row.Provider.String
-		provider = &value
-	}
-	var externalReference *string
-	if row.ExternalReference.Valid {
-		value := row.ExternalReference.String
-		externalReference = &value
-	}
-	var errorCode *string
-	if row.ErrorCode.Valid {
-		value := row.ErrorCode.String
-		errorCode = &value
-	}
-	var errorMessage *string
-	if row.ErrorMessage.Valid {
-		value := row.ErrorMessage.String
-		errorMessage = &value
-	}
-	var issuedAt *time.Time
-	if row.IssuedAt.Valid {
-		value := row.IssuedAt.Time.UTC()
-		issuedAt = &value
-	}
-	return ReceiptFiscalResponse{
-		Status:            string(row.Status),
-		AccessKey:         accessKey,
-		Protocol:          protocol,
-		Provider:          provider,
-		ExternalReference: externalReference,
-		ErrorCode:         errorCode,
-		ErrorMessage:      errorMessage,
-		IssuedAt:          issuedAt,
-	}
+	t := value.Time.UTC()
+	return &t
 }

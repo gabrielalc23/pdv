@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -16,10 +17,7 @@ type inventorySnapshot struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
-func (s *Service) CreateEntry(
-	ctx context.Context,
-	input CreateInventoryEntryInput,
-) (InventoryChangeResponse, error) {
+func (s *Service) CreateEntry(ctx context.Context, scope tenancy.ActorScope, input CreateInventoryEntryInput) (InventoryChangeResponse, error) {
 	normalized, err := normalizeEntryInput(input)
 	if err != nil {
 		return InventoryChangeResponse{}, err
@@ -27,51 +25,38 @@ func (s *Service) CreateEntry(
 
 	var response InventoryChangeResponse
 
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		if _, err := s.getProductInTx(
-			ctx,
-			tx,
-			normalized.ProductID,
-		); err != nil {
+	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
+		if _, err := s.getProductInTx(ctx, tx, scope.StoreScope(), normalized.ProductID); err != nil {
 			return err
 		}
 
-		inventory, err := tx.IncreaseInventory(
-			ctx,
-			database.IncreaseInventoryParams{
-				ProductID: normalized.ProductID,
-				Quantity:  normalized.Quantity,
-			},
-		)
+		inventory, err := tx.IncreaseInventory(ctx, scope.StoreScope(), database.IncreaseInventoryForStoreParams{
+			ProductID: normalized.ProductID,
+			Quantity:  normalized.Quantity,
+		})
 		if err != nil {
 			return fmt.Errorf("increase inventory: %w", err)
 		}
 
-		movement, err := tx.CreateInventoryMovement(
-			ctx,
-			database.CreateInventoryMovementParams{
-				ProductID:        normalized.ProductID,
-				MovementType:     database.InventoryMovementTypePURCHASE,
-				Quantity:         normalized.Quantity,
-				PreviousQuantity: inventory.PreviousQuantity,
-				CurrentQuantity:  inventory.CurrentQuantity,
-				Reason:           normalized.Reason,
-				ReferenceType:    normalized.ReferenceType,
-				ReferenceID:      normalized.ReferenceID,
-			},
-		)
+		movement, err := tx.CreateInventoryMovement(ctx, scope, database.CreateInventoryMovementForStoreParams{
+			ProductID:        normalized.ProductID,
+			ActorMembershipID: scope.ActorMembershipID,
+			MovementType:     database.InventoryMovementTypePURCHASE,
+			Quantity:         normalized.Quantity,
+			PreviousQuantity: inventory.PreviousQuantity,
+			CurrentQuantity:  inventory.CurrentQuantity,
+			Reason:           normalized.Reason,
+			ReferenceType:    normalized.ReferenceType,
+			ReferenceID:      normalized.ReferenceID,
+		})
 		if err != nil {
-			if isUniqueViolation(
-				err,
-				"inventory_movements_reference_unique",
-			) {
+			if isUniqueViolation(err, "inventory_movements_reference_unique") {
 				return ErrInventoryOperationAlreadyProcessed
 			}
-
 			return fmt.Errorf("create inventory movement: %w", err)
 		}
 
-		movementResponse, err := toInventoryMovementResponse(movement)
+		movementResponse, err := toInventoryMovementResponse(movementFromCreateRow(movement))
 		if err != nil {
 			return fmt.Errorf("map inventory movement: %w", err)
 		}
@@ -95,10 +80,7 @@ func (s *Service) CreateEntry(
 	return response, nil
 }
 
-func (s *Service) CreateAdjustment(
-	ctx context.Context,
-	input CreateInventoryAdjustmentInput,
-) (InventoryChangeResponse, error) {
+func (s *Service) CreateAdjustment(ctx context.Context, scope tenancy.ActorScope, input CreateInventoryAdjustmentInput) (InventoryChangeResponse, error) {
 	normalized, err := normalizeAdjustmentInput(input)
 	if err != nil {
 		return InventoryChangeResponse{}, err
@@ -106,49 +88,35 @@ func (s *Service) CreateAdjustment(
 
 	var response InventoryChangeResponse
 
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		if _, err := s.getProductInTx(
-			ctx,
-			tx,
-			normalized.ProductID,
-		); err != nil {
+	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
+		if _, err := s.getProductInTx(ctx, tx, scope.StoreScope(), normalized.ProductID); err != nil {
 			return err
 		}
 
-		snapshot, movementType, err := applyAdjustment(
-			ctx,
-			tx,
-			normalized,
-		)
+		snapshot, movementType, err := applyAdjustment(ctx, tx, scope.StoreScope(), normalized)
 		if err != nil {
 			return err
 		}
 
-		movement, err := tx.CreateInventoryMovement(
-			ctx,
-			database.CreateInventoryMovementParams{
-				ProductID:        normalized.ProductID,
-				MovementType:     movementType,
-				Quantity:         normalized.Quantity,
-				PreviousQuantity: snapshot.PreviousQuantity,
-				CurrentQuantity:  snapshot.CurrentQuantity,
-				Reason:           normalized.Reason,
-				ReferenceType:    normalized.ReferenceType,
-				ReferenceID:      normalized.ReferenceID,
-			},
-		)
+		movement, err := tx.CreateInventoryMovement(ctx, scope, database.CreateInventoryMovementForStoreParams{
+			ProductID:        normalized.ProductID,
+			ActorMembershipID: scope.ActorMembershipID,
+			MovementType:     movementType,
+			Quantity:         normalized.Quantity,
+			PreviousQuantity: snapshot.PreviousQuantity,
+			CurrentQuantity:  snapshot.CurrentQuantity,
+			Reason:           normalized.Reason,
+			ReferenceType:    normalized.ReferenceType,
+			ReferenceID:      normalized.ReferenceID,
+		})
 		if err != nil {
-			if isUniqueViolation(
-				err,
-				"inventory_movements_reference_unique",
-			) {
+			if isUniqueViolation(err, "inventory_movements_reference_unique") {
 				return ErrInventoryOperationAlreadyProcessed
 			}
-
 			return fmt.Errorf("create inventory movement: %w", err)
 		}
 
-		movementResponse, err := toInventoryMovementResponse(movement)
+		movementResponse, err := toInventoryMovementResponse(movementFromCreateRow(movement))
 		if err != nil {
 			return fmt.Errorf("map inventory movement: %w", err)
 		}
@@ -175,25 +143,17 @@ func (s *Service) CreateAdjustment(
 func applyAdjustment(
 	ctx context.Context,
 	tx TxQueries,
+	scope tenancy.StoreScope,
 	input normalizedAdjustmentInput,
-) (
-	inventorySnapshot,
-	database.InventoryMovementType,
-	error,
-) {
+) (inventorySnapshot, database.InventoryMovementType, error) {
 	switch input.Direction {
 	case "IN":
-		update, err := tx.IncreaseInventory(
-			ctx,
-			database.IncreaseInventoryParams{
-				ProductID: input.ProductID,
-				Quantity:  input.Quantity,
-			},
-		)
+		update, err := tx.IncreaseInventory(ctx, scope, database.IncreaseInventoryForStoreParams{
+			ProductID: input.ProductID,
+			Quantity:  input.Quantity,
+		})
 		if err != nil {
-			return inventorySnapshot{},
-				"",
-				fmt.Errorf("increase inventory: %w", err)
+			return inventorySnapshot{}, "", fmt.Errorf("increase inventory: %w", err)
 		}
 
 		return inventorySnapshot{
@@ -205,22 +165,12 @@ func applyAdjustment(
 			nil
 
 	case "OUT":
-		update, err := tx.DecreaseInventory(
-			ctx,
-			database.DecreaseInventoryParams{
-				ProductID: input.ProductID,
-				Quantity:  input.Quantity,
-			},
-		)
+		update, err := tx.DecreaseInventory(ctx, scope, database.DecreaseInventoryForStoreParams{
+			ProductID: input.ProductID,
+			Quantity:  input.Quantity,
+		})
 		if err != nil {
-			return inventorySnapshot{},
-				"",
-				translateDecreaseInventoryError(
-					ctx,
-					tx,
-					input.ProductID,
-					err,
-				)
+			return inventorySnapshot{}, "", translateDecreaseInventoryError(ctx, tx, scope, input.ProductID, err)
 		}
 
 		return inventorySnapshot{
@@ -232,54 +182,33 @@ func applyAdjustment(
 			nil
 
 	default:
-		return inventorySnapshot{},
-			"",
-			newValidationError(
-				"direction",
-				"must be IN or OUT",
-			)
+		return inventorySnapshot{}, "", newValidationError("direction", "must be IN or OUT")
 	}
 }
 
-func translateDecreaseInventoryError(
-	ctx context.Context,
-	tx TxQueries,
-	productID pgtype.UUID,
-	err error,
-) error {
+func translateDecreaseInventoryError(ctx context.Context, tx TxQueries, scope tenancy.StoreScope, productID pgtype.UUID, err error) error {
 	if !errors.Is(err, pgx.ErrNoRows) {
 		return fmt.Errorf("decrease inventory: %w", err)
 	}
 
-	_, inventoryErr := tx.GetInventoryByProductID(ctx, productID)
+	_, inventoryErr := tx.GetInventoryByProductID(ctx, scope, productID)
 	if inventoryErr != nil {
 		if errors.Is(inventoryErr, pgx.ErrNoRows) {
 			return ErrInventoryNotFound
 		}
-
-		return fmt.Errorf(
-			"check inventory balance: %w",
-			inventoryErr,
-		)
+		return fmt.Errorf("check inventory balance: %w", inventoryErr)
 	}
 
 	return ErrInsufficientInventory
 }
 
-func (s *Service) getProductInTx(
-	ctx context.Context,
-	tx TxQueries,
-	id pgtype.UUID,
-) (database.Product, error) {
-	product, err := tx.GetProductByID(ctx, id)
+func (s *Service) getProductInTx(ctx context.Context, tx TxQueries, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
+	product, err := tx.GetProductByID(ctx, scope, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return database.Product{}, ErrProductNotFound
+			return database.GetProductByIDForStoreRow{}, ErrProductNotFound
 		}
-
-		return database.Product{},
-			fmt.Errorf("get product: %w", err)
+		return database.GetProductByIDForStoreRow{}, fmt.Errorf("get product: %w", err)
 	}
-
 	return product, nil
 }

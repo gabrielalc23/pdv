@@ -8,28 +8,35 @@ import (
 
 	"github.com/gabrielalc23/pdv/internal/inventory"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var testScope = tenancy.ActorScope{
+	OrganizationID:    mustUUID("00000000-0000-0000-0000-000000000001"),
+	StoreID:           mustUUID("00000000-0000-0000-0000-000000000002"),
+	ActorMembershipID: mustUUID("00000000-0000-0000-0000-000000000003"),
+}
+
 func TestCreateEntryValid(t *testing.T) {
 	txQueries := &fakeTxQueries{
-		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
+		getProductByIDFn: func(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 			return productFixture(true), nil
 		},
-		increaseInventoryFn: func(context.Context, database.IncreaseInventoryParams) (database.IncreaseInventoryRow, error) {
+		increaseInventoryFn: func(ctx context.Context, scope tenancy.StoreScope, params database.IncreaseInventoryForStoreParams) (database.IncreaseInventoryForStoreRow, error) {
 			return increaseRowFixture("8.000", "10.500"), nil
 		},
-		createInventoryMovementFn: func(_ context.Context, arg database.CreateInventoryMovementParams) (database.InventoryMovement, error) {
-			if arg.MovementType != database.InventoryMovementTypePURCHASE {
-				t.Fatalf("unexpected movement type: %s", arg.MovementType)
+		createInventoryMovementFn: func(ctx context.Context, scope tenancy.ActorScope, params database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error) {
+			if params.MovementType != database.InventoryMovementTypePURCHASE {
+				t.Fatalf("unexpected movement type: %s", params.MovementType)
 			}
-			if arg.ReferenceType != "purchase" {
-				t.Fatalf("unexpected reference type: %s", arg.ReferenceType)
+			if params.ReferenceType != "purchase" {
+				t.Fatalf("unexpected reference type: %s", params.ReferenceType)
 			}
-			if arg.ReferenceID.String() != productFixture(true).ID.String() {
-				t.Fatalf("unexpected reference id: %s", arg.ReferenceID.String())
+			if params.ReferenceID.String() != productFixture(true).ID.String() {
+				t.Fatalf("unexpected reference id: %s", params.ReferenceID.String())
 			}
 			return movementFixture(database.InventoryMovementTypePURCHASE, "2.500", "8.000", "10.500"), nil
 		},
@@ -38,7 +45,7 @@ func TestCreateEntryValid(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
+	resp, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.500",
 		Reason:        strPtr("Compra de fornecedor"),
@@ -65,15 +72,15 @@ func TestCreateEntryValid(t *testing.T) {
 
 func TestCreateAdjustmentValidIn(t *testing.T) {
 	txQueries := &fakeTxQueries{
-		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
+		getProductByIDFn: func(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 			return productFixture(true), nil
 		},
-		increaseInventoryFn: func(context.Context, database.IncreaseInventoryParams) (database.IncreaseInventoryRow, error) {
+		increaseInventoryFn: func(ctx context.Context, scope tenancy.StoreScope, params database.IncreaseInventoryForStoreParams) (database.IncreaseInventoryForStoreRow, error) {
 			return increaseRowFixture("10.500", "12.000"), nil
 		},
-		createInventoryMovementFn: func(_ context.Context, arg database.CreateInventoryMovementParams) (database.InventoryMovement, error) {
-			if arg.MovementType != database.InventoryMovementTypeADJUSTMENTIN {
-				t.Fatalf("unexpected movement type: %s", arg.MovementType)
+		createInventoryMovementFn: func(ctx context.Context, scope tenancy.ActorScope, params database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error) {
+			if params.MovementType != database.InventoryMovementTypeADJUSTMENTIN {
+				t.Fatalf("unexpected movement type: %s", params.MovementType)
 			}
 			return movementFixture(database.InventoryMovementTypeADJUSTMENTIN, "1.500", "10.500", "12.000"), nil
 		},
@@ -82,7 +89,7 @@ func TestCreateAdjustmentValidIn(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
+	resp, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "IN",
 		Quantity:      "1.500",
@@ -107,15 +114,15 @@ func TestCreateAdjustmentValidIn(t *testing.T) {
 
 func TestCreateAdjustmentValidOut(t *testing.T) {
 	txQueries := &fakeTxQueries{
-		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
+		getProductByIDFn: func(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 			return productFixture(true), nil
 		},
-		decreaseInventoryFn: func(context.Context, database.DecreaseInventoryParams) (database.DecreaseInventoryRow, error) {
+		decreaseInventoryFn: func(ctx context.Context, scope tenancy.StoreScope, params database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
 			return decreaseRowFixture("12.000", "10.000"), nil
 		},
-		createInventoryMovementFn: func(_ context.Context, arg database.CreateInventoryMovementParams) (database.InventoryMovement, error) {
-			if arg.MovementType != database.InventoryMovementTypeADJUSTMENTOUT {
-				t.Fatalf("unexpected movement type: %s", arg.MovementType)
+		createInventoryMovementFn: func(ctx context.Context, scope tenancy.ActorScope, params database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error) {
+			if params.MovementType != database.InventoryMovementTypeADJUSTMENTOUT {
+				t.Fatalf("unexpected movement type: %s", params.MovementType)
 			}
 			return movementFixture(database.InventoryMovementTypeADJUSTMENTOUT, "2.000", "12.000", "10.000"), nil
 		},
@@ -124,7 +131,7 @@ func TestCreateAdjustmentValidOut(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
+	resp, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -149,15 +156,15 @@ func TestCreateAdjustmentValidOut(t *testing.T) {
 
 func TestCreateEntryProductNotFound(t *testing.T) {
 	txQueries := &fakeTxQueries{
-		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
-			return database.Product{}, pgx.ErrNoRows
+		getProductByIDFn: func(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
+			return database.GetProductByIDForStoreRow{}, pgx.ErrNoRows
 		},
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "1.000",
 		ReferenceType: "purchase",
@@ -173,13 +180,13 @@ func TestCreateEntryProductNotFound(t *testing.T) {
 
 func TestCreateAdjustmentInsufficientInventory(t *testing.T) {
 	txQueries := &fakeTxQueries{
-		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
+		getProductByIDFn: func(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 			return productFixture(true), nil
 		},
-		decreaseInventoryFn: func(context.Context, database.DecreaseInventoryParams) (database.DecreaseInventoryRow, error) {
-			return database.DecreaseInventoryRow{}, pgx.ErrNoRows
+		decreaseInventoryFn: func(ctx context.Context, scope tenancy.StoreScope, params database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
+			return database.DecreaseInventoryForStoreRow{}, pgx.ErrNoRows
 		},
-		getInventoryByProductIDFn: func(context.Context, pgtype.UUID) (database.Inventory, error) {
+		getInventoryByProductIDFn: func(ctx context.Context, scope tenancy.StoreScope, productID pgtype.UUID) (database.Inventory, error) {
 			return inventoryFixture("1.000"), nil
 		},
 	}
@@ -187,7 +194,7 @@ func TestCreateAdjustmentInsufficientInventory(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
+	_, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -219,7 +226,7 @@ func TestCreateEntryQuantityValidation(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
+			_, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
 				ProductID:     productFixture(true).ID.String(),
 				Quantity:      tc.quantity,
 				ReferenceType: "purchase",
@@ -234,7 +241,7 @@ func TestCreateAdjustmentValidation(t *testing.T) {
 	svc := inventory.NewService(&fakeReadStore{}, &fakeTxManager{})
 
 	t.Run("direction invalid", func(t *testing.T) {
-		_, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
+		_, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
 			ProductID:     productFixture(true).ID.String(),
 			Direction:     "SIDEWAYS",
 			Quantity:      "1.000",
@@ -246,7 +253,7 @@ func TestCreateAdjustmentValidation(t *testing.T) {
 	})
 
 	t.Run("reason blank", func(t *testing.T) {
-		_, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
+		_, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
 			ProductID:     productFixture(true).ID.String(),
 			Direction:     "OUT",
 			Quantity:      "1.000",
@@ -260,21 +267,21 @@ func TestCreateAdjustmentValidation(t *testing.T) {
 
 func TestDuplicateOperation(t *testing.T) {
 	txQueries := &fakeTxQueries{
-		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
+		getProductByIDFn: func(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 			return productFixture(true), nil
 		},
-		increaseInventoryFn: func(context.Context, database.IncreaseInventoryParams) (database.IncreaseInventoryRow, error) {
+		increaseInventoryFn: func(ctx context.Context, scope tenancy.StoreScope, params database.IncreaseInventoryForStoreParams) (database.IncreaseInventoryForStoreRow, error) {
 			return increaseRowFixture("8.000", "10.000"), nil
 		},
-		createInventoryMovementFn: func(context.Context, database.CreateInventoryMovementParams) (database.InventoryMovement, error) {
-			return database.InventoryMovement{}, &pgconn.PgError{Code: "23505", ConstraintName: "inventory_movements_reference_unique"}
+		createInventoryMovementFn: func(ctx context.Context, scope tenancy.ActorScope, params database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error) {
+			return database.CreateInventoryMovementForStoreRow{}, &pgconn.PgError{Code: "23505", ConstraintName: "inventory_movements_reference_unique"}
 		},
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.000",
 		ReferenceType: "purchase",
@@ -289,21 +296,21 @@ func TestDuplicateOperation(t *testing.T) {
 }
 
 func TestListInventoryDefaultPagination(t *testing.T) {
-	var capturedCount database.CountInventoryParams
-	var capturedList database.ListInventoryParams
+	var capturedCount database.CountInventoryForStoreParams
+	var capturedList database.ListInventoryForStoreParams
 
 	svc := inventory.NewService(&fakeReadStore{
-		countInventoryFn: func(_ context.Context, arg database.CountInventoryParams) (int64, error) {
+		countInventoryFn: func(_ context.Context, scope tenancy.StoreScope, arg database.CountInventoryForStoreParams) (int64, error) {
 			capturedCount = arg
 			return 1, nil
 		},
-		listInventoryFn: func(_ context.Context, arg database.ListInventoryParams) ([]database.ListInventoryRow, error) {
+		listInventoryFn: func(_ context.Context, scope tenancy.StoreScope, arg database.ListInventoryForStoreParams) ([]database.ListInventoryForStoreRow, error) {
 			capturedList = arg
-			return []database.ListInventoryRow{inventoryListRowFixture()}, nil
+			return []database.ListInventoryForStoreRow{inventoryListRowFixture()}, nil
 		},
 	}, &fakeTxManager{})
 
-	resp, err := svc.ListInventory(context.Background(), inventory.ListInventoryInput{})
+	resp, err := svc.ListInventory(context.Background(), testScope.StoreScope(), inventory.ListInventoryInput{})
 	if err != nil {
 		t.Fatalf("ListInventory returned error: %v", err)
 	}
@@ -314,8 +321,7 @@ func TestListInventoryDefaultPagination(t *testing.T) {
 	if capturedList.PageSize != 20 || capturedList.PageOffset != 0 {
 		t.Fatalf("unexpected list params: %+v", capturedList)
 	}
-	activeOnly, ok := capturedCount.ActiveOnly.(bool)
-	if !ok || activeOnly {
+	if capturedCount.ActiveOnly {
 		t.Fatalf("unexpected activeOnly: %#v", capturedCount.ActiveOnly)
 	}
 	if capturedCount.Search.Valid {
@@ -327,27 +333,27 @@ func TestListInventoryPageSizeMaximum(t *testing.T) {
 	svc := inventory.NewService(&fakeReadStore{}, &fakeTxManager{})
 
 	pageSize := 101
-	_, err := svc.ListInventory(context.Background(), inventory.ListInventoryInput{PageSize: &pageSize})
+	_, err := svc.ListInventory(context.Background(), testScope.StoreScope(), inventory.ListInventoryInput{PageSize: &pageSize})
 	requireValidationField(t, err, "pageSize")
 }
 
 func TestCreateEntryRollbackOnMovementError(t *testing.T) {
 	txQueries := &fakeTxQueries{
-		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
+		getProductByIDFn: func(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 			return productFixture(true), nil
 		},
-		increaseInventoryFn: func(context.Context, database.IncreaseInventoryParams) (database.IncreaseInventoryRow, error) {
+		increaseInventoryFn: func(ctx context.Context, scope tenancy.StoreScope, params database.IncreaseInventoryForStoreParams) (database.IncreaseInventoryForStoreRow, error) {
 			return increaseRowFixture("8.000", "10.000"), nil
 		},
-		createInventoryMovementFn: func(context.Context, database.CreateInventoryMovementParams) (database.InventoryMovement, error) {
-			return database.InventoryMovement{}, errors.New("insert failed")
+		createInventoryMovementFn: func(ctx context.Context, scope tenancy.ActorScope, params database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error) {
+			return database.CreateInventoryMovementForStoreRow{}, errors.New("insert failed")
 		},
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), inventory.CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.000",
 		ReferenceType: "purchase",
@@ -363,18 +369,18 @@ func TestCreateEntryRollbackOnMovementError(t *testing.T) {
 
 func TestCreateAdjustmentRollbackOnBalanceError(t *testing.T) {
 	txQueries := &fakeTxQueries{
-		getProductByIDFn: func(context.Context, pgtype.UUID) (database.Product, error) {
+		getProductByIDFn: func(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 			return productFixture(true), nil
 		},
-		decreaseInventoryFn: func(context.Context, database.DecreaseInventoryParams) (database.DecreaseInventoryRow, error) {
-			return database.DecreaseInventoryRow{}, errors.New("update failed")
+		decreaseInventoryFn: func(ctx context.Context, scope tenancy.StoreScope, params database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
+			return database.DecreaseInventoryForStoreRow{}, errors.New("update failed")
 		},
 	}
 
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateAdjustment(context.Background(), inventory.CreateInventoryAdjustmentInput{
+	_, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -391,97 +397,97 @@ func TestCreateAdjustmentRollbackOnBalanceError(t *testing.T) {
 }
 
 type fakeReadStore struct {
-	getProductByIDFn                     func(context.Context, pgtype.UUID) (database.Product, error)
-	getInventoryByProductIDFn            func(context.Context, pgtype.UUID) (database.Inventory, error)
-	listInventoryFn                      func(context.Context, database.ListInventoryParams) ([]database.ListInventoryRow, error)
-	countInventoryFn                     func(context.Context, database.CountInventoryParams) (int64, error)
-	listInventoryMovementsByProductIDFn  func(context.Context, database.ListInventoryMovementsByProductIDParams) ([]database.InventoryMovement, error)
-	countInventoryMovementsByProductIDFn func(context.Context, database.CountInventoryMovementsByProductIDParams) (int64, error)
+	getProductByIDFn                     func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.GetProductByIDForStoreRow, error)
+	getInventoryByProductIDFn            func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Inventory, error)
+	listInventoryFn                      func(context.Context, tenancy.StoreScope, database.ListInventoryForStoreParams) ([]database.ListInventoryForStoreRow, error)
+	countInventoryFn                     func(context.Context, tenancy.StoreScope, database.CountInventoryForStoreParams) (int64, error)
+	listInventoryMovementsByProductIDFn  func(context.Context, tenancy.StoreScope, database.ListInventoryMovementsByProductIDForStoreParams) ([]database.ListInventoryMovementsByProductIDForStoreRow, error)
+	countInventoryMovementsByProductIDFn func(context.Context, tenancy.StoreScope, database.CountInventoryMovementsByProductIDForStoreParams) (int64, error)
 }
 
-func (f *fakeReadStore) GetProductByID(ctx context.Context, id pgtype.UUID) (database.Product, error) {
+func (f *fakeReadStore) GetProductByID(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 	if f.getProductByIDFn == nil {
 		panic("unexpected GetProductByID call")
 	}
-	return f.getProductByIDFn(ctx, id)
+	return f.getProductByIDFn(ctx, scope, id)
 }
 
-func (f *fakeReadStore) GetInventoryByProductID(ctx context.Context, id pgtype.UUID) (database.Inventory, error) {
+func (f *fakeReadStore) GetInventoryByProductID(ctx context.Context, scope tenancy.StoreScope, productID pgtype.UUID) (database.Inventory, error) {
 	if f.getInventoryByProductIDFn == nil {
 		panic("unexpected GetInventoryByProductID call")
 	}
-	return f.getInventoryByProductIDFn(ctx, id)
+	return f.getInventoryByProductIDFn(ctx, scope, productID)
 }
 
-func (f *fakeReadStore) ListInventory(ctx context.Context, arg database.ListInventoryParams) ([]database.ListInventoryRow, error) {
+func (f *fakeReadStore) ListInventory(ctx context.Context, scope tenancy.StoreScope, arg database.ListInventoryForStoreParams) ([]database.ListInventoryForStoreRow, error) {
 	if f.listInventoryFn == nil {
 		panic("unexpected ListInventory call")
 	}
-	return f.listInventoryFn(ctx, arg)
+	return f.listInventoryFn(ctx, scope, arg)
 }
 
-func (f *fakeReadStore) CountInventory(ctx context.Context, arg database.CountInventoryParams) (int64, error) {
+func (f *fakeReadStore) CountInventory(ctx context.Context, scope tenancy.StoreScope, arg database.CountInventoryForStoreParams) (int64, error) {
 	if f.countInventoryFn == nil {
 		panic("unexpected CountInventory call")
 	}
-	return f.countInventoryFn(ctx, arg)
+	return f.countInventoryFn(ctx, scope, arg)
 }
 
-func (f *fakeReadStore) ListInventoryMovementsByProductID(ctx context.Context, arg database.ListInventoryMovementsByProductIDParams) ([]database.InventoryMovement, error) {
+func (f *fakeReadStore) ListInventoryMovementsByProductID(ctx context.Context, scope tenancy.StoreScope, arg database.ListInventoryMovementsByProductIDForStoreParams) ([]database.ListInventoryMovementsByProductIDForStoreRow, error) {
 	if f.listInventoryMovementsByProductIDFn == nil {
 		panic("unexpected ListInventoryMovementsByProductID call")
 	}
-	return f.listInventoryMovementsByProductIDFn(ctx, arg)
+	return f.listInventoryMovementsByProductIDFn(ctx, scope, arg)
 }
 
-func (f *fakeReadStore) CountInventoryMovementsByProductID(ctx context.Context, arg database.CountInventoryMovementsByProductIDParams) (int64, error) {
+func (f *fakeReadStore) CountInventoryMovementsByProductID(ctx context.Context, scope tenancy.StoreScope, arg database.CountInventoryMovementsByProductIDForStoreParams) (int64, error) {
 	if f.countInventoryMovementsByProductIDFn == nil {
 		panic("unexpected CountInventoryMovementsByProductID call")
 	}
-	return f.countInventoryMovementsByProductIDFn(ctx, arg)
+	return f.countInventoryMovementsByProductIDFn(ctx, scope, arg)
 }
 
 type fakeTxQueries struct {
-	getProductByIDFn          func(context.Context, pgtype.UUID) (database.Product, error)
-	getInventoryByProductIDFn func(context.Context, pgtype.UUID) (database.Inventory, error)
-	increaseInventoryFn       func(context.Context, database.IncreaseInventoryParams) (database.IncreaseInventoryRow, error)
-	decreaseInventoryFn       func(context.Context, database.DecreaseInventoryParams) (database.DecreaseInventoryRow, error)
-	createInventoryMovementFn func(context.Context, database.CreateInventoryMovementParams) (database.InventoryMovement, error)
+	getProductByIDFn          func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.GetProductByIDForStoreRow, error)
+	getInventoryByProductIDFn func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Inventory, error)
+	increaseInventoryFn       func(context.Context, tenancy.StoreScope, database.IncreaseInventoryForStoreParams) (database.IncreaseInventoryForStoreRow, error)
+	decreaseInventoryFn       func(context.Context, tenancy.StoreScope, database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error)
+	createInventoryMovementFn func(context.Context, tenancy.ActorScope, database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error)
 }
 
-func (f *fakeTxQueries) GetProductByID(ctx context.Context, id pgtype.UUID) (database.Product, error) {
+func (f *fakeTxQueries) GetProductByID(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
 	if f.getProductByIDFn == nil {
 		panic("unexpected GetProductByID call")
 	}
-	return f.getProductByIDFn(ctx, id)
+	return f.getProductByIDFn(ctx, scope, id)
 }
 
-func (f *fakeTxQueries) GetInventoryByProductID(ctx context.Context, id pgtype.UUID) (database.Inventory, error) {
+func (f *fakeTxQueries) GetInventoryByProductID(ctx context.Context, scope tenancy.StoreScope, productID pgtype.UUID) (database.Inventory, error) {
 	if f.getInventoryByProductIDFn == nil {
 		panic("unexpected GetInventoryByProductID call")
 	}
-	return f.getInventoryByProductIDFn(ctx, id)
+	return f.getInventoryByProductIDFn(ctx, scope, productID)
 }
 
-func (f *fakeTxQueries) IncreaseInventory(ctx context.Context, arg database.IncreaseInventoryParams) (database.IncreaseInventoryRow, error) {
+func (f *fakeTxQueries) IncreaseInventory(ctx context.Context, scope tenancy.StoreScope, params database.IncreaseInventoryForStoreParams) (database.IncreaseInventoryForStoreRow, error) {
 	if f.increaseInventoryFn == nil {
 		panic("unexpected IncreaseInventory call")
 	}
-	return f.increaseInventoryFn(ctx, arg)
+	return f.increaseInventoryFn(ctx, scope, params)
 }
 
-func (f *fakeTxQueries) DecreaseInventory(ctx context.Context, arg database.DecreaseInventoryParams) (database.DecreaseInventoryRow, error) {
+func (f *fakeTxQueries) DecreaseInventory(ctx context.Context, scope tenancy.StoreScope, params database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
 	if f.decreaseInventoryFn == nil {
 		panic("unexpected DecreaseInventory call")
 	}
-	return f.decreaseInventoryFn(ctx, arg)
+	return f.decreaseInventoryFn(ctx, scope, params)
 }
 
-func (f *fakeTxQueries) CreateInventoryMovement(ctx context.Context, arg database.CreateInventoryMovementParams) (database.InventoryMovement, error) {
+func (f *fakeTxQueries) CreateInventoryMovement(ctx context.Context, scope tenancy.ActorScope, params database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error) {
 	if f.createInventoryMovementFn == nil {
 		panic("unexpected CreateInventoryMovement call")
 	}
-	return f.createInventoryMovementFn(ctx, arg)
+	return f.createInventoryMovementFn(ctx, scope, params)
 }
 
 type fakeTxManager struct {
@@ -490,7 +496,7 @@ type fakeTxManager struct {
 	rolledBack bool
 }
 
-func (f *fakeTxManager) WithTx(ctx context.Context, fn func(inventory.TxQueries) error) error {
+func (f *fakeTxManager) WithTx(ctx context.Context, scope tenancy.ActorScope, fn func(inventory.TxQueries) error) error {
 	if f.tx == nil {
 		panic("unexpected transaction")
 	}
@@ -505,44 +511,52 @@ func (f *fakeTxManager) WithTx(ctx context.Context, fn func(inventory.TxQueries)
 	return nil
 }
 
-func productFixture(active bool) database.Product {
-	return database.Product{
-		ID:        mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
-		SKU:       "COCA-2L",
-		Barcode:   pgtype.Text{String: "7890000000000", Valid: true},
-		Name:      "Coca-Cola 2L",
-		Price:     mustNumeric("12.90"),
-		Cost:      mustNumeric("8.50"),
-		IsActive:  active,
-		CreatedAt: mustTime("2026-07-15T10:00:00Z"),
-		UpdatedAt: mustTime("2026-07-15T10:00:00Z"),
+func productFixture(active bool) database.GetProductByIDForStoreRow {
+	return database.GetProductByIDForStoreRow{
+		OrganizationID: testScope.OrganizationID,
+		StoreID:        testScope.StoreID,
+		ID:             mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
+		SKU:            "COCA-2L",
+		Barcode:        pgtype.Text{String: "7890000000000", Valid: true},
+		Name:           "Coca-Cola 2L",
+		Price:          mustNumeric("12.90"),
+		Cost:           mustNumeric("8.50"),
+		IsActive:       active,
+		CreatedAt:      mustTime("2026-07-15T10:00:00Z"),
+		UpdatedAt:      mustTime("2026-07-15T10:00:00Z"),
 	}
 }
 
 func inventoryFixture(quantity string) database.Inventory {
 	return database.Inventory{
-		ProductID: productFixture(true).ID,
-		Quantity:  mustNumeric(quantity),
-		CreatedAt: mustTime("2026-07-15T10:00:00Z"),
-		UpdatedAt: mustTime("2026-07-15T10:00:00Z"),
+		OrganizationID: testScope.OrganizationID,
+		StoreID:        testScope.StoreID,
+		ProductID:      productFixture(true).ID,
+		Quantity:       mustNumeric(quantity),
+		CreatedAt:      mustTime("2026-07-15T10:00:00Z"),
+		UpdatedAt:      mustTime("2026-07-15T10:00:00Z"),
 	}
 }
 
-func inventoryListRowFixture() database.ListInventoryRow {
-	return database.ListInventoryRow{
-		ProductID: productFixture(true).ID,
-		SKU:       "COCA-2L",
-		Barcode:   pgtype.Text{String: "7890000000000", Valid: true},
-		Name:      "Coca-Cola 2L",
-		IsActive:  true,
-		Quantity:  mustNumeric("8.000"),
-		CreatedAt: mustTime("2026-07-15T10:00:00Z"),
-		UpdatedAt: mustTime("2026-07-15T10:00:00Z"),
+func inventoryListRowFixture() database.ListInventoryForStoreRow {
+	return database.ListInventoryForStoreRow{
+		OrganizationID: testScope.OrganizationID,
+		StoreID:        testScope.StoreID,
+		ProductID:      productFixture(true).ID,
+		SKU:            "COCA-2L",
+		Barcode:        pgtype.Text{String: "7890000000000", Valid: true},
+		Name:           "Coca-Cola 2L",
+		IsActive:       true,
+		Quantity:       mustNumeric("8.000"),
+		CreatedAt:      mustTime("2026-07-15T10:00:00Z"),
+		UpdatedAt:      mustTime("2026-07-15T10:00:00Z"),
 	}
 }
 
-func increaseRowFixture(previous, current string) database.IncreaseInventoryRow {
-	return database.IncreaseInventoryRow{
+func increaseRowFixture(previous, current string) database.IncreaseInventoryForStoreRow {
+	return database.IncreaseInventoryForStoreRow{
+		OrganizationID:   testScope.OrganizationID,
+		StoreID:          testScope.StoreID,
 		ProductID:        productFixture(true).ID,
 		PreviousQuantity: mustNumeric(previous),
 		CurrentQuantity:  mustNumeric(current),
@@ -551,8 +565,10 @@ func increaseRowFixture(previous, current string) database.IncreaseInventoryRow 
 	}
 }
 
-func decreaseRowFixture(previous, current string) database.DecreaseInventoryRow {
-	return database.DecreaseInventoryRow{
+func decreaseRowFixture(previous, current string) database.DecreaseInventoryForStoreRow {
+	return database.DecreaseInventoryForStoreRow{
+		OrganizationID:   testScope.OrganizationID,
+		StoreID:          testScope.StoreID,
 		ProductID:        productFixture(true).ID,
 		PreviousQuantity: mustNumeric(previous),
 		CurrentQuantity:  mustNumeric(current),
@@ -561,18 +577,21 @@ func decreaseRowFixture(previous, current string) database.DecreaseInventoryRow 
 	}
 }
 
-func movementFixture(movementType database.InventoryMovementType, quantity, previous, current string) database.InventoryMovement {
-	return database.InventoryMovement{
-		ID:               mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa"),
-		ProductID:        productFixture(true).ID,
-		MovementType:     movementType,
-		Quantity:         mustNumeric(quantity),
-		PreviousQuantity: mustNumeric(previous),
-		CurrentQuantity:  mustNumeric(current),
-		Reason:           pgtype.Text{String: "Compra de fornecedor", Valid: true},
-		ReferenceType:    "purchase",
-		ReferenceID:      productFixture(true).ID,
-		CreatedAt:        mustTime("2026-07-15T10:00:00Z"),
+func movementFixture(movementType database.InventoryMovementType, quantity, previous, current string) database.CreateInventoryMovementForStoreRow {
+	return database.CreateInventoryMovementForStoreRow{
+		OrganizationID:    testScope.OrganizationID,
+		StoreID:           testScope.StoreID,
+		ID:                mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa"),
+		ProductID:         productFixture(true).ID,
+		ActorMembershipID: testScope.ActorMembershipID,
+		MovementType:      movementType,
+		Quantity:          mustNumeric(quantity),
+		PreviousQuantity:  mustNumeric(previous),
+		CurrentQuantity:   mustNumeric(current),
+		Reason:            pgtype.Text{String: "Compra de fornecedor", Valid: true},
+		ReferenceType:     "purchase",
+		ReferenceID:       productFixture(true).ID,
+		CreatedAt:         mustTime("2026-07-15T10:00:00Z"),
 	}
 }
 

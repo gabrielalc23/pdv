@@ -20,14 +20,21 @@ import (
 	"github.com/gabrielalc23/pdv/internal/payments"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/gabrielalc23/pdv/internal/products"
 	"github.com/gabrielalc23/pdv/internal/receipt"
 	"github.com/gabrielalc23/pdv/internal/sales"
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var baseURL string
+var (
+	baseURL          string
+	testOrgID        string
+	testStoreID      string
+	testMembershipID string
+)
 
 func TestMain(m *testing.M) {
 	dsn := os.Getenv("DATABASE_URL")
@@ -56,6 +63,7 @@ func TestMain(m *testing.M) {
 
 	runMigrations(ctx, testPool)
 	seedPaymentMethods(ctx, testPool)
+	testOrgID, testStoreID, testMembershipID = seedTenantData(ctx, testPool)
 
 	store := database.NewStore(testPool)
 	lis := mustListen()
@@ -245,6 +253,57 @@ func seedPaymentMethods(ctx context.Context, pool *pgxpool.Pool) {
 	}
 }
 
+func seedTenantData(ctx context.Context, pool *pgxpool.Pool) (orgID, storeID, membershipID string) {
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		log.Fatalf("acquire: %v", err)
+	}
+	defer conn.Release()
+
+	var userID string
+	err = conn.QueryRow(ctx, `
+		INSERT INTO users (email, email_normalized, display_name)
+		VALUES ('e2e@test.local', 'e2e@test.local', 'E2E Test')
+		ON CONFLICT (email_normalized) DO UPDATE SET email = users.email
+		RETURNING id
+	`).Scan(&userID)
+	if err != nil {
+		log.Fatalf("insert user: %v", err)
+	}
+
+	err = conn.QueryRow(ctx, `
+		INSERT INTO organizations (name, slug, created_by_user_id)
+		VALUES ('E2E Test Org', 'e2e-test-org', $1)
+		ON CONFLICT (slug) DO UPDATE SET name = organizations.name
+		RETURNING id
+	`, userID).Scan(&orgID)
+	if err != nil {
+		log.Fatalf("insert organization: %v", err)
+	}
+
+	err = conn.QueryRow(ctx, `
+		INSERT INTO stores (organization_id, code, name, timezone, created_by_user_id)
+		VALUES ($1, 'E2E', 'E2E Store', 'America/Sao_Paulo', $2)
+		ON CONFLICT (organization_id, code) DO UPDATE SET name = stores.name
+		RETURNING id
+	`, orgID, userID).Scan(&storeID)
+	if err != nil {
+		log.Fatalf("insert store: %v", err)
+	}
+
+	err = conn.QueryRow(ctx, `
+		INSERT INTO organization_memberships (organization_id, user_id, created_by_user_id)
+		VALUES ($1, $2, $2)
+		ON CONFLICT (organization_id, user_id) WHERE status <> 'REMOVED' DO UPDATE SET user_id = organization_memberships.user_id
+		RETURNING id
+	`, orgID, userID).Scan(&membershipID)
+	if err != nil {
+		log.Fatalf("insert membership: %v", err)
+	}
+
+	return
+}
+
 func mustListen() net.Listener {
 	lis, err := net.Listen("tcp", ":0")
 	if err != nil {
@@ -262,39 +321,54 @@ func startServer(store *database.PostgresStore, addr string) *http.Server {
 		},
 	})
 
-	productService := products.NewService(store.Queries)
-	productHandler := products.NewHandler(productService)
-	products.RegisterRoutes(router, productHandler)
+	resolver := tenancy.NewContextResolver()
 
-	inventoryService := inventory.NewService(store.Queries, inventory.NewTxManager(store))
-	inventoryHandler := inventory.NewHandler(inventoryService)
-	inventory.RegisterRoutes(router, inventoryHandler)
+	router.Group(func(r chi.Router) {
+		r.Use(tenancy.Middleware)
 
-	catalogService := catalog.NewService(store.Queries)
-	catalogHandler := catalog.NewHandler(catalogService)
-	catalog.RegisterRoutes(router, catalogHandler)
+		productStore := products.NewStore(store.Queries)
+		productService := products.NewService(productStore)
+		productHandler := products.NewHandler(productService, resolver)
+		products.RegisterRoutes(r, productHandler)
 
-	salesService := sales.NewService(store.Queries, sales.NewTxManager(store))
-	salesHandler := sales.NewHandler(salesService)
-	sales.RegisterRoutes(router, salesHandler)
+		inventoryReadStore := inventory.NewReadStore(store.Queries)
+		inventoryTxManager := inventory.NewTxManager(store)
+		inventoryService := inventory.NewService(inventoryReadStore, inventoryTxManager)
+		inventoryHandler := inventory.NewHandler(inventoryService, resolver)
+		inventory.RegisterRoutes(r, inventoryHandler)
 
-	fiscalProvider := &fiscal.MockProvider{}
+		catalogStore := catalog.NewStore(store.Queries)
+		catalogService := catalog.NewService(catalogStore)
+		catalogHandler := catalog.NewHandler(catalogService, resolver)
+		catalog.RegisterRoutes(r, catalogHandler)
 
-	checkoutService := checkout.NewService(checkout.NewTxManager(store), fiscalProvider)
-	checkoutHandler := checkout.NewHandler(checkoutService)
-	checkout.RegisterRoutes(router, checkoutHandler)
+		salesReadStore := sales.NewReadStore(store.Queries)
+		salesTxManager := sales.NewTxManager(store)
+		salesService := sales.NewService(salesReadStore, salesTxManager)
+		salesHandler := sales.NewHandler(salesService, resolver)
+		sales.RegisterRoutes(r, salesHandler)
 
-	paymentsService := payments.NewService(store.Queries)
-	paymentsHandler := payments.NewHandler(paymentsService)
-	payments.RegisterRoutes(router, paymentsHandler)
+		fiscalProvider := &fiscal.MockProvider{}
 
-	fiscalService := fiscal.NewService(store.Queries, fiscalProvider)
-	fiscalHandler := fiscal.NewHandler(fiscalService)
-	fiscal.RegisterRoutes(router, fiscalHandler)
+		checkoutTxManager := checkout.NewTxManager(store)
+		checkoutService := checkout.NewService(checkoutTxManager, fiscalProvider)
+		checkoutHandler := checkout.NewHandler(checkoutService, resolver)
+		checkout.RegisterRoutes(r, checkoutHandler)
 
-	receiptService := receipt.NewService(store.Queries)
-	receiptHandler := receipt.NewHandler(receiptService)
-	receipt.RegisterRoutes(router, receiptHandler)
+		paymentsStore := payments.NewStore(store.Queries)
+		paymentsService := payments.NewService(paymentsStore)
+		paymentsHandler := payments.NewHandler(paymentsService, resolver)
+		payments.RegisterRoutes(r, paymentsHandler)
+
+		fiscalService := fiscal.NewService(fiscal.NewStore(store.Queries), fiscalProvider)
+		fiscalHandler := fiscal.NewHandler(fiscalService, resolver)
+		fiscal.RegisterRoutes(r, fiscalHandler)
+
+		receiptStore := receipt.NewStore(store.Queries)
+		receiptService := receipt.NewService(receiptStore)
+		receiptHandler := receipt.NewHandler(receiptService, resolver)
+		receipt.RegisterRoutes(r, receiptHandler)
+	})
 
 	return &http.Server{
 		Addr:    addr,

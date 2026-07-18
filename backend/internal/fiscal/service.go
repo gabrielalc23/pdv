@@ -1,10 +1,19 @@
 package fiscal
 
-type Service struct {
-	store    Store
-	provider Provider
+import "context"
+
+type FiscalProvider interface {
+	Authorize(context.Context, AuthorizationInput) (AuthorizationResult, error)
 }
 
-func NewService(store Store, provider Provider) *Service {
-	return &Service{store: store, provider: provider}
+type Service struct {
+	store    Store
+	provider FiscalProvider
+}
+
+func NewService(store Store, provider FiscalProvider) *Service {
+	return &Service{
+		store:    store,
+		provider: provider,
+	}
 }

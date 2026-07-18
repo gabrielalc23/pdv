@@ -6,16 +6,17 @@ import (
 	"fmt"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) Get(ctx context.Context, rawSaleID string) (ReceiptResponse, error) {
+func (s *Service) Get(ctx context.Context, scope tenancy.StoreScope, rawSaleID string) (ReceiptResponse, error) {
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return ReceiptResponse{}, err
 	}
 
-	sale, err := s.store.GetSaleByID(ctx, saleID)
+	sale, err := s.store.GetSaleByID(ctx, scope, saleID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ReceiptResponse{}, ErrSaleNotFound
@@ -27,17 +28,17 @@ func (s *Service) Get(ctx context.Context, rawSaleID string) (ReceiptResponse, e
 		return ReceiptResponse{}, ErrReceiptNotAvailable
 	}
 
-	items, err := s.store.ListSaleItemsBySaleID(ctx, saleID)
+	items, err := s.store.ListSaleItemsBySaleID(ctx, scope, saleID)
 	if err != nil {
 		return ReceiptResponse{}, fmt.Errorf("list sale items: %w", err)
 	}
 
-	payments, err := s.store.ListReceiptPaymentsBySaleID(ctx, saleID)
+	payments, err := s.store.ListReceiptPaymentsBySaleID(ctx, scope, saleID)
 	if err != nil {
 		return ReceiptResponse{}, fmt.Errorf("list receipt payments: %w", err)
 	}
 
-	fiscalDoc, err := s.store.GetFiscalDocumentBySaleID(ctx, saleID)
+	fiscalDoc, err := s.store.GetFiscalDocumentBySaleID(ctx, scope, saleID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return ReceiptResponse{}, ErrReceiptNotAvailable

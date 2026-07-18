@@ -5,9 +5,10 @@ import (
 	"fmt"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 )
 
-func (s *Service) Create(ctx context.Context, input CreateSaleInput) (SaleResponse, error) {
+func (s *Service) Create(ctx context.Context, scope tenancy.ActorScope, input CreateSaleInput) (SaleResponse, error) {
 	normalized, err := normalizeCreateSaleInput(input)
 	if err != nil {
 		return SaleResponse{}, err
@@ -15,32 +16,25 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (SaleRespon
 
 	var response SaleResponse
 
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		sale, err := tx.CreateSale(ctx, normalized.IdempotencyKey)
+	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
+		sale, err := tx.CreateSaleForStore(ctx, scope, database.CreateSaleForStoreParams{
+			IdempotencyKey: normalized.IdempotencyKey,
+		})
 		if err != nil {
 			return fmt.Errorf("create sale: %w", translateSaleMutationError(err))
 		}
 
-		items, err := tx.ListSaleItemsBySaleID(ctx, sale.ID)
+		items, err := tx.ListSaleItemsBySaleID(ctx, scope.StoreScope(), sale.ID)
 		if err != nil {
 			return fmt.Errorf("list sale items: %w", err)
 		}
 
-		response, err = toSaleResponseFromColumns(
-			sale.ID,
-			sale.Number,
-			sale.Status,
-			sale.Subtotal,
-			sale.Discount,
-			sale.Addition,
-			sale.Total,
-			sale.OpenedAt,
-			sale.CompletedAt,
-			sale.CancelledAt,
-			sale.CreatedAt,
-			sale.UpdatedAt,
-			sale.IdempotencyKey,
-			items,
+		response, err = toSaleResponseFromFields(
+			sale.ID, sale.Number, sale.Status,
+			sale.Subtotal, sale.Discount, sale.Addition, sale.Total,
+			sale.OpenedAt, sale.CompletedAt, sale.CancelledAt,
+			sale.CreatedAt, sale.UpdatedAt,
+			sale.IdempotencyKey, items,
 		)
 		if err != nil {
 			return fmt.Errorf("map sale response: %w", err)
@@ -55,7 +49,7 @@ func (s *Service) Create(ctx context.Context, input CreateSaleInput) (SaleRespon
 	return response, nil
 }
 
-func (s *Service) AddItem(ctx context.Context, rawSaleID string, input AddSaleItemInput) (SaleResponse, error) {
+func (s *Service) AddItem(ctx context.Context, scope tenancy.ActorScope, rawSaleID string, input AddSaleItemInput) (SaleResponse, error) {
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return SaleResponse{}, err
@@ -68,8 +62,8 @@ func (s *Service) AddItem(ctx context.Context, rawSaleID string, input AddSaleIt
 
 	var response SaleResponse
 
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		sale, err := tx.LockSaleByID(ctx, saleID)
+	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
+		sale, err := tx.LockSaleByID(ctx, scope.StoreScope(), saleID)
 		if err != nil {
 			return translateSaleMutationError(err)
 		}
@@ -82,7 +76,7 @@ func (s *Service) AddItem(ctx context.Context, rawSaleID string, input AddSaleIt
 			return ErrSaleNotOpen
 		}
 
-		product, err := s.getProductByIDInTx(ctx, tx, normalized.ProductID)
+		product, err := s.getProductByIDInTx(ctx, tx, scope.StoreScope(), normalized.ProductID)
 		if err != nil {
 			return err
 		}
@@ -106,7 +100,7 @@ func (s *Service) AddItem(ctx context.Context, rawSaleID string, input AddSaleIt
 			return fmt.Errorf("calculate item total: %w", err)
 		}
 
-		_, err = tx.CreateSaleItem(ctx, database.CreateSaleItemParams{
+		_, err = tx.CreateSaleItemForStore(ctx, scope.StoreScope(), database.CreateSaleItemForStoreParams{
 			SaleID:      saleID,
 			ProductID:   product.ID,
 			ProductName: product.Name,
@@ -120,7 +114,7 @@ func (s *Service) AddItem(ctx context.Context, rawSaleID string, input AddSaleIt
 			return fmt.Errorf("create sale item: %w", translateSaleMutationError(err))
 		}
 
-		items, err := tx.ListSaleItemsBySaleID(ctx, saleID)
+		items, err := tx.ListSaleItemsBySaleID(ctx, scope.StoreScope(), saleID)
 		if err != nil {
 			return fmt.Errorf("list sale items: %w", err)
 		}
@@ -130,7 +124,7 @@ func (s *Service) AddItem(ctx context.Context, rawSaleID string, input AddSaleIt
 			return fmt.Errorf("recalculate sale totals: %w", err)
 		}
 
-		saleRow, err := tx.RecalculateSaleTotals(ctx, database.RecalculateSaleTotalsParams{
+		saleRow, err := tx.RecalculateSaleTotalsForStore(ctx, scope.StoreScope(), database.RecalculateSaleTotalsForStoreParams{
 			ID:       saleID,
 			Subtotal: subtotal,
 			Discount: discount,
@@ -141,21 +135,12 @@ func (s *Service) AddItem(ctx context.Context, rawSaleID string, input AddSaleIt
 			return fmt.Errorf("update sale totals: %w", translateSaleMutationError(err))
 		}
 
-		response, err = toSaleResponseFromColumns(
-			saleRow.ID,
-			saleRow.Number,
-			saleRow.Status,
-			saleRow.Subtotal,
-			saleRow.Discount,
-			saleRow.Addition,
-			saleRow.Total,
-			saleRow.OpenedAt,
-			saleRow.CompletedAt,
-			saleRow.CancelledAt,
-			saleRow.CreatedAt,
-			saleRow.UpdatedAt,
-			saleRow.IdempotencyKey,
-			items,
+		response, err = toSaleResponseFromFields(
+			saleRow.ID, saleRow.Number, saleRow.Status,
+			saleRow.Subtotal, saleRow.Discount, saleRow.Addition, saleRow.Total,
+			saleRow.OpenedAt, saleRow.CompletedAt, saleRow.CancelledAt,
+			saleRow.CreatedAt, saleRow.UpdatedAt,
+			saleRow.IdempotencyKey, items,
 		)
 		if err != nil {
 			return fmt.Errorf("map sale response: %w", err)
@@ -170,7 +155,7 @@ func (s *Service) AddItem(ctx context.Context, rawSaleID string, input AddSaleIt
 	return response, nil
 }
 
-func (s *Service) UpdateItem(ctx context.Context, rawSaleID, rawItemID string, input UpdateSaleItemInput) (SaleResponse, error) {
+func (s *Service) UpdateItem(ctx context.Context, scope tenancy.ActorScope, rawSaleID, rawItemID string, input UpdateSaleItemInput) (SaleResponse, error) {
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return SaleResponse{}, err
@@ -188,8 +173,8 @@ func (s *Service) UpdateItem(ctx context.Context, rawSaleID, rawItemID string, i
 
 	var response SaleResponse
 
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		sale, err := tx.LockSaleByID(ctx, saleID)
+	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
+		sale, err := tx.LockSaleByID(ctx, scope.StoreScope(), saleID)
 		if err != nil {
 			return translateSaleMutationError(err)
 		}
@@ -200,7 +185,7 @@ func (s *Service) UpdateItem(ctx context.Context, rawSaleID, rawItemID string, i
 			return ErrSaleNotOpen
 		}
 
-		item, err := s.getSaleItemByID(ctx, tx, saleID, itemID)
+		item, err := s.getSaleItemByID(ctx, tx, scope.StoreScope(), saleID, itemID)
 		if err != nil {
 			return err
 		}
@@ -221,7 +206,7 @@ func (s *Service) UpdateItem(ctx context.Context, rawSaleID, rawItemID string, i
 			return fmt.Errorf("calculate item total: %w", err)
 		}
 
-		_, err = tx.UpdateSaleItem(ctx, database.UpdateSaleItemParams{
+		_, err = tx.UpdateSaleItemForStore(ctx, scope.StoreScope(), database.UpdateSaleItemForStoreParams{
 			SaleID:   saleID,
 			ID:       itemID,
 			Quantity: normalized.Quantity,
@@ -232,7 +217,7 @@ func (s *Service) UpdateItem(ctx context.Context, rawSaleID, rawItemID string, i
 			return fmt.Errorf("update sale item: %w", translateSaleItemMutationError(err))
 		}
 
-		items, err := tx.ListSaleItemsBySaleID(ctx, saleID)
+		items, err := tx.ListSaleItemsBySaleID(ctx, scope.StoreScope(), saleID)
 		if err != nil {
 			return fmt.Errorf("list sale items: %w", err)
 		}
@@ -242,7 +227,7 @@ func (s *Service) UpdateItem(ctx context.Context, rawSaleID, rawItemID string, i
 			return fmt.Errorf("recalculate sale totals: %w", err)
 		}
 
-		saleRow, err := tx.RecalculateSaleTotals(ctx, database.RecalculateSaleTotalsParams{
+		saleRow, err := tx.RecalculateSaleTotalsForStore(ctx, scope.StoreScope(), database.RecalculateSaleTotalsForStoreParams{
 			ID:       saleID,
 			Subtotal: subtotal,
 			Discount: discount,
@@ -253,21 +238,12 @@ func (s *Service) UpdateItem(ctx context.Context, rawSaleID, rawItemID string, i
 			return fmt.Errorf("update sale totals: %w", translateSaleMutationError(err))
 		}
 
-		response, err = toSaleResponseFromColumns(
-			saleRow.ID,
-			saleRow.Number,
-			saleRow.Status,
-			saleRow.Subtotal,
-			saleRow.Discount,
-			saleRow.Addition,
-			saleRow.Total,
-			saleRow.OpenedAt,
-			saleRow.CompletedAt,
-			saleRow.CancelledAt,
-			saleRow.CreatedAt,
-			saleRow.UpdatedAt,
-			saleRow.IdempotencyKey,
-			items,
+		response, err = toSaleResponseFromFields(
+			saleRow.ID, saleRow.Number, saleRow.Status,
+			saleRow.Subtotal, saleRow.Discount, saleRow.Addition, saleRow.Total,
+			saleRow.OpenedAt, saleRow.CompletedAt, saleRow.CancelledAt,
+			saleRow.CreatedAt, saleRow.UpdatedAt,
+			saleRow.IdempotencyKey, items,
 		)
 		if err != nil {
 			return fmt.Errorf("map sale response: %w", err)
@@ -282,7 +258,7 @@ func (s *Service) UpdateItem(ctx context.Context, rawSaleID, rawItemID string, i
 	return response, nil
 }
 
-func (s *Service) RemoveItem(ctx context.Context, rawSaleID, rawItemID string) (SaleResponse, error) {
+func (s *Service) RemoveItem(ctx context.Context, scope tenancy.ActorScope, rawSaleID, rawItemID string) (SaleResponse, error) {
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return SaleResponse{}, err
@@ -295,8 +271,8 @@ func (s *Service) RemoveItem(ctx context.Context, rawSaleID, rawItemID string) (
 
 	var response SaleResponse
 
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		sale, err := tx.LockSaleByID(ctx, saleID)
+	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
+		sale, err := tx.LockSaleByID(ctx, scope.StoreScope(), saleID)
 		if err != nil {
 			return translateSaleMutationError(err)
 		}
@@ -305,12 +281,12 @@ func (s *Service) RemoveItem(ctx context.Context, rawSaleID, rawItemID string) (
 			return ErrSaleNotOpen
 		}
 
-		_, err = s.getSaleItemByID(ctx, tx, saleID, itemID)
+		_, err = s.getSaleItemByID(ctx, tx, scope.StoreScope(), saleID, itemID)
 		if err != nil {
 			return err
 		}
 
-		_, err = tx.DeleteSaleItem(ctx, database.DeleteSaleItemParams{
+		_, err = tx.DeleteSaleItemForStore(ctx, scope.StoreScope(), database.DeleteSaleItemForStoreParams{
 			SaleID: saleID,
 			ID:     itemID,
 		})
@@ -318,7 +294,7 @@ func (s *Service) RemoveItem(ctx context.Context, rawSaleID, rawItemID string) (
 			return fmt.Errorf("delete sale item: %w", translateSaleItemMutationError(err))
 		}
 
-		items, err := tx.ListSaleItemsBySaleID(ctx, saleID)
+		items, err := tx.ListSaleItemsBySaleID(ctx, scope.StoreScope(), saleID)
 		if err != nil {
 			return fmt.Errorf("list sale items: %w", err)
 		}
@@ -328,7 +304,7 @@ func (s *Service) RemoveItem(ctx context.Context, rawSaleID, rawItemID string) (
 			return fmt.Errorf("recalculate sale totals: %w", err)
 		}
 
-		saleRow, err := tx.RecalculateSaleTotals(ctx, database.RecalculateSaleTotalsParams{
+		saleRow, err := tx.RecalculateSaleTotalsForStore(ctx, scope.StoreScope(), database.RecalculateSaleTotalsForStoreParams{
 			ID:       saleID,
 			Subtotal: subtotal,
 			Discount: discount,
@@ -339,21 +315,12 @@ func (s *Service) RemoveItem(ctx context.Context, rawSaleID, rawItemID string) (
 			return fmt.Errorf("update sale totals: %w", translateSaleMutationError(err))
 		}
 
-		response, err = toSaleResponseFromColumns(
-			saleRow.ID,
-			saleRow.Number,
-			saleRow.Status,
-			saleRow.Subtotal,
-			saleRow.Discount,
-			saleRow.Addition,
-			saleRow.Total,
-			saleRow.OpenedAt,
-			saleRow.CompletedAt,
-			saleRow.CancelledAt,
-			saleRow.CreatedAt,
-			saleRow.UpdatedAt,
-			saleRow.IdempotencyKey,
-			items,
+		response, err = toSaleResponseFromFields(
+			saleRow.ID, saleRow.Number, saleRow.Status,
+			saleRow.Subtotal, saleRow.Discount, saleRow.Addition, saleRow.Total,
+			saleRow.OpenedAt, saleRow.CompletedAt, saleRow.CancelledAt,
+			saleRow.CreatedAt, saleRow.UpdatedAt,
+			saleRow.IdempotencyKey, items,
 		)
 		if err != nil {
 			return fmt.Errorf("map sale response: %w", err)
@@ -368,7 +335,7 @@ func (s *Service) RemoveItem(ctx context.Context, rawSaleID, rawItemID string) (
 	return response, nil
 }
 
-func (s *Service) Cancel(ctx context.Context, rawID string) (SaleResponse, error) {
+func (s *Service) Cancel(ctx context.Context, scope tenancy.ActorScope, rawID string) (SaleResponse, error) {
 	saleID, err := parseUUID(rawID, "id")
 	if err != nil {
 		return SaleResponse{}, err
@@ -376,8 +343,8 @@ func (s *Service) Cancel(ctx context.Context, rawID string) (SaleResponse, error
 
 	var response SaleResponse
 
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		sale, err := tx.LockSaleByID(ctx, saleID)
+	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
+		sale, err := tx.LockSaleByID(ctx, scope.StoreScope(), saleID)
 		if err != nil {
 			return translateSaleMutationError(err)
 		}
@@ -390,31 +357,24 @@ func (s *Service) Cancel(ctx context.Context, rawID string) (SaleResponse, error
 			return ErrSaleNotOpen
 		}
 
-		cancelled, err := tx.CancelSale(ctx, saleID)
+		cancelled, err := tx.CancelSaleForStore(ctx, scope, database.CancelSaleForStoreParams{
+			ID: saleID,
+		})
 		if err != nil {
 			return fmt.Errorf("cancel sale: %w", translateSaleMutationError(err))
 		}
 
-		items, err := tx.ListSaleItemsBySaleID(ctx, saleID)
+		items, err := tx.ListSaleItemsBySaleID(ctx, scope.StoreScope(), saleID)
 		if err != nil {
 			return fmt.Errorf("list sale items: %w", err)
 		}
 
-		response, err = toSaleResponseFromColumns(
-			cancelled.ID,
-			cancelled.Number,
-			cancelled.Status,
-			cancelled.Subtotal,
-			cancelled.Discount,
-			cancelled.Addition,
-			cancelled.Total,
-			cancelled.OpenedAt,
-			cancelled.CompletedAt,
-			cancelled.CancelledAt,
-			cancelled.CreatedAt,
-			cancelled.UpdatedAt,
-			cancelled.IdempotencyKey,
-			items,
+		response, err = toSaleResponseFromFields(
+			cancelled.ID, cancelled.Number, cancelled.Status,
+			cancelled.Subtotal, cancelled.Discount, cancelled.Addition, cancelled.Total,
+			cancelled.OpenedAt, cancelled.CompletedAt, cancelled.CancelledAt,
+			cancelled.CreatedAt, cancelled.UpdatedAt,
+			cancelled.IdempotencyKey, items,
 		)
 		if err != nil {
 			return fmt.Errorf("map sale response: %w", err)

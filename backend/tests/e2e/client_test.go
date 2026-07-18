@@ -26,6 +26,9 @@ func doRequest(method, path string, body any) (*http.Response, error) {
 		return nil, fmt.Errorf("new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Organization-ID", testOrgID)
+	req.Header.Set("X-Store-ID", testStoreID)
+	req.Header.Set("X-Membership-ID", testMembershipID)
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

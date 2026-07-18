@@ -2,32 +2,25 @@ package products
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) Get(
-	ctx context.Context,
-	id string,
-) (ProductResponse, error) {
-	product, err := s.productByID(ctx, id)
+func (s *Service) Get(ctx context.Context, scope tenancy.OrganizationScope, id string) (ProductResponse, error) {
+	product, err := s.productByID(ctx, scope, id)
 	if err != nil {
 		return ProductResponse{}, err
 	}
-
 	return toProductResponse(product)
 }
 
-func (s *Service) List(
-	ctx context.Context,
-	input ListProductsInput,
-) (ProductListResponse, error) {
-	page, pageSize, err := normalizePagination(
-		input.Page,
-		input.PageSize,
-	)
+func (s *Service) List(ctx context.Context, scope tenancy.OrganizationScope, input ListProductsInput) (ProductListResponse, error) {
+	page, pageSize, err := normalizePagination(input.Page, input.PageSize)
 	if err != nil {
 		return ProductListResponse{}, err
 	}
@@ -41,42 +34,32 @@ func (s *Service) List(
 		}
 	}
 
-	total, err := s.store.CountProducts(
-		ctx,
-		database.CountProductsParams{
-			Search:     search,
-			CategoryID: categoryID,
-			ActiveOnly: input.ActiveOnly,
-		},
-	)
+	total, err := s.store.CountProducts(ctx, scope, database.CountProductsForOrganizationParams{
+		Search:     search,
+		CategoryID: categoryID,
+		ActiveOnly: input.ActiveOnly,
+	})
 	if err != nil {
-		return ProductListResponse{},
-			fmt.Errorf("count products: %w", err)
+		return ProductListResponse{}, fmt.Errorf("count products: %w", err)
 	}
 
-	items, err := s.store.ListProducts(
-		ctx,
-		database.ListProductsParams{
-			Search:     search,
-			CategoryID: categoryID,
-			ActiveOnly: input.ActiveOnly,
-			PageOffset: int32((page - 1) * pageSize),
-			PageSize:   int32(pageSize),
-		},
-	)
+	items, err := s.store.ListProducts(ctx, scope, database.ListProductsForOrganizationParams{
+		Search:     search,
+		CategoryID: categoryID,
+		ActiveOnly: input.ActiveOnly,
+		PageOffset: int32((page - 1) * pageSize),
+		PageSize:   int32(pageSize),
+	})
 	if err != nil {
-		return ProductListResponse{},
-			fmt.Errorf("list products: %w", err)
+		return ProductListResponse{}, fmt.Errorf("list products: %w", err)
 	}
 
 	data := make([]ProductResponse, 0, len(items))
 	for _, item := range items {
-		response, err := toProductResponse(item)
+		response, err := toProductResponse(productFromRow(item.ID, item.SKU, item.Barcode, item.Name, item.CategoryID, item.Price, item.Cost, item.IsActive, item.CreatedAt, item.UpdatedAt))
 		if err != nil {
-			return ProductListResponse{},
-				fmt.Errorf("map product response: %w", err)
+			return ProductListResponse{}, fmt.Errorf("map product response: %w", err)
 		}
-
 		data = append(data, response)
 	}
 
@@ -86,26 +69,22 @@ func (s *Service) List(
 	}, nil
 }
 
-func (s *Service) productByID(
-	ctx context.Context,
-	rawID string,
-) (database.Product, error) {
+func (s *Service) productByID(ctx context.Context, scope tenancy.OrganizationScope, rawID string) (productProjection, error) {
 	productID, err := parseUUID(rawID, "id")
 	if err != nil {
-		return database.Product{}, err
+		return productProjection{}, err
 	}
-
-	return s.getProductByID(ctx, productID)
+	return s.getProductByID(ctx, scope, productID)
 }
 
-func (s *Service) getProductByID(
-	ctx context.Context,
-	id pgtype.UUID,
-) (database.Product, error) {
-	product, err := s.store.GetProductByID(ctx, id)
+func (s *Service) getProductByID(ctx context.Context, scope tenancy.OrganizationScope, id pgtype.UUID) (productProjection, error) {
+	row, err := s.store.GetProductByID(ctx, scope, id)
 	if err != nil {
-		return database.Product{}, translatePersistenceError(err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return productProjection{}, ErrProductNotFound
+		}
+		return productProjection{}, translatePersistenceError(err)
 	}
 
-	return product, nil
+	return productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt), nil
 }

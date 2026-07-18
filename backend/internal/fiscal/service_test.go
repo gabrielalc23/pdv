@@ -8,23 +8,29 @@ import (
 
 	"github.com/gabrielalc23/pdv/internal/fiscal"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+var testScope = tenancy.StoreScope{
+	OrganizationID: mustUUID("00000000-0000-0000-0000-000000000001"),
+	StoreID:        mustUUID("00000000-0000-0000-0000-000000000002"),
+}
 
 func TestGetBySaleIDReturnsFiscalDocument(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
 	docID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	svc := fiscal.NewService(&fiscalFakeStore{
-		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
+		getSaleByIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
-		getFiscalDocumentBySaleIDFn: func(context.Context, pgtype.UUID) (database.FiscalDocument, error) {
+		getFiscalDocumentBySaleIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.FiscalDocument, error) {
 			return fiscalDocumentRowFixture(docID, saleID, database.FiscalDocumentStatusAUTHORIZED), nil
 		},
 	}, nil)
 
-	resp, err := svc.GetBySaleID(context.Background(), saleID.String())
+	resp, err := svc.GetBySaleID(context.Background(), testScope, saleID.String())
 	if err != nil {
 		t.Fatalf("GetBySaleID returned error: %v", err)
 	}
@@ -36,15 +42,15 @@ func TestGetBySaleIDReturnsFiscalDocument(t *testing.T) {
 func TestGetBySaleIDDocumentNotFound(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
 	svc := fiscal.NewService(&fiscalFakeStore{
-		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
+		getSaleByIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
-		getFiscalDocumentBySaleIDFn: func(context.Context, pgtype.UUID) (database.FiscalDocument, error) {
+		getFiscalDocumentBySaleIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.FiscalDocument, error) {
 			return database.FiscalDocument{}, pgx.ErrNoRows
 		},
 	}, nil)
 
-	_, err := svc.GetBySaleID(context.Background(), saleID.String())
+	_, err := svc.GetBySaleID(context.Background(), testScope, saleID.String())
 	if !errors.Is(err, fiscal.ErrFiscalDocumentNotFound) {
 		t.Fatalf("expected fiscal.ErrFiscalDocumentNotFound, got %v", err)
 	}
@@ -55,13 +61,13 @@ func TestAuthorizeSuccessUpdatesDocument(t *testing.T) {
 	docID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	authorizedAt := time.Date(2026, 7, 15, 12, 10, 0, 0, time.UTC)
 	store := &fiscalFakeStore{
-		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
+		getSaleByIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
-		getFiscalDocumentBySaleIDFn: func(context.Context, pgtype.UUID) (database.FiscalDocument, error) {
+		getFiscalDocumentBySaleIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.FiscalDocument, error) {
 			return fiscalDocumentRowFixture(docID, saleID, database.FiscalDocumentStatusPENDING), nil
 		},
-		markFiscalDocumentAuthorizedFn: func(_ context.Context, arg database.MarkFiscalDocumentAuthorizedParams) (database.FiscalDocument, error) {
+		markFiscalDocumentAuthorizedFn: func(_ context.Context, _ tenancy.StoreScope, arg database.MarkFiscalDocumentAuthorizedForStoreParams) (database.FiscalDocument, error) {
 			if arg.ID.String() != docID.String() {
 				t.Fatalf("unexpected id: %s", arg.ID.String())
 			}
@@ -70,7 +76,7 @@ func TestAuthorizeSuccessUpdatesDocument(t *testing.T) {
 	}
 
 	svc := fiscal.NewService(store, &fiscal.MockProvider{Now: func() time.Time { return authorizedAt }})
-	resp, err := svc.Authorize(context.Background(), saleID.String(), fiscal.AuthorizationInput{SaleID: saleID.String(), SaleNumber: 77, SaleTotal: "100.00"})
+	resp, err := svc.Authorize(context.Background(), testScope, saleID.String(), fiscal.AuthorizationInput{SaleID: saleID.String(), SaleNumber: 77, SaleTotal: "100.00"})
 	if err != nil {
 		t.Fatalf("Authorize returned error: %v", err)
 	}
@@ -86,13 +92,13 @@ func TestAuthorizeFailureUpdatesDocumentError(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
 	docID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	store := &fiscalFakeStore{
-		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
+		getSaleByIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
-		getFiscalDocumentBySaleIDFn: func(context.Context, pgtype.UUID) (database.FiscalDocument, error) {
+		getFiscalDocumentBySaleIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.FiscalDocument, error) {
 			return fiscalDocumentRowFixture(docID, saleID, database.FiscalDocumentStatusPENDING), nil
 		},
-		markFiscalDocumentErrorFn: func(_ context.Context, arg database.MarkFiscalDocumentErrorParams) (database.FiscalDocument, error) {
+		markFiscalDocumentErrorFn: func(_ context.Context, _ tenancy.StoreScope, arg database.MarkFiscalDocumentErrorForStoreParams) (database.FiscalDocument, error) {
 			if arg.ID.String() != docID.String() {
 				t.Fatalf("unexpected id: %s", arg.ID.String())
 			}
@@ -101,7 +107,7 @@ func TestAuthorizeFailureUpdatesDocumentError(t *testing.T) {
 	}
 
 	svc := fiscal.NewService(store, &fiscal.MockProvider{Fail: true})
-	resp, err := svc.Authorize(context.Background(), saleID.String(), fiscal.AuthorizationInput{SaleID: saleID.String(), SaleNumber: 77, SaleTotal: "100.00"})
+	resp, err := svc.Authorize(context.Background(), testScope, saleID.String(), fiscal.AuthorizationInput{SaleID: saleID.String(), SaleNumber: 77, SaleTotal: "100.00"})
 	if !errors.Is(err, fiscal.ErrFiscalAuthorizationFailed) {
 		t.Fatalf("expected fiscal.ErrFiscalAuthorizationFailed, got %v", err)
 	}
@@ -122,42 +128,54 @@ func TestMockProviderAuthorizeFailure(t *testing.T) {
 }
 
 type fiscalFakeStore struct {
-	getSaleByIDFn                  func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error)
-	getFiscalDocumentBySaleIDFn    func(context.Context, pgtype.UUID) (database.FiscalDocument, error)
-	markFiscalDocumentAuthorizedFn func(context.Context, database.MarkFiscalDocumentAuthorizedParams) (database.FiscalDocument, error)
-	markFiscalDocumentErrorFn      func(context.Context, database.MarkFiscalDocumentErrorParams) (database.FiscalDocument, error)
+	getSaleByIDFn                  func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error)
+	getFiscalDocumentBySaleIDFn    func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.FiscalDocument, error)
+	getFiscalDocumentByIDFn        func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.FiscalDocument, error)
+	markFiscalDocumentAuthorizedFn func(context.Context, tenancy.StoreScope, database.MarkFiscalDocumentAuthorizedForStoreParams) (database.FiscalDocument, error)
+	markFiscalDocumentErrorFn      func(context.Context, tenancy.StoreScope, database.MarkFiscalDocumentErrorForStoreParams) (database.FiscalDocument, error)
 	markAuthorizedCalls            int
 	markErrorCalls                 int
 }
 
-func (f *fiscalFakeStore) GetSaleByID(ctx context.Context, saleID pgtype.UUID) (database.GetSaleByIDRow, error) {
+func (f *fiscalFakeStore) GetSaleByID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) (database.Sale, error) {
 	if f.getSaleByIDFn != nil {
-		return f.getSaleByIDFn(ctx, saleID)
+		return f.getSaleByIDFn(ctx, scope, saleID)
 	}
-	return database.GetSaleByIDRow{}, pgx.ErrNoRows
+	return database.Sale{}, pgx.ErrNoRows
 }
 
-func (f *fiscalFakeStore) GetFiscalDocumentBySaleID(ctx context.Context, saleID pgtype.UUID) (database.FiscalDocument, error) {
+func (f *fiscalFakeStore) GetFiscalDocumentBySaleID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) (database.FiscalDocument, error) {
 	if f.getFiscalDocumentBySaleIDFn != nil {
-		return f.getFiscalDocumentBySaleIDFn(ctx, saleID)
+		return f.getFiscalDocumentBySaleIDFn(ctx, scope, saleID)
 	}
 	return database.FiscalDocument{}, pgx.ErrNoRows
 }
 
-func (f *fiscalFakeStore) MarkFiscalDocumentAuthorized(ctx context.Context, arg database.MarkFiscalDocumentAuthorizedParams) (database.FiscalDocument, error) {
+func (f *fiscalFakeStore) GetFiscalDocumentByID(ctx context.Context, scope tenancy.StoreScope, id pgtype.UUID) (database.FiscalDocument, error) {
+	if f.getFiscalDocumentByIDFn != nil {
+		return f.getFiscalDocumentByIDFn(ctx, scope, id)
+	}
+	return database.FiscalDocument{}, pgx.ErrNoRows
+}
+
+func (f *fiscalFakeStore) MarkFiscalDocumentAuthorized(ctx context.Context, scope tenancy.StoreScope, arg database.MarkFiscalDocumentAuthorizedForStoreParams) (database.FiscalDocument, error) {
 	f.markAuthorizedCalls++
 	if f.markFiscalDocumentAuthorizedFn != nil {
-		return f.markFiscalDocumentAuthorizedFn(ctx, arg)
+		return f.markFiscalDocumentAuthorizedFn(ctx, scope, arg)
 	}
 	return database.FiscalDocument{}, nil
 }
 
-func (f *fiscalFakeStore) MarkFiscalDocumentError(ctx context.Context, arg database.MarkFiscalDocumentErrorParams) (database.FiscalDocument, error) {
+func (f *fiscalFakeStore) MarkFiscalDocumentError(ctx context.Context, scope tenancy.StoreScope, arg database.MarkFiscalDocumentErrorForStoreParams) (database.FiscalDocument, error) {
 	f.markErrorCalls++
 	if f.markFiscalDocumentErrorFn != nil {
-		return f.markFiscalDocumentErrorFn(ctx, arg)
+		return f.markFiscalDocumentErrorFn(ctx, scope, arg)
 	}
 	return database.FiscalDocument{}, nil
+}
+
+func (f *fiscalFakeStore) LockFiscalDocumentBySaleID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) (database.FiscalDocument, error) {
+	return f.GetFiscalDocumentBySaleID(ctx, scope, saleID)
 }
 
 func authorizedFiscalDocumentFixture(id, saleID pgtype.UUID, at time.Time) database.FiscalDocument {
@@ -178,9 +196,9 @@ func errorFiscalDocumentFixture(id, saleID pgtype.UUID) database.FiscalDocument 
 	return row
 }
 
-func saleFixtureRow(id pgtype.UUID, status database.SaleStatus) database.GetSaleByIDRow {
+func saleFixtureRow(id pgtype.UUID, status database.SaleStatus) database.Sale {
 	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
-	row := database.GetSaleByIDRow{
+	row := database.Sale{
 		ID:             id,
 		Number:         77,
 		Status:         status,

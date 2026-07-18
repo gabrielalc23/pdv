@@ -5,48 +5,46 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) ListPaymentMethods(ctx context.Context) (PaymentMethodsResponse, error) {
-	rows, err := s.store.ListActivePaymentMethods(ctx)
+func (s *Service) ListPaymentMethods(ctx context.Context, scope tenancy.OrganizationScope) (PaymentMethodsResponse, error) {
+	rows, err := s.store.ListActivePaymentMethods(ctx, scope)
 	if err != nil {
 		return PaymentMethodsResponse{}, fmt.Errorf("list active payment methods: %w", err)
 	}
 
 	items := make([]PaymentMethodResponse, 0, len(rows))
 	for _, row := range rows {
-		item, err := toPaymentMethodResponse(row)
-		if err != nil {
-			return PaymentMethodsResponse{}, err
-		}
+		item := toPaymentMethodResponse(row)
 		items = append(items, item)
 	}
 
 	return PaymentMethodsResponse{Data: items}, nil
 }
 
-func (s *Service) ListSalePayments(ctx context.Context, rawSaleID string) (SalePaymentsResponse, error) {
+func (s *Service) ListSalePayments(ctx context.Context, scope tenancy.StoreScope, rawSaleID string) (SalePaymentsResponse, error) {
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return SalePaymentsResponse{}, err
 	}
 
-	if _, err := s.store.GetSaleByID(ctx, saleID); err != nil {
+	if _, err := s.store.GetSaleByID(ctx, scope, saleID); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return SalePaymentsResponse{}, ErrSaleNotFound
 		}
 		return SalePaymentsResponse{}, fmt.Errorf("get sale by id: %w", err)
 	}
 
-	rows, err := s.store.ListPaymentsBySaleID(ctx, saleID)
+	rows, err := s.store.ListPaymentsBySaleID(ctx, scope, saleID)
 	if err != nil {
 		return SalePaymentsResponse{}, fmt.Errorf("list payments by sale id: %w", err)
 	}
 
 	items := make([]SalePaymentResponse, 0, len(rows))
 	for _, row := range rows {
-		method, err := s.store.GetPaymentMethodByID(ctx, row.PaymentMethodID)
+		method, err := s.store.GetPaymentMethodByID(ctx, tenancy.OrganizationScope{OrganizationID: scope.OrganizationID}, row.PaymentMethodID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return SalePaymentsResponse{}, fmt.Errorf("payment method not found for payment %s", row.ID.String())

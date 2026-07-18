@@ -6,16 +6,17 @@ import (
 	"fmt"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) Get(ctx context.Context, rawID string) (CategoryResponse, error) {
+func (s *Service) Get(ctx context.Context, scope tenancy.OrganizationScope, rawID string) (CategoryResponse, error) {
 	id, err := parseUUID(rawID)
 	if err != nil {
 		return CategoryResponse{}, err
 	}
 
-	category, err := s.store.GetCategoryByID(ctx, id)
+	row, err := s.store.GetCategoryByID(ctx, scope, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return CategoryResponse{}, ErrCategoryNotFound
@@ -23,11 +24,11 @@ func (s *Service) Get(ctx context.Context, rawID string) (CategoryResponse, erro
 		return CategoryResponse{}, fmt.Errorf("get category: %w", err)
 	}
 
-	return toCategoryResponse(category), nil
+	return toCategoryResponse(row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt), nil
 }
 
-func (s *Service) List(ctx context.Context, input ListCategoriesInput) (CategoryListResponse, error) {
-	rows, err := s.store.ListCategories(ctx, database.ListCategoriesParams{
+func (s *Service) List(ctx context.Context, scope tenancy.OrganizationScope, input ListCategoriesInput) (CategoryListResponse, error) {
+	rows, err := s.store.ListCategories(ctx, scope, database.ListCategoriesForOrganizationParams{
 		Search:     optionalText(input.Search),
 		ActiveOnly: input.ActiveOnly,
 	})
@@ -37,7 +38,7 @@ func (s *Service) List(ctx context.Context, input ListCategoriesInput) (Category
 
 	data := make([]CategoryResponse, 0, len(rows))
 	for _, row := range rows {
-		data = append(data, toCategoryResponse(row))
+		data = append(data, toCategoryResponse(row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt))
 	}
 
 	return CategoryListResponse{Data: data}, nil

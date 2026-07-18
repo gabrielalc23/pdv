@@ -5,51 +5,52 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/gabrielalc23/pdv/internal/receipt"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 type FakeStore struct {
-	GetSaleByIDFn                 func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error)
-	ListSaleItemsBySaleIDFn       func(context.Context, pgtype.UUID) ([]database.SaleItem, error)
-	ListReceiptPaymentsBySaleIDFn func(context.Context, pgtype.UUID) ([]database.MvReceiptPayment, error)
-	GetFiscalDocumentBySaleIDFn   func(context.Context, pgtype.UUID) (database.FiscalDocument, error)
+	GetSaleByIDFn                 func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error)
+	ListSaleItemsBySaleIDFn       func(context.Context, tenancy.StoreScope, pgtype.UUID) ([]database.SaleItem, error)
+	ListReceiptPaymentsBySaleIDFn func(context.Context, tenancy.StoreScope, pgtype.UUID) ([]database.ReceiptPayment, error)
+	GetFiscalDocumentBySaleIDFn   func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.FiscalDocument, error)
 }
 
-func (f *FakeStore) GetSaleByID(ctx context.Context, saleID pgtype.UUID) (database.GetSaleByIDRow, error) {
+func (f *FakeStore) GetSaleByID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) (database.Sale, error) {
 	if f.GetSaleByIDFn != nil {
-		return f.GetSaleByIDFn(ctx, saleID)
+		return f.GetSaleByIDFn(ctx, scope, saleID)
 	}
-	return database.GetSaleByIDRow{}, pgx.ErrNoRows
+	return database.Sale{}, pgx.ErrNoRows
 }
 
-func (f *FakeStore) ListSaleItemsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]database.SaleItem, error) {
+func (f *FakeStore) ListSaleItemsBySaleID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) ([]database.SaleItem, error) {
 	if f.ListSaleItemsBySaleIDFn != nil {
-		return f.ListSaleItemsBySaleIDFn(ctx, saleID)
+		return f.ListSaleItemsBySaleIDFn(ctx, scope, saleID)
 	}
 	return []database.SaleItem{}, nil
 }
 
-func (f *FakeStore) ListReceiptPaymentsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]database.MvReceiptPayment, error) {
+func (f *FakeStore) ListReceiptPaymentsBySaleID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) ([]database.ReceiptPayment, error) {
 	if f.ListReceiptPaymentsBySaleIDFn != nil {
-		return f.ListReceiptPaymentsBySaleIDFn(ctx, saleID)
+		return f.ListReceiptPaymentsBySaleIDFn(ctx, scope, saleID)
 	}
-	return []database.MvReceiptPayment{}, nil
+	return []database.ReceiptPayment{}, nil
 }
 
-func (f *FakeStore) GetFiscalDocumentBySaleID(ctx context.Context, saleID pgtype.UUID) (database.FiscalDocument, error) {
+func (f *FakeStore) GetFiscalDocumentBySaleID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) (database.FiscalDocument, error) {
 	if f.GetFiscalDocumentBySaleIDFn != nil {
-		return f.GetFiscalDocumentBySaleIDFn(ctx, saleID)
+		return f.GetFiscalDocumentBySaleIDFn(ctx, scope, saleID)
 	}
 	return database.FiscalDocument{}, pgx.ErrNoRows
 }
 
 var _ receipt.Store = (*FakeStore)(nil)
 
-func SaleFixtureRow(id pgtype.UUID, status database.SaleStatus) database.GetSaleByIDRow {
+func SaleFixtureRow(id pgtype.UUID, status database.SaleStatus) database.Sale {
 	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
-	row := database.GetSaleByIDRow{
+	row := database.Sale{
 		ID:             id,
 		Number:         77,
 		Status:         status,
@@ -86,8 +87,8 @@ func SaleItemFixture(id, saleID pgtype.UUID, unitPrice, quantity, discount, tota
 	}
 }
 
-func ReceiptPaymentFixture(id, saleID pgtype.UUID, amount, received, change string, installments int16, methodName string, order int) database.MvReceiptPayment {
-	return database.MvReceiptPayment{
+func ReceiptPaymentFixture(id, saleID pgtype.UUID, amount, received, change string, installments int16, methodName string, order int) database.ReceiptPayment {
+	return database.ReceiptPayment{
 		ID:                id,
 		SaleID:            saleID,
 		PaymentMethodName: methodName,

@@ -67,7 +67,7 @@ func ToCatalogProductResponse(data CatalogProductData) (CatalogProductResponse, 
 	}, nil
 }
 
-func toCatalogProductDataFromListRow(row database.ListCatalogProductsRow) CatalogProductData {
+func toCatalogProductDataFromListRow(row database.ListCatalogProductsForStoreRow) CatalogProductData {
 	return CatalogProductData{
 		ID:           row.ID,
 		SKU:          row.SKU,
@@ -84,7 +84,7 @@ func toCatalogProductDataFromListRow(row database.ListCatalogProductsRow) Catalo
 	}
 }
 
-func toCatalogProductDataFromIDRow(row database.GetCatalogProductByIDRow) CatalogProductData {
+func toCatalogProductDataFromIDRow(row database.GetCatalogProductByIDForStoreRow) CatalogProductData {
 	return CatalogProductData{
 		ID:           row.ID,
 		SKU:          row.SKU,
@@ -101,7 +101,7 @@ func toCatalogProductDataFromIDRow(row database.GetCatalogProductByIDRow) Catalo
 	}
 }
 
-func toCatalogProductDataFromBarcodeRow(row database.GetCatalogProductByBarcodeRow) CatalogProductData {
+func toCatalogProductDataFromBarcodeRow(row database.GetCatalogProductByBarcodeForStoreRow) CatalogProductData {
 	return CatalogProductData{
 		ID:           row.ID,
 		SKU:          row.SKU,

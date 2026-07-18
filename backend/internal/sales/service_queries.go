@@ -5,10 +5,11 @@ import (
 	"fmt"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) List(ctx context.Context, input ListSalesInput) (SaleListResponse, error) {
+func (s *Service) List(ctx context.Context, scope tenancy.ActorScope, input ListSalesInput) (SaleListResponse, error) {
 	page, pageSize, err := normalizePagination(input.Page, input.PageSize)
 	if err != nil {
 		return SaleListResponse{}, err
@@ -19,12 +20,14 @@ func (s *Service) List(ctx context.Context, input ListSalesInput) (SaleListRespo
 		return SaleListResponse{}, err
 	}
 
-	total, err := s.store.CountSales(ctx, statusFilter)
+	total, err := s.store.CountSales(ctx, scope.StoreScope(), database.CountSalesForStoreParams{
+		Status: statusFilter,
+	})
 	if err != nil {
 		return SaleListResponse{}, fmt.Errorf("count sales: %w", err)
 	}
 
-	rows, err := s.store.ListSales(ctx, database.ListSalesParams{
+	rows, err := s.store.ListSales(ctx, scope.StoreScope(), database.ListSalesForStoreParams{
 		Status:     statusFilter,
 		PageOffset: int32((page - 1) * pageSize),
 		PageSize:   int32(pageSize),
@@ -48,60 +51,51 @@ func (s *Service) List(ctx context.Context, input ListSalesInput) (SaleListRespo
 	}, nil
 }
 
-func (s *Service) Get(ctx context.Context, rawID string) (SaleResponse, error) {
+func (s *Service) Get(ctx context.Context, scope tenancy.ActorScope, rawID string) (SaleResponse, error) {
 	saleID, err := parseUUID(rawID, "id")
 	if err != nil {
 		return SaleResponse{}, err
 	}
 
-	sale, items, err := s.getSaleWithItems(ctx, saleID)
+	sale, items, err := s.getSaleWithItems(ctx, scope, saleID)
 	if err != nil {
 		return SaleResponse{}, err
 	}
 
-	return toSaleResponseFromColumns(
-		sale.ID,
-		sale.Number,
-		sale.Status,
-		sale.Subtotal,
-		sale.Discount,
-		sale.Addition,
-		sale.Total,
-		sale.OpenedAt,
-		sale.CompletedAt,
-		sale.CancelledAt,
-		sale.CreatedAt,
-		sale.UpdatedAt,
-		sale.IdempotencyKey,
-		items,
+	return toSaleResponseFromFields(
+		sale.ID, sale.Number, sale.Status,
+		sale.Subtotal, sale.Discount, sale.Addition, sale.Total,
+		sale.OpenedAt, sale.CompletedAt, sale.CancelledAt,
+		sale.CreatedAt, sale.UpdatedAt,
+		sale.IdempotencyKey, items,
 	)
 }
 
-func (s *Service) getSaleByID(ctx context.Context, id pgtype.UUID) (database.GetSaleByIDRow, error) {
-	sale, err := s.store.GetSaleByID(ctx, id)
+func (s *Service) getSaleByID(ctx context.Context, scope tenancy.ActorScope, id pgtype.UUID) (database.Sale, error) {
+	sale, err := s.store.GetSaleByID(ctx, scope.StoreScope(), id)
 	if err != nil {
-		return database.GetSaleByIDRow{}, translateSaleReadError(err)
+		return database.Sale{}, translateSaleReadError(err)
 	}
 
 	return sale, nil
 }
 
-func (s *Service) getSaleWithItems(ctx context.Context, id pgtype.UUID) (database.GetSaleByIDRow, []database.SaleItem, error) {
-	sale, err := s.getSaleByID(ctx, id)
+func (s *Service) getSaleWithItems(ctx context.Context, scope tenancy.ActorScope, id pgtype.UUID) (database.Sale, []database.SaleItem, error) {
+	sale, err := s.getSaleByID(ctx, scope, id)
 	if err != nil {
-		return database.GetSaleByIDRow{}, nil, err
+		return database.Sale{}, nil, err
 	}
 
-	items, err := s.store.ListSaleItemsBySaleID(ctx, id)
+	items, err := s.store.ListSaleItemsBySaleID(ctx, scope.StoreScope(), id)
 	if err != nil {
-		return database.GetSaleByIDRow{}, nil, fmt.Errorf("list sale items: %w", err)
+		return database.Sale{}, nil, fmt.Errorf("list sale items: %w", err)
 	}
 
 	return sale, items, nil
 }
 
-func (s *Service) getSaleItemByID(ctx context.Context, tx TxQueries, saleID, itemID pgtype.UUID) (database.SaleItem, error) {
-	item, err := tx.GetSaleItemByID(ctx, database.GetSaleItemByIDParams{
+func (s *Service) getSaleItemByID(ctx context.Context, tx TxQueries, scope tenancy.StoreScope, saleID, itemID pgtype.UUID) (database.SaleItem, error) {
+	item, err := tx.GetSaleItemByID(ctx, scope, database.GetSaleItemByIDForStoreParams{
 		SaleID: saleID,
 		ID:     itemID,
 	})
@@ -112,10 +106,10 @@ func (s *Service) getSaleItemByID(ctx context.Context, tx TxQueries, saleID, ite
 	return item, nil
 }
 
-func (s *Service) getProductByIDInTx(ctx context.Context, tx TxQueries, id pgtype.UUID) (database.Product, error) {
-	product, err := tx.GetProductByID(ctx, id)
+func (s *Service) getProductByIDInTx(ctx context.Context, tx TxQueries, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
+	product, err := tx.GetProductByID(ctx, scope, id)
 	if err != nil {
-		return database.Product{}, translateProductReadError(err)
+		return database.GetProductByIDForStoreRow{}, translateProductReadError(err)
 	}
 
 	return product, nil

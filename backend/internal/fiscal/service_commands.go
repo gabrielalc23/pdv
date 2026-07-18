@@ -6,17 +6,18 @@ import (
 	"fmt"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) Authorize(ctx context.Context, rawSaleID string, input AuthorizationInput) (FiscalDocumentResponse, error) {
+func (s *Service) Authorize(ctx context.Context, scope tenancy.StoreScope, rawSaleID string, input AuthorizationInput) (FiscalDocumentResponse, error) {
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return FiscalDocumentResponse{}, err
 	}
 
-	sale, err := s.store.GetSaleByID(ctx, saleID)
+	sale, err := s.store.GetSaleByID(ctx, scope, saleID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return FiscalDocumentResponse{}, ErrSaleNotFound
@@ -24,7 +25,7 @@ func (s *Service) Authorize(ctx context.Context, rawSaleID string, input Authori
 		return FiscalDocumentResponse{}, fmt.Errorf("get sale by id: %w", err)
 	}
 
-	document, err := s.store.GetFiscalDocumentBySaleID(ctx, saleID)
+	document, err := s.store.GetFiscalDocumentBySaleID(ctx, scope, saleID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return FiscalDocumentResponse{}, ErrFiscalDocumentNotFound
@@ -38,7 +39,7 @@ func (s *Service) Authorize(ctx context.Context, rawSaleID string, input Authori
 
 	result, err := s.provider.Authorize(ctx, input)
 	if err != nil {
-		updated, updateErr := s.store.MarkFiscalDocumentError(ctx, database.MarkFiscalDocumentErrorParams{
+		updated, updateErr := s.store.MarkFiscalDocumentError(ctx, scope, database.MarkFiscalDocumentErrorForStoreParams{
 			ID:           document.ID,
 			ErrorCode:    pgtype.Text{String: "mock_authorization_failed", Valid: true},
 			ErrorMessage: pgtype.Text{String: "Fiscal authorization failed", Valid: true},
@@ -49,7 +50,7 @@ func (s *Service) Authorize(ctx context.Context, rawSaleID string, input Authori
 		return toFiscalDocumentResponse(updated), ErrFiscalAuthorizationFailed
 	}
 
-	updated, err := s.store.MarkFiscalDocumentAuthorized(ctx, database.MarkFiscalDocumentAuthorizedParams{
+	updated, err := s.store.MarkFiscalDocumentAuthorized(ctx, scope, database.MarkFiscalDocumentAuthorizedForStoreParams{
 		AccessKey:         pgtype.Text{String: result.AccessKey, Valid: true},
 		Protocol:          pgtype.Text{String: result.Protocol, Valid: true},
 		Provider:          pgtype.Text{String: result.Provider, Valid: true},
