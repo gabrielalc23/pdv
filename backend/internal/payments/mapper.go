@@ -22,6 +22,16 @@ func toSalePaymentResponse(payment database.Payment, method database.PaymentMeth
 		paidAt = &t
 	}
 
+	receivedAmount, err := nullableMoneyToString(payment.ReceivedAmount)
+	if err != nil {
+		return SalePaymentResponse{}, fmt.Errorf("format received amount: %w", err)
+	}
+
+	changeAmount, err := nullableMoneyToString(payment.ChangeAmount)
+	if err != nil {
+		return SalePaymentResponse{}, fmt.Errorf("format change amount: %w", err)
+	}
+
 	return SalePaymentResponse{
 		ID:                payment.ID.String(),
 		SaleID:            payment.SaleID.String(),
@@ -30,6 +40,8 @@ func toSalePaymentResponse(payment database.Payment, method database.PaymentMeth
 		PaymentMethodName: method.Name,
 		Status:            string(payment.Status),
 		Amount:            amount,
+		ReceivedAmount:    receivedAmount,
+		ChangeAmount:      changeAmount,
 		Installments:      payment.Installments,
 		ExternalReference: externalReferenceOrNull(payment.ExternalReference),
 		PaidAt:            paidAt,
@@ -71,6 +83,17 @@ func externalReferenceOrNull(value pgtype.Text) *string {
 	}
 	result := value.String
 	return &result
+}
+
+func nullableMoneyToString(value pgtype.Numeric) (*string, error) {
+	if !value.Valid {
+		return nil, nil
+	}
+	s, err := numericToMoneyString(value)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 func numericToMoneyString(value pgtype.Numeric) (string, error) {

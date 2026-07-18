@@ -87,9 +87,9 @@ func (s *Service) Checkout(ctx context.Context, scope tenancy.ActorScope, rawSal
 		}
 
 		state = checkoutState{
-			sale:     completed,
-			items:    items,
-			payments: approvedPayments,
+			sale:           completed,
+			items:          items,
+			payments:       approvedPayments,
 			fiscalDocument: toFiscalDocumentResponse(fiscalDocFromCreateRow(fiscalDocument)),
 		}
 
@@ -492,7 +492,7 @@ func (s *Service) authorizeFiscalDocument(ctx context.Context, scope tenancy.Act
 			Provider:          pgtype.Text{String: result.Provider, Valid: true},
 			ExternalReference: pgtype.Text{String: result.ExternalReference, Valid: true},
 			XML:               pgtype.Text{String: result.XML, Valid: true},
-			IssuedAt:          pgtype.Timestamptz{Time: result.AuthorizedAt, Valid: true},
+			IssuedAt:          pgtype.Timestamptz{},
 			ID:                parseUUIDMust(state.fiscalDocument.ID),
 		})
 		if err != nil {
