@@ -282,6 +282,56 @@ func (q *Queries) ExpireSessions(ctx context.Context) ([]ExpireSessionsRow, erro
 	return items, nil
 }
 
+const getAuthSessionByID = `-- name: GetAuthSessionByID :one
+SELECT
+    id,
+    user_id,
+    status,
+    client_id,
+    device_name,
+    user_agent,
+    ip_address,
+    context_kind,
+    current_organization_id,
+    current_membership_id,
+    current_store_id,
+    idle_expires_at,
+    absolute_expires_at,
+    last_seen_at,
+    revoked_at,
+    revoke_reason,
+    created_at,
+    updated_at
+FROM auth_sessions
+WHERE id = $1
+`
+
+func (q *Queries) GetAuthSessionByID(ctx context.Context, id pgtype.UUID) (AuthSession, error) {
+	row := q.db.QueryRow(ctx, getAuthSessionByID, id)
+	var i AuthSession
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.ClientID,
+		&i.DeviceName,
+		&i.UserAgent,
+		&i.IpAddress,
+		&i.ContextKind,
+		&i.CurrentOrganizationID,
+		&i.CurrentMembershipID,
+		&i.CurrentStoreID,
+		&i.IdleExpiresAt,
+		&i.AbsoluteExpiresAt,
+		&i.LastSeenAt,
+		&i.RevokedAt,
+		&i.RevokeReason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getAuthSessionForUpdate = `-- name: GetAuthSessionForUpdate :one
 SELECT
     s.id,
@@ -384,6 +434,86 @@ func (q *Queries) GetAuthSessionForUpdate(ctx context.Context, sessionID pgtype.
 	return i, err
 }
 
+const getAuthSessionState = `-- name: GetAuthSessionState :one
+SELECT
+    s.id,
+    s.user_id,
+    s.status,
+    s.client_id,
+    s.context_kind,
+    s.current_organization_id,
+    s.current_membership_id,
+    s.current_store_id,
+    s.idle_expires_at,
+    s.absolute_expires_at,
+    s.last_seen_at,
+    u.status AS user_status,
+    u.password_version,
+    o.status AS organization_status,
+    o.authorization_version AS organization_authorization_version,
+    m.status AS membership_status,
+    m.authorization_version AS membership_authorization_version,
+    st.status AS store_status
+FROM auth_sessions AS s
+JOIN users AS u ON u.id = s.user_id
+LEFT JOIN organizations AS o ON o.id = s.current_organization_id
+LEFT JOIN organization_memberships AS m
+  ON m.organization_id = s.current_organization_id
+ AND m.id = s.current_membership_id
+ AND m.user_id = s.user_id
+LEFT JOIN stores AS st
+  ON st.organization_id = s.current_organization_id
+ AND st.id = s.current_store_id
+WHERE s.id = $1
+`
+
+type GetAuthSessionStateRow struct {
+	ID                               pgtype.UUID
+	UserID                           pgtype.UUID
+	Status                           AuthSessionStatus
+	ClientID                         string
+	ContextKind                      AuthContextKind
+	CurrentOrganizationID            pgtype.UUID
+	CurrentMembershipID              pgtype.UUID
+	CurrentStoreID                   pgtype.UUID
+	IdleExpiresAt                    pgtype.Timestamptz
+	AbsoluteExpiresAt                pgtype.Timestamptz
+	LastSeenAt                       pgtype.Timestamptz
+	UserStatus                       UserStatus
+	PasswordVersion                  int64
+	OrganizationStatus               NullOrganizationStatus
+	OrganizationAuthorizationVersion pgtype.Int8
+	MembershipStatus                 NullMembershipStatus
+	MembershipAuthorizationVersion   pgtype.Int8
+	StoreStatus                      NullStoreStatus
+}
+
+func (q *Queries) GetAuthSessionState(ctx context.Context, sessionID pgtype.UUID) (GetAuthSessionStateRow, error) {
+	row := q.db.QueryRow(ctx, getAuthSessionState, sessionID)
+	var i GetAuthSessionStateRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.ClientID,
+		&i.ContextKind,
+		&i.CurrentOrganizationID,
+		&i.CurrentMembershipID,
+		&i.CurrentStoreID,
+		&i.IdleExpiresAt,
+		&i.AbsoluteExpiresAt,
+		&i.LastSeenAt,
+		&i.UserStatus,
+		&i.PasswordVersion,
+		&i.OrganizationStatus,
+		&i.OrganizationAuthorizationVersion,
+		&i.MembershipStatus,
+		&i.MembershipAuthorizationVersion,
+		&i.StoreStatus,
+	)
+	return i, err
+}
+
 const getRefreshTokenForUpdate = `-- name: GetRefreshTokenForUpdate :one
 SELECT
     id,
@@ -415,6 +545,70 @@ func (q *Queries) GetRefreshTokenForUpdate(ctx context.Context, id pgtype.UUID) 
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listUserSessions = `-- name: ListUserSessions :many
+SELECT
+    id,
+    user_id,
+    status,
+    client_id,
+    device_name,
+    user_agent,
+    ip_address,
+    context_kind,
+    current_organization_id,
+    current_membership_id,
+    current_store_id,
+    idle_expires_at,
+    absolute_expires_at,
+    last_seen_at,
+    revoked_at,
+    revoke_reason,
+    created_at,
+    updated_at
+FROM auth_sessions
+WHERE user_id = $1
+ORDER BY last_seen_at DESC
+`
+
+func (q *Queries) ListUserSessions(ctx context.Context, userID pgtype.UUID) ([]AuthSession, error) {
+	rows, err := q.db.Query(ctx, listUserSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AuthSession{}
+	for rows.Next() {
+		var i AuthSession
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.Status,
+			&i.ClientID,
+			&i.DeviceName,
+			&i.UserAgent,
+			&i.IpAddress,
+			&i.ContextKind,
+			&i.CurrentOrganizationID,
+			&i.CurrentMembershipID,
+			&i.CurrentStoreID,
+			&i.IdleExpiresAt,
+			&i.AbsoluteExpiresAt,
+			&i.LastSeenAt,
+			&i.RevokedAt,
+			&i.RevokeReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const markSessionCompromised = `-- name: MarkSessionCompromised :one

@@ -85,6 +85,38 @@ LEFT JOIN stores AS st
 WHERE s.id = sqlc.arg(session_id)
 FOR UPDATE OF s;
 
+-- name: GetAuthSessionState :one
+SELECT
+    s.id,
+    s.user_id,
+    s.status,
+    s.client_id,
+    s.context_kind,
+    s.current_organization_id,
+    s.current_membership_id,
+    s.current_store_id,
+    s.idle_expires_at,
+    s.absolute_expires_at,
+    s.last_seen_at,
+    u.status AS user_status,
+    u.password_version,
+    o.status AS organization_status,
+    o.authorization_version AS organization_authorization_version,
+    m.status AS membership_status,
+    m.authorization_version AS membership_authorization_version,
+    st.status AS store_status
+FROM auth_sessions AS s
+JOIN users AS u ON u.id = s.user_id
+LEFT JOIN organizations AS o ON o.id = s.current_organization_id
+LEFT JOIN organization_memberships AS m
+  ON m.organization_id = s.current_organization_id
+ AND m.id = s.current_membership_id
+ AND m.user_id = s.user_id
+LEFT JOIN stores AS st
+  ON st.organization_id = s.current_organization_id
+ AND st.id = s.current_store_id
+WHERE s.id = sqlc.arg(session_id);
+
 -- name: UpdateSessionContext :one
 UPDATE auth_sessions
 SET
@@ -278,3 +310,50 @@ RETURNING
     consumed_at,
     revoked_at,
     created_at;
+
+-- name: ListUserSessions :many
+SELECT
+    id,
+    user_id,
+    status,
+    client_id,
+    device_name,
+    user_agent,
+    ip_address,
+    context_kind,
+    current_organization_id,
+    current_membership_id,
+    current_store_id,
+    idle_expires_at,
+    absolute_expires_at,
+    last_seen_at,
+    revoked_at,
+    revoke_reason,
+    created_at,
+    updated_at
+FROM auth_sessions
+WHERE user_id = sqlc.arg(user_id)
+ORDER BY last_seen_at DESC;
+
+-- name: GetAuthSessionByID :one
+SELECT
+    id,
+    user_id,
+    status,
+    client_id,
+    device_name,
+    user_agent,
+    ip_address,
+    context_kind,
+    current_organization_id,
+    current_membership_id,
+    current_store_id,
+    idle_expires_at,
+    absolute_expires_at,
+    last_seen_at,
+    revoked_at,
+    revoke_reason,
+    created_at,
+    updated_at
+FROM auth_sessions
+WHERE id = sqlc.arg(id);

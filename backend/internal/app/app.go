@@ -17,6 +17,9 @@ import (
 	"github.com/gabrielalc23/pdv/internal/fiscal"
 	"github.com/gabrielalc23/pdv/internal/inventory"
 	"github.com/gabrielalc23/pdv/internal/payments"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
+	"github.com/gabrielalc23/pdv/internal/platform/authz"
+	"github.com/gabrielalc23/pdv/internal/platform/clock"
 	"github.com/gabrielalc23/pdv/internal/platform/cookie"
 	"github.com/gabrielalc23/pdv/internal/platform/csrf"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
@@ -29,23 +32,80 @@ import (
 	"github.com/gabrielalc23/pdv/internal/products"
 	"github.com/gabrielalc23/pdv/internal/receipt"
 	"github.com/gabrielalc23/pdv/internal/sales"
+	"github.com/gabrielalc23/pdv/internal/sessions"
 )
 
 type Dependencies struct {
-	Store             *database.PostgresStore
-	Valkey            *valkey.Client
-	PasswordHasher    password.Hasher
-	PasswordPolicy    password.Policy
-	PasswordBlocklist password.Blocklist
-	CookieManager     *cookie.Manager
-	CSRFManager       *csrf.Manager
-	JWTKeyring        *jwt.Keyring
-	JWTIssuer         string
-	JWTAudience       string
-	AccessTokenTTL    time.Duration
-	JWTClockSkew      time.Duration
-	RequestMeta       *requestmeta.Resolver
-	RateLimiter       ratelimit.Limiter
+	Store              *database.PostgresStore
+	Valkey             *valkey.Client
+	PasswordHasher     password.Hasher
+	PasswordPolicy     password.Policy
+	PasswordBlocklist  password.Blocklist
+	CookieManager      *cookie.Manager
+	CSRFManager        *csrf.Manager
+	JWTKeyring         *jwt.Keyring
+	JWTIssuer          string
+	JWTAudience        string
+	AccessTokenTTL     time.Duration
+	JWTClockSkew       time.Duration
+	RequestMeta        *requestmeta.Resolver
+	RateLimiter        ratelimit.Limiter
+	RefreshIdleTTL     time.Duration
+	SessionAbsoluteTTL time.Duration
+	AuthTokenHashKey   []byte
+}
+
+type AuthComponents struct {
+	AuthN        *authn.Middleware
+	AuthZ        authz.Guard
+	Sessions     *sessions.Service
+	RefreshCodec sessions.RefreshTokenCodec
+}
+
+func buildAuthComponents(deps Dependencies, cfg configAuth) *AuthComponents {
+	if deps.Store == nil || deps.Valkey == nil || deps.JWTKeyring == nil {
+		return nil
+	}
+
+	validator := jwt.NewValidator(deps.JWTKeyring, cfg.JWTIssuer, cfg.JWTAudience, cfg.JWTClockSkew)
+
+	persistence := authn.NewPersistenceStore(deps.Store.Queries)
+	cache := authn.NewSessionCache(deps.Valkey, cfg.AuthSessionCacheTTL)
+	touchThrottle := authn.NewTouchThrottle(deps.Valkey, cfg.AuthSessionTouchInterval)
+	clk := clock.RealClock{}
+
+	authnMiddleware := authn.NewMiddleware(validator, persistence, cache, touchThrottle, clk)
+	guard := authz.NewGuard()
+
+	refreshCodec := sessions.NewRefreshTokenCodec(deps.AuthTokenHashKey)
+	sessionQuerier := sessions.NewStore(deps.Store.Queries)
+	sessionProvider := sessions.NewTxProvider(deps.Store)
+
+	sessionSvc := sessions.NewService(
+		refreshCodec,
+		sessionProvider,
+		sessionQuerier,
+		sessions.Config{
+			RefreshIdleTTL:     deps.RefreshIdleTTL,
+			SessionAbsoluteTTL: deps.SessionAbsoluteTTL,
+		},
+		clk,
+	)
+
+	return &AuthComponents{
+		AuthN:        authnMiddleware,
+		AuthZ:        guard,
+		Sessions:     sessionSvc,
+		RefreshCodec: refreshCodec,
+	}
+}
+
+type configAuth struct {
+	JWTIssuer                string
+	JWTAudience              string
+	JWTClockSkew             time.Duration
+	AuthSessionCacheTTL      time.Duration
+	AuthSessionTouchInterval time.Duration
 }
 
 func New(deps Dependencies) http.Handler {
