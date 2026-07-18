@@ -232,12 +232,40 @@ func (c Config) validate() error {
 		}
 
 		if c.JWTPrivateKeyPath == "" && !c.AuthAllowEphemeralDevKey {
-			return fmt.Errorf("JWT_PRIVATE_KEY_PATH is required in production (or set AUTH_ALLOW_EPHEMERAL_DEV_KEY=true)")
+			return fmt.Errorf("JWT_PRIVATE_KEY_PATH is required in production")
 		}
 
 		if slices.Contains(c.CORSAllowedOrigins, "*") {
 			return fmt.Errorf("CORS_ALLOWED_ORIGINS must not contain wildcard in production")
 		}
+	}
+
+	if c.AppEnv != "production" {
+		if c.JWTPrivateKeyPath == "" && !c.AuthAllowEphemeralDevKey {
+			return fmt.Errorf("JWT_PRIVATE_KEY_PATH or AUTH_ALLOW_EPHEMERAL_DEV_KEY=true is required")
+		}
+	}
+
+	if c.AuthAllowEphemeralDevKey && c.AppEnv == "production" && c.JWTPrivateKeyPath != "" {
+		return fmt.Errorf("ephemeral dev key must not be enabled with a persisted key in production")
+	}
+
+	if c.JWTActiveKeyID != "" && c.JWTPrivateKeyPath == "" && !c.AuthAllowEphemeralDevKey {
+		return fmt.Errorf("JWT_ACTIVE_KEY_ID requires a private key (JWT_PRIVATE_KEY_PATH or ephemeral)")
+	}
+
+	if c.JWTClockSkew <= 0 || c.JWTClockSkew > 30*time.Second {
+		return fmt.Errorf("JWT_CLOCK_SKEW must be positive and at most 30s")
+	}
+
+	if c.PasswordArgon2MemoryKiB < 8 || c.PasswordArgon2MemoryKiB > 1<<24 {
+		return fmt.Errorf("PASSWORD_ARGON2_MEMORY_KIB must be between 8 and 16777216")
+	}
+	if c.PasswordArgon2Iterations < 1 || c.PasswordArgon2Iterations > 100 {
+		return fmt.Errorf("PASSWORD_ARGON2_ITERATIONS must be between 1 and 100")
+	}
+	if c.PasswordArgon2Parallelism < 1 || c.PasswordArgon2Parallelism > 256 {
+		return fmt.Errorf("PASSWORD_ARGON2_PARALLELISM must be between 1 and 256")
 	}
 
 	for _, cidr := range c.TrustedProxyCIDRs {

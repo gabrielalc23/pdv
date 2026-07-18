@@ -11,6 +11,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("HTTP_ADDRESS", "")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -56,8 +57,8 @@ func TestLoadDefaults(t *testing.T) {
 	if cfg.AuthRequireVerifiedEmail {
 		t.Fatal("expected AUTH_REQUIRE_VERIFIED_EMAIL false by default")
 	}
-	if cfg.AuthAllowEphemeralDevKey {
-		t.Fatal("expected AUTH_ALLOW_EPHEMERAL_DEV_KEY false by default")
+	if !cfg.AuthAllowEphemeralDevKey {
+		t.Fatal("expected AUTH_ALLOW_EPHEMERAL_DEV_KEY true by default in development")
 	}
 	if !cfg.AuthTenantCreationEnabled {
 		t.Fatal("expected AUTH_TENANT_CREATION_ENABLED true by default")
@@ -97,11 +98,9 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 
 func TestLoadValidAppEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 	for _, env := range []string{"development", "test", "production"} {
 		t.Setenv("APP_ENV", env)
-		if env == "production" {
-			t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
-		}
 		if _, err := config.Load(); err != nil {
 			t.Fatalf("expected valid APP_ENV %q: %v", env, err)
 		}
@@ -118,6 +117,7 @@ func TestLoadInvalidAppEnv(t *testing.T) {
 
 func TestLoadAccessTokenTTLValidation(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 
 	t.Run("zero", func(t *testing.T) {
 		t.Setenv("ACCESS_TOKEN_TTL", "0s")
@@ -228,6 +228,7 @@ func TestLoadInvalidCIDRs(t *testing.T) {
 
 func TestLoadValidCIDRs(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 	t.Setenv("TRUSTED_PROXY_CIDRS", "10.0.0.0/8,192.168.0.0/16")
 
 	cfg, err := config.Load()
@@ -254,6 +255,7 @@ func TestLoadInvalidSameSite(t *testing.T) {
 
 func TestLoadValidSameSite(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 
 	for _, val := range []string{"Lax", "Strict", "None"} {
 		t.Setenv("COOKIE_SAME_SITE", val)
@@ -274,6 +276,7 @@ func TestLoadAppPublicURL(t *testing.T) {
 
 func TestLoadValidAppPublicURL(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 	t.Setenv("APP_PUBLIC_URL", "https://app.example.com")
 
 	cfg, err := config.Load()
@@ -288,6 +291,7 @@ func TestLoadValidAppPublicURL(t *testing.T) {
 
 func TestLoadSecretDecoding(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 
 	t.Run("base64_32_bytes", func(t *testing.T) {
 		key := "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVoxMjM0NTY="
@@ -322,6 +326,7 @@ func TestLoadSecretDecoding(t *testing.T) {
 
 func TestLoadCORSOrigins(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 	t.Setenv("CORS_ALLOWED_ORIGINS", "http://localhost:5173,http://localhost:4173")
 
 	cfg, err := config.Load()
@@ -336,6 +341,7 @@ func TestLoadCORSOrigins(t *testing.T) {
 
 func TestLoadCustomCookieNames(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
 	t.Setenv("COOKIE_REFRESH_NAME", "my_refresh")
 	t.Setenv("COOKIE_CSRF_NAME", "my_csrf")
 

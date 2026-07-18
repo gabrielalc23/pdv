@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -16,15 +17,35 @@ import (
 	"github.com/gabrielalc23/pdv/internal/fiscal"
 	"github.com/gabrielalc23/pdv/internal/inventory"
 	"github.com/gabrielalc23/pdv/internal/payments"
+	"github.com/gabrielalc23/pdv/internal/platform/cookie"
+	"github.com/gabrielalc23/pdv/internal/platform/csrf"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/password"
+	"github.com/gabrielalc23/pdv/internal/platform/ratelimit"
+	"github.com/gabrielalc23/pdv/internal/platform/requestmeta"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
+	jwt "github.com/gabrielalc23/pdv/internal/platform/token/jwt"
+	"github.com/gabrielalc23/pdv/internal/platform/valkey"
 	"github.com/gabrielalc23/pdv/internal/products"
 	"github.com/gabrielalc23/pdv/internal/receipt"
 	"github.com/gabrielalc23/pdv/internal/sales"
 )
 
 type Dependencies struct {
-	Store *database.PostgresStore
+	Store             *database.PostgresStore
+	Valkey            *valkey.Client
+	PasswordHasher    password.Hasher
+	PasswordPolicy    password.Policy
+	PasswordBlocklist password.Blocklist
+	CookieManager     *cookie.Manager
+	CSRFManager       *csrf.Manager
+	JWTKeyring        *jwt.Keyring
+	JWTIssuer         string
+	JWTAudience       string
+	AccessTokenTTL    time.Duration
+	JWTClockSkew      time.Duration
+	RequestMeta       *requestmeta.Resolver
+	RateLimiter       ratelimit.Limiter
 }
 
 func New(deps Dependencies) http.Handler {
@@ -43,23 +64,62 @@ func New(deps Dependencies) http.Handler {
 
 	router.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
 		if deps.Store == nil || deps.Store.Pool == nil {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"status":"unavailable","detail":"database not connected"}`))
+			writeReadyError(w, "database not connected")
 			return
 		}
 		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
 		defer cancel()
 		if err := deps.Store.Pool.Ping(ctx); err != nil {
 			slog.Error("readiness ping failed", "error", err)
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte(`{"status":"unavailable","detail":"database ping failed"}`))
+			writeReadyError(w, "database ping failed")
 			return
+		}
+		if deps.Valkey != nil {
+			if err := deps.Valkey.Ping(ctx); err != nil {
+				slog.Error("readiness valkey ping failed", "error", err)
+				writeReadyError(w, "valkey ping failed")
+				return
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(`{"status":"ok"}`))
+	})
+
+	if deps.JWTKeyring != nil {
+		jwksService := jwt.NewJWKSService(deps.JWTKeyring)
+		router.Get("/.well-known/jwks.json", jwksService.ServeHTTP)
+	}
+
+	router.Get("/auth/csrf", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", "use GET")
+			return
+		}
+		if csrf.IsUnsafeMethod(r.Method) {
+			if err := deps.CSRFManager.CheckOrigin(r); err != nil {
+				writeError(w, http.StatusForbidden, "CSRF_INVALID", "origin not allowed")
+				return
+			}
+			if err := deps.CSRFManager.CheckFetchMetadata(r); err != nil {
+				writeError(w, http.StatusForbidden, "CSRF_INVALID", "cross-site request rejected")
+				return
+			}
+		}
+
+		token, err := deps.CSRFManager.Generate(csrf.BindingPreauth, "preauth")
+		if err != nil {
+			slog.Error("failed to generate csrf token", "error", err)
+			writeError(w, http.StatusInternalServerError, "AUTH_DEPENDENCY_UNAVAILABLE", "failed to generate csrf token")
+			return
+		}
+
+		deps.CookieManager.SetCSRFCookie(w, token, time.Now().Add(24*time.Hour))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"csrfToken": token})
 	})
 
 	router.Group(func(r chi.Router) {
@@ -140,6 +200,23 @@ func securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+func writeReadyError(w http.ResponseWriter, detail string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = w.Write([]byte(fmt.Sprintf(`{"status":"unavailable","detail":%q}`, detail)))
+}
+
+func writeError(w http.ResponseWriter, status int, code, message string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error": map[string]string{
+			"code":    code,
+			"message": message,
+		},
+	})
+}
+
 func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              addr,
@@ -150,11 +227,4 @@ func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 		IdleTimeout:       120 * time.Second,
 		MaxHeaderBytes:    1 << 20,
 	}
-}
-
-func WriteJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	enc := json.NewEncoder(w)
-	_ = enc.Encode(payload)
 }

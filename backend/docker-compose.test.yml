@@ -18,3 +18,20 @@ services:
       start_period: 5s
     tmpfs:
       - /var/lib/postgresql
+
+  valkey:
+    image: valkey/valkey:9.1.0-alpine3.23
+    command:
+      - valkey-server
+      - --loglevel
+      - warning
+    ports:
+      - "127.0.0.1:6380:6379"
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
+    tmpfs:
+      - /data
