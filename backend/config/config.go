@@ -38,6 +38,10 @@ type Config struct {
 	RefreshIdleTTL     time.Duration
 	SessionAbsoluteTTL time.Duration
 
+	// Auth cache
+	AuthSessionCacheTTL      time.Duration
+	AuthSessionTouchInterval time.Duration
+
 	// Secrets (decoded binary)
 	AuthTokenHashKey   []byte
 	AuthCSRFSecret     []byte
@@ -86,6 +90,9 @@ func Load() (Config, error) {
 	sessionAbsoluteTTL := mustParseDuration(getEnv("SESSION_ABSOLUTE_TTL", "2160h"))
 
 	jwtClockSkew := mustParseDuration(getEnv("JWT_CLOCK_SKEW", "30s"))
+
+	authSessionCacheTTL := mustParseDuration(getEnv("AUTH_SESSION_CACHE_TTL", "60s"))
+	authSessionTouchInterval := mustParseDuration(getEnv("AUTH_SESSION_TOUCH_INTERVAL", "30s"))
 
 	cookieSecure := getEnv("COOKIE_SECURE", "")
 	if cookieSecure == "" {
@@ -147,6 +154,9 @@ func Load() (Config, error) {
 
 		RefreshIdleTTL:     refreshIdleTTL,
 		SessionAbsoluteTTL: sessionAbsoluteTTL,
+
+		AuthSessionCacheTTL:      authSessionCacheTTL,
+		AuthSessionTouchInterval: authSessionTouchInterval,
 
 		AuthTokenHashKey:   authTokenHashKey,
 		AuthCSRFSecret:     authCSRFSecret,
@@ -252,6 +262,13 @@ func (c Config) validate() error {
 
 	if c.JWTActiveKeyID != "" && c.JWTPrivateKeyPath == "" && !c.AuthAllowEphemeralDevKey {
 		return fmt.Errorf("JWT_ACTIVE_KEY_ID requires a private key (JWT_PRIVATE_KEY_PATH or ephemeral)")
+	}
+
+	if c.AuthSessionCacheTTL < 1*time.Second || c.AuthSessionCacheTTL > 5*time.Minute {
+		return fmt.Errorf("AUTH_SESSION_CACHE_TTL must be between 1s and 5m (got %s)", c.AuthSessionCacheTTL)
+	}
+	if c.AuthSessionTouchInterval < 1*time.Second || c.AuthSessionTouchInterval > 5*time.Minute {
+		return fmt.Errorf("AUTH_SESSION_TOUCH_INTERVAL must be between 1s and 5m (got %s)", c.AuthSessionTouchInterval)
 	}
 
 	if c.JWTClockSkew <= 0 || c.JWTClockSkew > 30*time.Second {
