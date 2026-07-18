@@ -13,18 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabrielalc23/pdv/internal/catalog"
-	"github.com/gabrielalc23/pdv/internal/checkout"
-	"github.com/gabrielalc23/pdv/internal/fiscal"
-	"github.com/gabrielalc23/pdv/internal/inventory"
-	"github.com/gabrielalc23/pdv/internal/payments"
+	"github.com/gabrielalc23/pdv/internal/app"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
-	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
-	"github.com/gabrielalc23/pdv/internal/products"
-	"github.com/gabrielalc23/pdv/internal/receipt"
-	"github.com/gabrielalc23/pdv/internal/sales"
-	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -62,8 +52,8 @@ func TestMain(m *testing.M) {
 	defer testPool.Close()
 
 	runMigrations(ctx, testPool)
-	seedPaymentMethods(ctx, testPool)
 	testOrgID, testStoreID, testMembershipID = seedTenantData(ctx, testPool)
+	seedPaymentMethods(ctx, testPool, testOrgID, testStoreID)
 
 	store := database.NewStore(testPool)
 	lis := mustListen()
@@ -212,28 +202,21 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) {
 	}
 }
 
-func seedPaymentMethods(ctx context.Context, pool *pgxpool.Pool) {
+func seedPaymentMethods(ctx context.Context, pool *pgxpool.Pool, orgID, storeID string) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
 		log.Fatalf("acquire: %v", err)
 	}
 	defer conn.Release()
 
-	var count int
-	if err := conn.QueryRow(ctx, `SELECT COUNT(*) FROM payment_methods`).Scan(&count); err != nil {
-		log.Fatalf("count payment_methods: %v", err)
-	}
-	if count > 0 {
-		return
-	}
-
-	methods := []struct {
+	type methodDef struct {
 		code, name, kind string
 		allowsChange     bool
 		allowsInstall    bool
 		maxInstall       int16
 		sortOrder        int
-	}{
+	}
+	methods := []methodDef{
 		{"CASH", "Dinheiro", "CASH", true, false, 1, 1},
 		{"PIX", "PIX", "PIX", false, false, 1, 2},
 		{"DEBIT", "Cartão de Débito", "DEBIT_CARD", false, false, 1, 3},
@@ -241,14 +224,28 @@ func seedPaymentMethods(ctx context.Context, pool *pgxpool.Pool) {
 		{"VOUCHER", "Vale", "VOUCHER", false, false, 1, 5},
 	}
 
+	now := time.Now()
 	for _, m := range methods {
-		_, err := conn.Exec(ctx, `
-			INSERT INTO payment_methods (code, name, kind, allows_change, allows_installments, max_installments, sort_order)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (code) DO NOTHING
-		`, m.code, m.name, m.kind, m.allowsChange, m.allowsInstall, m.maxInstall, m.sortOrder)
+		var mid string
+		err := conn.QueryRow(ctx, `
+			INSERT INTO payment_methods (organization_id, code, name, kind, allows_change, allows_installments, max_installments, sort_order, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			ON CONFLICT (organization_id, code) DO UPDATE SET name = EXCLUDED.name
+			RETURNING id
+		`, orgID, m.code, m.name, m.kind, m.allowsChange, m.allowsInstall, m.maxInstall, m.sortOrder, now, now).Scan(&mid)
 		if err != nil {
 			log.Fatalf("seed payment method %s: %v", m.code, err)
+		}
+		if mid == "" {
+			continue
+		}
+		_, err = conn.Exec(ctx, `
+			INSERT INTO store_payment_methods (organization_id, store_id, payment_method_id, is_active, sort_order, created_at, updated_at)
+			VALUES ($1, $2, $3, TRUE, $4, $5, $6)
+			ON CONFLICT (organization_id, store_id, payment_method_id) DO NOTHING
+		`, orgID, storeID, mid, m.sortOrder, now, now)
+		if err != nil {
+			log.Fatalf("link payment method %s to store: %v", m.code, err)
 		}
 	}
 }
@@ -313,67 +310,10 @@ func mustListen() net.Listener {
 }
 
 func startServer(store *database.PostgresStore, addr string) *http.Server {
-	router := apphttp.NewRouter(apphttp.Dependencies{
-		HealthHandler: func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"ok"}`))
-		},
+	handler := app.New(app.Dependencies{
+		Store: store,
 	})
-
-	resolver := tenancy.NewContextResolver()
-
-	router.Group(func(r chi.Router) {
-		r.Use(tenancy.Middleware)
-
-		productStore := products.NewStore(store.Queries)
-		productService := products.NewService(productStore)
-		productHandler := products.NewHandler(productService, resolver)
-		products.RegisterRoutes(r, productHandler)
-
-		inventoryReadStore := inventory.NewReadStore(store.Queries)
-		inventoryTxManager := inventory.NewTxManager(store)
-		inventoryService := inventory.NewService(inventoryReadStore, inventoryTxManager)
-		inventoryHandler := inventory.NewHandler(inventoryService, resolver)
-		inventory.RegisterRoutes(r, inventoryHandler)
-
-		catalogStore := catalog.NewStore(store.Queries)
-		catalogService := catalog.NewService(catalogStore)
-		catalogHandler := catalog.NewHandler(catalogService, resolver)
-		catalog.RegisterRoutes(r, catalogHandler)
-
-		salesReadStore := sales.NewReadStore(store.Queries)
-		salesTxManager := sales.NewTxManager(store)
-		salesService := sales.NewService(salesReadStore, salesTxManager)
-		salesHandler := sales.NewHandler(salesService, resolver)
-		sales.RegisterRoutes(r, salesHandler)
-
-		fiscalProvider := &fiscal.MockProvider{}
-
-		checkoutTxManager := checkout.NewTxManager(store)
-		checkoutService := checkout.NewService(checkoutTxManager, fiscalProvider)
-		checkoutHandler := checkout.NewHandler(checkoutService, resolver)
-		checkout.RegisterRoutes(r, checkoutHandler)
-
-		paymentsStore := payments.NewStore(store.Queries)
-		paymentsService := payments.NewService(paymentsStore)
-		paymentsHandler := payments.NewHandler(paymentsService, resolver)
-		payments.RegisterRoutes(r, paymentsHandler)
-
-		fiscalService := fiscal.NewService(fiscal.NewStore(store.Queries), fiscalProvider)
-		fiscalHandler := fiscal.NewHandler(fiscalService, resolver)
-		fiscal.RegisterRoutes(r, fiscalHandler)
-
-		receiptStore := receipt.NewStore(store.Queries)
-		receiptService := receipt.NewService(receiptStore)
-		receiptHandler := receipt.NewHandler(receiptService, resolver)
-		receipt.RegisterRoutes(r, receiptHandler)
-	})
-
-	return &http.Server{
-		Addr:    addr,
-		Handler: router,
-	}
+	return app.NewHTTPServer(addr, handler)
 }
 
 func waitForReady(ctx context.Context) {
