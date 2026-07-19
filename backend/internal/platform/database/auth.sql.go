@@ -54,6 +54,7 @@ func (q *Queries) ConsumeActionToken(ctx context.Context, arg ConsumeActionToken
 
 const createActionToken = `-- name: CreateActionToken :one
 INSERT INTO auth_action_tokens (
+    id,
     user_id,
     purpose,
     secret_hash,
@@ -65,7 +66,8 @@ VALUES (
     $2,
     $3,
     $4,
-    $5
+    $5,
+    $6
 )
 RETURNING
     id,
@@ -79,6 +81,7 @@ RETURNING
 `
 
 type CreateActionTokenParams struct {
+	ID          pgtype.UUID
 	UserID      pgtype.UUID
 	Purpose     AuthActionTokenPurpose
 	SecretHash  []byte
@@ -88,6 +91,7 @@ type CreateActionTokenParams struct {
 
 func (q *Queries) CreateActionToken(ctx context.Context, arg CreateActionTokenParams) (AuthActionToken, error) {
 	row := q.db.QueryRow(ctx, createActionToken,
+		arg.ID,
 		arg.UserID,
 		arg.Purpose,
 		arg.SecretHash,
@@ -193,6 +197,27 @@ func (q *Queries) InvalidatePreviousActionTokens(ctx context.Context, arg Invali
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockActionTokenOwner = `-- name: LockActionTokenOwner :one
+SELECT u.id AS user_id
+FROM auth_action_tokens AS t
+JOIN users AS u ON u.id = t.user_id
+WHERE t.id = $1
+  AND t.purpose = $2
+FOR UPDATE OF u
+`
+
+type LockActionTokenOwnerParams struct {
+	ID      pgtype.UUID
+	Purpose AuthActionTokenPurpose
+}
+
+func (q *Queries) LockActionTokenOwner(ctx context.Context, arg LockActionTokenOwnerParams) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, lockActionTokenOwner, arg.ID, arg.Purpose)
+	var user_id pgtype.UUID
+	err := row.Scan(&user_id)
+	return user_id, err
 }
 
 const lockUserForActionTokenChange = `-- name: LockUserForActionTokenChange :one

@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,6 +17,7 @@ import (
 	"github.com/gabrielalc23/pdv/internal/platform/cookie"
 	"github.com/gabrielalc23/pdv/internal/platform/csrf"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/mailer"
 	"github.com/gabrielalc23/pdv/internal/platform/password"
 	"github.com/gabrielalc23/pdv/internal/platform/ratelimit"
 	"github.com/gabrielalc23/pdv/internal/platform/requestmeta"
@@ -115,23 +118,46 @@ func main() {
 		log.Fatalf("request meta resolver: %v", err)
 	}
 
-	rateLimiter := ratelimit.NewFallbackLimiter(10000)
+	fallbackLimiter := ratelimit.NewFallbackLimiter(10000)
+	rateLimiter := ratelimit.NewValkeyLimiter(vk, fallbackLimiter)
+	var authMailer mailer.Mailer
+	if cfg.MailDriver == "smtp" {
+		authMailer, err = mailer.NewSMTPMailer(mailer.SMTPConfig{Host: cfg.SMTPHost, Port: cfg.SMTPPort, Username: cfg.SMTPUsername, Password: cfg.SMTPPassword, From: cfg.MailFrom, StartTLS: cfg.SMTPStartTLS})
+		if err != nil {
+			log.Fatalf("mailer: %v", err)
+		}
+	} else {
+		authMailer, err = mailer.NewLogMailer(cfg.AppEnv)
+		if err != nil {
+			log.Fatalf("mailer: %v", err)
+		}
+	}
 
 	handler := app.New(app.Dependencies{
-		Store:             store,
-		Valkey:            vk,
-		PasswordHasher:    hasher,
-		PasswordPolicy:    passwordPolicy,
-		PasswordBlocklist: passwordBlocklist,
-		CookieManager:     cookieManager,
-		CSRFManager:       csrfManager,
-		JWTKeyring:        keyring,
-		JWTIssuer:         cfg.JWTIssuer,
-		JWTAudience:       cfg.JWTAudience,
-		AccessTokenTTL:    cfg.AccessTokenTTL,
-		JWTClockSkew:      cfg.JWTClockSkew,
-		RequestMeta:       requestMeta,
-		RateLimiter:       rateLimiter,
+		Store:                    store,
+		Valkey:                   vk,
+		PasswordHasher:           hasher,
+		PasswordPolicy:           passwordPolicy,
+		PasswordBlocklist:        passwordBlocklist,
+		CookieManager:            cookieManager,
+		CSRFManager:              csrfManager,
+		JWTKeyring:               keyring,
+		JWTIssuer:                cfg.JWTIssuer,
+		JWTAudience:              cfg.JWTAudience,
+		AccessTokenTTL:           cfg.AccessTokenTTL,
+		JWTClockSkew:             cfg.JWTClockSkew,
+		RequestMeta:              requestMeta,
+		RateLimiter:              rateLimiter,
+		RefreshIdleTTL:           cfg.RefreshIdleTTL,
+		SessionAbsoluteTTL:       cfg.SessionAbsoluteTTL,
+		AuthTokenHashKey:         cfg.AuthTokenHashKey,
+		RateLimitKeySecret:       cfg.RateLimitKeySecret,
+		RegistrationEnabled:      cfg.AuthRegistrationEnabled,
+		RequireVerifiedEmail:     cfg.AuthRequireVerifiedEmail,
+		AppPublicURL:             cfg.AppPublicURL,
+		AuthSessionCacheTTL:      cfg.AuthSessionCacheTTL,
+		AuthSessionTouchInterval: cfg.AuthSessionTouchInterval,
+		Mailer:                   authMailer,
 	})
 
 	server := app.NewHTTPServer(cfg.Address, handler)
@@ -147,7 +173,7 @@ func main() {
 	}()
 
 	slog.Info(fmt.Sprintf("listening on %s", cfg.Address))
-	if err := server.ListenAndServe(); err != nil {
+	if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatalf("server: %v", err)
 	}
 }

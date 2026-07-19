@@ -30,7 +30,19 @@ VALUES (
     is_active,
     created_by_membership_id,
     created_at,
-    updated_at;
+     updated_at;
+
+-- name: ListPermissionScopes :many
+SELECT
+    code,
+    resource,
+    action,
+    scope_level,
+    description,
+    is_assignable,
+    created_at
+FROM permission_scopes
+ORDER BY code ASC;
 
 -- name: ReplaceRoleScopes :many
 WITH deleted_scopes AS (

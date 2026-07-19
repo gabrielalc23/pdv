@@ -16,8 +16,10 @@ type Querier interface {
 	GetRefreshTokenForUpdate(ctx context.Context, id pgtype.UUID) (database.AuthRefreshToken, error)
 	ConsumeAndReplaceRefreshToken(ctx context.Context, arg database.ConsumeAndReplaceRefreshTokenParams) (database.ConsumeAndReplaceRefreshTokenRow, error)
 	RevokeSessionRefreshTokens(ctx context.Context, sessionID pgtype.UUID) ([]database.RevokeSessionRefreshTokensRow, error)
+	RevokeAllUserRefreshTokens(ctx context.Context, userID pgtype.UUID) (int64, error)
 	RevokeSession(ctx context.Context, arg database.RevokeSessionParams) (database.RevokeSessionRow, error)
 	RevokeAllUserSessions(ctx context.Context, arg database.RevokeAllUserSessionsParams) ([]database.RevokeAllUserSessionsRow, error)
+	RevokeAllActiveUserSessions(ctx context.Context, arg database.RevokeAllActiveUserSessionsParams) ([]pgtype.UUID, error)
 	MarkSessionCompromised(ctx context.Context, arg database.MarkSessionCompromisedParams) (database.MarkSessionCompromisedRow, error)
 	ListUserSessions(ctx context.Context, userID pgtype.UUID) ([]database.AuthSession, error)
 	GetAuthSessionByID(ctx context.Context, id pgtype.UUID) (database.AuthSession, error)
@@ -76,12 +78,20 @@ func (s *storeImpl) RevokeSessionRefreshTokens(ctx context.Context, sessionID pg
 	return s.q.RevokeSessionRefreshTokens(ctx, sessionID)
 }
 
+func (s *storeImpl) RevokeAllUserRefreshTokens(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	return s.q.RevokeAllUserRefreshTokens(ctx, userID)
+}
+
 func (s *storeImpl) RevokeSession(ctx context.Context, arg database.RevokeSessionParams) (database.RevokeSessionRow, error) {
 	return s.q.RevokeSession(ctx, arg)
 }
 
 func (s *storeImpl) RevokeAllUserSessions(ctx context.Context, arg database.RevokeAllUserSessionsParams) ([]database.RevokeAllUserSessionsRow, error) {
 	return s.q.RevokeAllUserSessions(ctx, arg)
+}
+
+func (s *storeImpl) RevokeAllActiveUserSessions(ctx context.Context, arg database.RevokeAllActiveUserSessionsParams) ([]pgtype.UUID, error) {
+	return s.q.RevokeAllActiveUserSessions(ctx, arg)
 }
 
 func (s *storeImpl) MarkSessionCompromised(ctx context.Context, arg database.MarkSessionCompromisedParams) (database.MarkSessionCompromisedRow, error) {

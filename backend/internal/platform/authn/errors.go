@@ -76,9 +76,21 @@ func mapErr(err error) *AuthError {
 	case errors.Is(err, ErrDependencyUnavailable):
 		return authError(503, CodeDependencyUnavailable, "authentication service unavailable", err)
 	case errors.Is(err, ErrUserSuspended):
-		return authError(401, CodeUserSuspended, "user account is suspended", err)
+		return authError(403, CodeUserSuspended, "user account is suspended", err)
 	case errors.Is(err, ErrUserDisabled):
-		return authError(401, CodeUserDisabled, "user account is disabled", err)
+		return authError(403, CodeUserDisabled, "user account is disabled", err)
+	case errors.Is(err, ErrOrgSuspended):
+		return authError(403, CodeOrganizationSuspended, "organization is suspended", err)
+	case errors.Is(err, ErrOrgArchived):
+		return authError(403, CodeOrganizationArchived, "organization is archived", err)
+	case errors.Is(err, ErrMembershipSuspended):
+		return authError(403, CodeMembershipSuspended, "membership is suspended", err)
+	case errors.Is(err, ErrMembershipRemoved):
+		return authError(403, CodeMembershipRemoved, "membership has been removed", err)
+	case errors.Is(err, ErrStoreInactive):
+		return authError(403, CodeStoreInactive, "store is inactive", err)
+	case errors.Is(err, ErrStoreArchived):
+		return authError(403, CodeStoreArchived, "store is archived", err)
 	default:
 		return authError(500, "AUTH_INTERNAL_ERROR", "internal authentication error", err)
 	}

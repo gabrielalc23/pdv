@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net"
+	"net/mail"
 	"net/url"
 	"os"
 	"slices"
@@ -133,6 +134,10 @@ func Load() (Config, error) {
 	argon2Parallelism, _ := strconv.ParseUint(getEnv("PASSWORD_ARGON2_PARALLELISM", "1"), 10, 32)
 
 	smtpPort, _ := strconv.Atoi(getEnv("SMTP_PORT", "587"))
+	smtpStartTLS, err := parseEnvBool("SMTP_STARTTLS", "true")
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		AppEnv:  appEnv,
@@ -174,7 +179,7 @@ func Load() (Config, error) {
 
 		CORSAllowedOrigins: corsOrigins,
 		TrustedProxyCIDRs:  cidrs,
-		AppPublicURL:       os.Getenv("APP_PUBLIC_URL"),
+		AppPublicURL:       getEnv("APP_PUBLIC_URL", "http://localhost:5173"),
 
 		PasswordArgon2MemoryKiB:   uint32(argon2Memory),
 		PasswordArgon2Iterations:  uint32(argon2Iterations),
@@ -187,7 +192,7 @@ func Load() (Config, error) {
 		SMTPPort:     smtpPort,
 		SMTPUsername: os.Getenv("SMTP_USERNAME"),
 		SMTPPassword: os.Getenv("SMTP_PASSWORD"),
-		SMTPStartTLS: getEnvBool("SMTP_STARTTLS", "true"),
+		SMTPStartTLS: smtpStartTLS,
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -248,6 +253,30 @@ func (c Config) validate() error {
 		if slices.Contains(c.CORSAllowedOrigins, "*") {
 			return fmt.Errorf("CORS_ALLOWED_ORIGINS must not contain wildcard in production")
 		}
+		if len(c.AuthTokenHashKey) < 32 || len(c.AuthCSRFSecret) < 32 || len(c.RateLimitKeySecret) < 32 {
+			return fmt.Errorf("AUTH_TOKEN_HASH_KEY, AUTH_CSRF_SECRET, and RATE_LIMIT_KEY_SECRET are required in production")
+		}
+		if c.MailDriver == "log" {
+			return fmt.Errorf("MAIL_DRIVER=log is not allowed in production")
+		}
+		if !c.SMTPStartTLS {
+			return fmt.Errorf("SMTP_STARTTLS must be true in production")
+		}
+	}
+	if c.MailDriver != "log" && c.MailDriver != "smtp" {
+		return fmt.Errorf("MAIL_DRIVER must be log or smtp")
+	}
+	if c.MailDriver == "smtp" {
+		if c.SMTPHost == "" || c.SMTPPort < 1 || c.SMTPPort > 65535 || c.MailFrom == "" {
+			return fmt.Errorf("SMTP_HOST, SMTP_PORT between 1 and 65535, and MAIL_FROM are required for smtp")
+		}
+		address, err := mail.ParseAddress(c.MailFrom)
+		if err != nil || address.Address == "" {
+			return fmt.Errorf("MAIL_FROM must be a valid mailbox")
+		}
+		if c.SMTPUsername == "" && c.SMTPPassword != "" {
+			return fmt.Errorf("SMTP_USERNAME is required when SMTP_PASSWORD is configured")
+		}
 	}
 
 	if c.AppEnv != "production" {
@@ -297,23 +326,25 @@ func (c Config) validate() error {
 		return fmt.Errorf("COOKIE_SAME_SITE must be one of: Lax, Strict, None (got %q)", c.CookieSameSite)
 	}
 
-	if c.AppPublicURL != "" {
-		if _, err := url.ParseRequestURI(c.AppPublicURL); err != nil {
-			return fmt.Errorf("APP_PUBLIC_URL must be a valid absolute URL: %w", err)
-		}
+	publicURL, err := url.Parse(c.AppPublicURL)
+	if err != nil || (publicURL.Scheme != "http" && publicURL.Scheme != "https") || publicURL.Host == "" || publicURL.User != nil {
+		return fmt.Errorf("APP_PUBLIC_URL must be a valid absolute HTTP(S) URL")
+	}
+	if c.AppEnv == "production" && publicURL.Scheme != "https" {
+		return fmt.Errorf("APP_PUBLIC_URL must use HTTPS in production")
 	}
 
 	return nil
 }
 
-func getEnv(key, fallback string) string {
+func getEnv(key string, fallback string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
 	}
 	return fallback
 }
 
-func getEnvBool(key, fallback string) bool {
+func getEnvBool(key string, fallback string) bool {
 	raw := os.Getenv(key)
 	if raw == "" {
 		raw = fallback
@@ -324,6 +355,18 @@ func getEnvBool(key, fallback string) bool {
 	default:
 		return false
 	}
+}
+
+func parseEnvBool(key, fallback string) (bool, error) {
+	raw := os.Getenv(key)
+	if raw == "" {
+		raw = fallback
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return false, fmt.Errorf("%s must be a valid boolean", key)
+	}
+	return value, nil
 }
 
 func mustParseDuration(raw string) time.Duration {

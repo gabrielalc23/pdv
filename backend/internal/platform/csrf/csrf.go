@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -73,7 +74,7 @@ func (m *Manager) Validate(cookieToken, headerToken, binding string, bindingValu
 	if headerToken == "" {
 		return ErrTokenMissing
 	}
-	if cookieToken != headerToken {
+	if !hmac.Equal([]byte(cookieToken), []byte(headerToken)) {
 		return ErrTokenInvalid
 	}
 
@@ -138,19 +139,17 @@ func (m *Manager) CheckOrigin(r *http.Request) error {
 	if origin == "" {
 		referer := r.Header.Get("Referer")
 		if referer == "" {
-			return nil
+			return fmt.Errorf("%w: origin or referer is required", ErrOriginDenied)
 		}
 		origin = extractOriginFromReferer(referer)
 	}
 
 	if origin == "" {
-		return nil
+		return fmt.Errorf("%w: invalid referer", ErrOriginDenied)
 	}
 
-	for _, allowed := range m.allowedOrigins {
-		if origin == allowed {
-			return nil
-		}
+	if slices.Contains(m.allowedOrigins, origin) {
+		return nil
 	}
 
 	return fmt.Errorf("%w: %q", ErrOriginDenied, origin)

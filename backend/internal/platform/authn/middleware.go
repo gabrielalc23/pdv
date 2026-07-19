@@ -90,12 +90,27 @@ func (m *Middleware) RequireAccessToken(next http.Handler) http.Handler {
 			writeAuthError(w, authErr.HTTPStatus, authErr.Code, authErr.Message)
 			return
 		}
+		// PostgreSQL remains authoritative for security decisions. This closes
+		// cache-aside refill and failed-eviction races after revocation/context
+		// changes while Valkey remains a bounded acceleration layer.
+		state, err = m.persistence.getSessionState(r.Context(), sessionID)
+		if err != nil {
+			if errors.Is(err, ErrDependencyUnavailable) {
+				writeAuthError(w, 503, CodeDependencyUnavailable, "authentication service unavailable")
+				return
+			}
+			authErr := mapErr(err)
+			writeAuthError(w, authErr.HTTPStatus, authErr.Code, authErr.Message)
+			return
+		}
 
 		if state.UserID != userID {
 			writeAuthError(w, 401, CodeSessionRevoked, "session does not match user")
 			return
 		}
 
+		// Password changes revoke every access token immediately even if a
+		// post-commit Valkey invalidation fails and a session payload is stale.
 		if state.ClientID != "" && state.ClientID != claims.ClientID {
 			writeAuthError(w, 401, CodeSessionRevoked, "client id mismatch")
 			return
@@ -163,14 +178,15 @@ func (m *Middleware) tryTouch(ctx context.Context, state sessionState) {
 		return
 	}
 
+	background := context.WithoutCancel(ctx)
 	go func() {
-		if err := m.persistence.touchSession(ctx, state.SessionID, state.UserID, idleExpiresAt); err != nil {
+		if err := m.persistence.touchSession(background, state.SessionID, state.UserID, idleExpiresAt); err != nil {
 			slog.Warn("authn: failed to touch session", "error", err)
 		}
 	}()
 
 	go func() {
-		m.cache.setUserPasswordVersion(ctx, state.UserID, state.PasswordVersion)
+		m.cache.setUserPasswordVersion(background, state.UserID, state.PasswordVersion)
 	}()
 }
 

@@ -27,12 +27,12 @@ func TestRefreshTokenCodec_Generate(t *testing.T) {
 	}
 
 	if !strings.HasPrefix(raw, "rt_") {
-		t.Fatalf("expected prefix rt_, got %q", raw)
+		t.Fatal("expected prefix rt_")
 	}
 
 	parts := strings.SplitN(raw[3:], ".", 2)
 	if len(parts) != 2 {
-		t.Fatalf("expected uuid.secret format, got %q", raw)
+		t.Fatal("expected uuid.secret format")
 	}
 
 	selectorStr, secretB64 := parts[0], parts[1]

@@ -126,8 +126,8 @@ func (h *hasher) Verify(password, encodedHash string) (match, needsRehash bool, 
 	return true, needsRehash, nil
 }
 
-const argon2Version = 19
-const MaxPHCLength = 256
+const argon2Version int = 19
+const MaxPHCLength int = 256
 const maxArgon2MemoryKiB uint32 = 1 << 24
 const maxArgon2Iterations uint32 = 100
 const maxArgon2Parallelism uint32 = 255

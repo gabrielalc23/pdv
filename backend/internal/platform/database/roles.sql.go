@@ -73,7 +73,7 @@ VALUES (
     is_active,
     created_by_membership_id,
     created_at,
-    updated_at
+     updated_at
 `
 
 type CreateRoleParams struct {
@@ -392,6 +392,47 @@ func (q *Queries) ListMemberRoleBindings(ctx context.Context, arg ListMemberRole
 			&i.IsActive,
 			&i.StoreCode,
 			&i.StoreName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPermissionScopes = `-- name: ListPermissionScopes :many
+SELECT
+    code,
+    resource,
+    action,
+    scope_level,
+    description,
+    is_assignable,
+    created_at
+FROM permission_scopes
+ORDER BY code ASC
+`
+
+func (q *Queries) ListPermissionScopes(ctx context.Context) ([]PermissionScope, error) {
+	rows, err := q.db.Query(ctx, listPermissionScopes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PermissionScope{}
+	for rows.Next() {
+		var i PermissionScope
+		if err := rows.Scan(
+			&i.Code,
+			&i.Resource,
+			&i.Action,
+			&i.ScopeLevel,
+			&i.Description,
+			&i.IsAssignable,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

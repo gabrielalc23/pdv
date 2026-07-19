@@ -666,6 +666,57 @@ func (e PaymentStatus) Valid() bool {
 	return false
 }
 
+type PermissionScopeLevel string
+
+const (
+	PermissionScopeLevelORGANIZATION PermissionScopeLevel = "ORGANIZATION"
+	PermissionScopeLevelSTORE        PermissionScopeLevel = "STORE"
+)
+
+func (e *PermissionScopeLevel) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PermissionScopeLevel(s)
+	case string:
+		*e = PermissionScopeLevel(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PermissionScopeLevel: %T", src)
+	}
+	return nil
+}
+
+type NullPermissionScopeLevel struct {
+	PermissionScopeLevel PermissionScopeLevel
+	Valid                bool // Valid is true if PermissionScopeLevel is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPermissionScopeLevel) Scan(value interface{}) error {
+	if value == nil {
+		ns.PermissionScopeLevel, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PermissionScopeLevel.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPermissionScopeLevel) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PermissionScopeLevel), nil
+}
+
+func (e PermissionScopeLevel) Valid() bool {
+	switch e {
+	case PermissionScopeLevelORGANIZATION,
+		PermissionScopeLevelSTORE:
+		return true
+	}
+	return false
+}
+
 type RoleAssignmentScope string
 
 const (
@@ -1146,6 +1197,20 @@ type PaymentMethod struct {
 	UpdatedAt                 pgtype.Timestamptz
 }
 
+// Platform-managed catalog of explicit authorization scopes.
+type PermissionScope struct {
+	// Lowercase scope code composed from resource and action.
+	Code     string
+	Resource string
+	Action   string
+	// Context level at which the scope can become effective.
+	ScopeLevel  PermissionScopeLevel
+	Description string
+	// Whether the scope may be granted to custom roles.
+	IsAssignable bool
+	CreatedAt    pgtype.Timestamptz
+}
+
 // Approved receipt payments with explicit organization and store context; no refresh is required.
 type ReceiptPayment struct {
 	OrganizationID    pgtype.UUID
@@ -1170,7 +1235,7 @@ type Role struct {
 	ID pgtype.UUID
 	// Organization tenant that owns the role.
 	OrganizationID pgtype.UUID
-	// Stable lowercase kebab-case role key unique within the organization.
+	// Stable lowercase snake_case role key unique within the organization.
 	Key         string
 	Name        string
 	Description pgtype.Text
@@ -1287,4 +1352,37 @@ type Store struct {
 	ArchivedAt pgtype.Timestamptz
 	CreatedAt  pgtype.Timestamptz
 	UpdatedAt  pgtype.Timestamptz
+}
+
+// Enables and orders organization payment methods for one store.
+type StorePaymentMethod struct {
+	OrganizationID  pgtype.UUID
+	StoreID         pgtype.UUID
+	PaymentMethodID pgtype.UUID
+	IsActive        bool
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// Stores global user identities shared across organizations.
+type User struct {
+	// Internal UUIDv7 identifier.
+	ID pgtype.UUID
+	// User email preserving the trimmed display casing supplied by the application.
+	Email string
+	// Trimmed lowercase email used for identity lookup and uniqueness.
+	EmailNormalized string
+	// Name displayed in user-facing interfaces.
+	DisplayName string
+	// Lifecycle status of the global identity.
+	Status UserStatus
+	// Timestamp at which ownership of the email was verified.
+	EmailVerifiedAt pgtype.Timestamptz
+	// Monotonic version used to invalidate access after credential changes.
+	PasswordVersion int64
+	// Timestamp of the latest successful password login.
+	LastLoginAt pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }

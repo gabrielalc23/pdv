@@ -181,7 +181,7 @@ CREATE TABLE roles (
     CONSTRAINT roles_key_not_blank CHECK (BTRIM (key) <> ''),
     CONSTRAINT roles_name_not_blank CHECK (BTRIM (name) <> ''),
     CONSTRAINT roles_key_format CHECK (
-        key ~ '^[a-z0-9]+(?:-[a-z0-9]+)*$'
+        key ~ '^[a-z0-9]+(?:_[a-z0-9]+)*$'
     ),
     CONSTRAINT roles_system_immutable_check CHECK (
         NOT is_system
@@ -209,7 +209,7 @@ TABLE roles IS 'Organization-owned RBAC roles composed from platform permission 
 
 COMMENT ON COLUMN roles.organization_id IS 'Organization tenant that owns the role.';
 
-COMMENT ON COLUMN roles.key IS 'Stable lowercase kebab-case role key unique within the organization.';
+COMMENT ON COLUMN roles.key IS 'Stable lowercase snake_case role key unique within the organization.';
 
 COMMENT ON COLUMN roles.assignment_scope IS 'Determines whether bindings apply organization-wide or to one store.';
 

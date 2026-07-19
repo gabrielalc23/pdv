@@ -117,13 +117,71 @@ LEFT JOIN stores AS st
  AND st.id = s.current_store_id
 WHERE s.id = sqlc.arg(session_id);
 
+-- name: GetAuthSessionView :one
+SELECT
+    s.id,
+    s.user_id,
+    s.status,
+    s.client_id,
+    s.device_name,
+    s.context_kind,
+    s.current_organization_id,
+    s.current_membership_id,
+    s.current_store_id,
+    s.idle_expires_at,
+    s.absolute_expires_at,
+    s.last_seen_at,
+    s.created_at,
+    u.email,
+    u.display_name,
+    u.status AS user_status,
+    u.email_verified_at,
+    u.password_version,
+    o.name AS organization_name,
+    o.slug AS organization_slug,
+    o.status AS organization_status,
+    o.authorization_version AS organization_authorization_version,
+    m.status AS membership_status,
+    m.authorization_version AS membership_authorization_version,
+    st.code AS store_code,
+    st.name AS store_name,
+    st.status AS store_status
+FROM auth_sessions AS s
+JOIN users AS u ON u.id = s.user_id
+LEFT JOIN organizations AS o ON o.id = s.current_organization_id
+LEFT JOIN organization_memberships AS m
+  ON m.organization_id = s.current_organization_id
+ AND m.id = s.current_membership_id
+ AND m.user_id = s.user_id
+LEFT JOIN stores AS st
+  ON st.organization_id = s.current_organization_id
+ AND st.id = s.current_store_id
+WHERE s.id = sqlc.arg(session_id);
+
+-- name: GetLastActiveSessionContextForClient :one
+SELECT
+    id,
+    context_kind,
+    current_organization_id,
+    current_membership_id,
+    current_store_id
+FROM auth_sessions
+WHERE user_id = sqlc.arg(user_id)
+  AND client_id = sqlc.arg(client_id)
+  AND status = 'ACTIVE'
+  AND idle_expires_at > NOW()
+  AND absolute_expires_at > NOW()
+ORDER BY last_seen_at DESC, id DESC
+LIMIT 1;
+
 -- name: UpdateSessionContext :one
 UPDATE auth_sessions
 SET
     context_kind = sqlc.arg(context_kind),
     current_organization_id = sqlc.narg(current_organization_id),
     current_membership_id = sqlc.narg(current_membership_id),
-    current_store_id = sqlc.narg(current_store_id)
+    current_store_id = sqlc.narg(current_store_id),
+    last_seen_at = NOW()
 WHERE id = sqlc.arg(session_id)
   AND user_id = sqlc.arg(user_id)
   AND status = 'ACTIVE'
@@ -216,6 +274,16 @@ RETURNING
     revoked_at,
     revoke_reason;
 
+-- name: RevokeAllActiveUserSessions :many
+UPDATE auth_sessions
+SET
+    status = 'REVOKED',
+    revoked_at = NOW(),
+    revoke_reason = sqlc.arg(revoke_reason)
+WHERE user_id = sqlc.arg(user_id)
+  AND status = 'ACTIVE'
+RETURNING id;
+
 -- name: ExpireSessions :many
 UPDATE auth_sessions
 SET
@@ -239,12 +307,14 @@ RETURNING
 
 -- name: CreateRefreshToken :one
 INSERT INTO auth_refresh_tokens (
+    id,
     session_id,
     parent_token_id,
     secret_hash,
     expires_at
 )
 VALUES (
+    sqlc.arg(id),
     sqlc.arg(session_id),
     sqlc.narg(parent_token_id),
     sqlc.arg(secret_hash),
@@ -310,6 +380,23 @@ RETURNING
     consumed_at,
     revoked_at,
     created_at;
+
+-- name: RevokeAllUserRefreshTokens :execrows
+UPDATE auth_refresh_tokens AS t
+SET revoked_at = NOW()
+WHERE t.revoked_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM auth_sessions AS s
+      WHERE s.id = t.session_id
+        AND s.user_id = sqlc.arg(user_id)
+  );
+
+-- name: ListAllUserSessionIDs :many
+SELECT id
+FROM auth_sessions
+WHERE user_id = sqlc.arg(user_id)
+ORDER BY id;
 
 -- name: ListUserSessions :many
 SELECT

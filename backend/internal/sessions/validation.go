@@ -49,6 +49,8 @@ func validateContextCoherence(kind ContextKind, orgID, memID, storeID pgtype.UUI
 		if !orgID.Valid || !memID.Valid || !storeID.Valid {
 			return newValidationError("context", "store context requires organization_id, membership_id, and store_id")
 		}
+	default:
+		return newValidationError("context_kind", "unsupported context kind")
 	}
 	return nil
 }

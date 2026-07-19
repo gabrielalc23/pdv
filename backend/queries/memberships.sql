@@ -49,6 +49,32 @@ WHERE m.organization_id = sqlc.arg(organization_id)
   AND u.status = 'ACTIVE'
 LIMIT 1;
 
+-- name: GetMembershipContextForUser :one
+SELECT
+    m.id,
+    m.organization_id,
+    m.user_id,
+    m.status,
+    m.default_store_id,
+    m.authorization_version,
+    m.joined_at,
+    m.suspended_at,
+    m.removed_at,
+    m.created_by_user_id,
+    m.created_at,
+    m.updated_at,
+    o.name AS organization_name,
+    o.slug AS organization_slug,
+    o.status AS organization_status,
+    o.authorization_version AS organization_authorization_version
+FROM organization_memberships AS m
+JOIN organizations AS o ON o.id = m.organization_id
+WHERE m.organization_id = sqlc.arg(organization_id)
+  AND m.user_id = sqlc.arg(user_id)
+  AND m.status <> 'REMOVED'
+ORDER BY m.joined_at ASC, m.id ASC
+LIMIT 1;
+
 -- name: GetMembershipForUpdate :one
 SELECT
     id,

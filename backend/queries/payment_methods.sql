@@ -47,6 +47,34 @@ RETURNING
     created_at,
     updated_at;
 
+-- name: UpsertStorePaymentMethod :one
+INSERT INTO store_payment_methods (
+    organization_id,
+    store_id,
+    payment_method_id,
+    is_active,
+    sort_order
+)
+VALUES (
+    sqlc.arg(organization_id),
+    sqlc.arg(store_id),
+    sqlc.arg(payment_method_id),
+    sqlc.arg(is_active),
+    sqlc.arg(sort_order)
+)
+ON CONFLICT (organization_id, store_id, payment_method_id)
+DO UPDATE SET
+    is_active = EXCLUDED.is_active,
+    sort_order = EXCLUDED.sort_order
+RETURNING
+    organization_id,
+    store_id,
+    payment_method_id,
+    is_active,
+    sort_order,
+    created_at,
+    updated_at;
+
 -- name: GetPaymentMethodByIDForOrganization :one
 SELECT
     method.id,

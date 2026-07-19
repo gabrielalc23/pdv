@@ -53,16 +53,22 @@ func sessionStateFromRow(row database.GetAuthSessionStateRow) sessionState {
 }
 
 type cachedSessionPayload struct {
-	Version       int    `json:"version"`
-	Status        string `json:"status"`
-	UserID        string `json:"user_id"`
-	ContextKind   string `json:"context_kind"`
-	OrgID         string `json:"org_id,omitempty"`
-	MembershipID  string `json:"membership_id,omitempty"`
-	StoreID       string `json:"store_id,omitempty"`
-	IdleExpiresAt int64  `json:"idle_expires_at"`
-	AbsExpiresAt  int64  `json:"abs_expires_at"`
-	PasswordVer   int64  `json:"pv"`
-	OrgAuthVer    *int64 `json:"oav,omitempty"`
-	MemAuthVer    *int64 `json:"mav,omitempty"`
+	Version            int    `json:"version"`
+	SessionID          string `json:"session_id"`
+	Status             string `json:"status"`
+	UserID             string `json:"user_id"`
+	UserStatus         string `json:"user_status"`
+	ClientID           string `json:"client_id"`
+	ContextKind        string `json:"context_kind"`
+	OrgID              string `json:"org_id,omitempty"`
+	OrganizationStatus string `json:"organization_status,omitempty"`
+	MembershipID       string `json:"membership_id,omitempty"`
+	MembershipStatus   string `json:"membership_status,omitempty"`
+	StoreID            string `json:"store_id,omitempty"`
+	StoreStatus        string `json:"store_status,omitempty"`
+	IdleExpiresAt      int64  `json:"idle_expires_at"`
+	AbsExpiresAt       int64  `json:"abs_expires_at"`
+	PasswordVer        int64  `json:"pv"`
+	OrgAuthVer         *int64 `json:"oav,omitempty"`
+	MemAuthVer         *int64 `json:"mav,omitempty"`
 }

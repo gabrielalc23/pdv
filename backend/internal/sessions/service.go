@@ -52,11 +52,22 @@ type RevokeAllResult struct {
 }
 
 type Service struct {
-	codec    RefreshTokenCodec
-	provider TxProvider
-	store    Querier
-	cfg      Config
-	clock    clock.Clock
+	codec            RefreshTokenCodec
+	provider         TxProvider
+	store            Querier
+	cfg              Config
+	clock            clock.Clock
+	cacheInvalidator SessionCacheInvalidator
+}
+
+func (s *Service) SetCacheInvalidator(invalidator SessionCacheInvalidator) {
+	s.cacheInvalidator = invalidator
+}
+
+func (s *Service) invalidateSession(ctx context.Context, sessionID pgtype.UUID) {
+	if s.cacheInvalidator != nil {
+		s.cacheInvalidator.InvalidateSession(ctx, sessionID)
+	}
 }
 
 type Config struct {

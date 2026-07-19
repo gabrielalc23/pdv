@@ -17,6 +17,8 @@ var (
 	ErrSessionNotOwned       = errors.New("session does not belong to the user")
 	ErrInvalidClientID       = errors.New("invalid client id")
 	ErrInvalidContext        = errors.New("invalid session context")
+	ErrUserSuspended         = errors.New("user is suspended")
+	ErrUserDisabled          = errors.New("user is disabled")
 	ErrDependencyUnavailable = errors.New("authentication dependency unavailable")
 )
 

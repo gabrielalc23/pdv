@@ -65,24 +65,24 @@ func (f *fallbackLimiter) Allow(ctx context.Context, key string, limit int, wind
 	if !exists {
 		if len(f.entries) >= f.maxItems {
 			f.mu.Unlock()
-			slog.Warn("rate limit fallback at capacity, allowing request",
-				"key", key, "max_items", f.maxItems)
-			return Result{Allowed: true, Remaining: limit - 1, ResetAt: now.Add(window)}, nil
+			slog.Warn("rate limiter fallback at capacity",
+				"component", "rate_limiter",
+				"backend", "local",
+				"reason", "capacity",
+				"max_items", f.maxItems)
+			return Result{Allowed: false, Remaining: 0, ResetAt: now.Add(window)}, nil
 		}
 		entry = &fallbackEntry{count: 0, resetAt: now.Add(window)}
 		f.entries[key] = entry
 	}
 
-	if now.After(entry.resetAt) {
+	if !now.Before(entry.resetAt) {
 		entry.count = 0
 		entry.resetAt = now.Add(window)
 	}
 
 	entry.count++
-	remaining := limit - entry.count
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(limit-entry.count, 0)
 
 	if entry.count > limit {
 		f.mu.Unlock()
@@ -95,7 +95,7 @@ func (f *fallbackLimiter) Allow(ctx context.Context, key string, limit int, wind
 
 func (f *fallbackLimiter) evictExpired(now time.Time) {
 	for k, v := range f.entries {
-		if now.After(v.resetAt) {
+		if !now.Before(v.resetAt) {
 			delete(f.entries, k)
 		}
 	}

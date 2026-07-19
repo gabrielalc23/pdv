@@ -46,6 +46,16 @@ RETURNING
     metadata,
     occurred_at;
 
+-- name: HasSecurityAuditEventForEntity :one
+SELECT EXISTS (
+    SELECT 1
+    FROM security_audit_events
+    WHERE event_type = sqlc.arg(event_type)
+      AND entity_type = sqlc.arg(entity_type)
+      AND entity_id = sqlc.arg(entity_id)
+      AND outcome = 'SUCCESS'
+);
+
 -- name: ListAuditEvents :many
 SELECT
     id,

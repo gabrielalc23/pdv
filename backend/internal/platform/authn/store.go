@@ -35,7 +35,12 @@ func (l *sessionLoader) load(ctx context.Context, sessionID pgtype.UUID) (sessio
 	}
 
 	if cached != nil {
-		return l.fromCache(cached, now)
+		state, cacheErr := l.fromCache(cached, now)
+		if cacheErr == nil {
+			return state, nil
+		}
+		slog.Warn("authn: invalid session cache entry, falling back to database", "error", cacheErr)
+		return l.loadFromDBAndCache(ctx, sessionID, now)
 	}
 
 	state, err := l.loadFromDBAndCache(ctx, sessionID, now)
@@ -59,7 +64,7 @@ func (l *sessionLoader) loadFromDBAndCache(ctx context.Context, sessionID pgtype
 		return sessionState{}, err
 	}
 
-	ttl := computeCacheTTL(state, now)
+	ttl := computeCacheTTL(state, now, l.cache.ttl)
 	l.cache.set(ctx, sessionID, state, ttl)
 	l.cacheVersionCache(ctx, state)
 
@@ -85,12 +90,20 @@ func (l *sessionLoader) fromCache(payload *cachedSessionPayload, now time.Time) 
 	}
 
 	var userID pgtype.UUID
-	_ = userID.Scan(payload.UserID)
+	if err := userID.Scan(payload.UserID); err != nil {
+		return sessionState{}, err
+	}
+	var sessionID pgtype.UUID
+	if err := sessionID.Scan(payload.SessionID); err != nil {
+		return sessionState{}, err
+	}
 
 	state := sessionState{
+		SessionID:       sessionID,
 		SessionStatus:   database.AuthSessionStatus(payload.Status),
 		UserID:          userID,
-		ClientID:        "",
+		UserStatus:      database.UserStatus(payload.UserStatus),
+		ClientID:        payload.ClientID,
 		ContextKind:     database.AuthContextKind(payload.ContextKind),
 		PasswordVersion: payload.PasswordVer,
 	}
@@ -102,13 +115,28 @@ func (l *sessionLoader) fromCache(payload *cachedSessionPayload, now time.Time) 
 		state.AbsoluteExpiresAt = time.Unix(payload.AbsExpiresAt, 0)
 	}
 	if payload.OrgID != "" {
-		_ = state.OrganizationID.Scan(payload.OrgID)
+		if err := state.OrganizationID.Scan(payload.OrgID); err != nil {
+			return sessionState{}, err
+		}
 	}
 	if payload.MembershipID != "" {
-		_ = state.MembershipID.Scan(payload.MembershipID)
+		if err := state.MembershipID.Scan(payload.MembershipID); err != nil {
+			return sessionState{}, err
+		}
 	}
 	if payload.StoreID != "" {
-		_ = state.StoreID.Scan(payload.StoreID)
+		if err := state.StoreID.Scan(payload.StoreID); err != nil {
+			return sessionState{}, err
+		}
+	}
+	if payload.OrganizationStatus != "" {
+		state.OrganizationStatus = database.NullOrganizationStatus{OrganizationStatus: database.OrganizationStatus(payload.OrganizationStatus), Valid: true}
+	}
+	if payload.MembershipStatus != "" {
+		state.MembershipStatus = database.NullMembershipStatus{MembershipStatus: database.MembershipStatus(payload.MembershipStatus), Valid: true}
+	}
+	if payload.StoreStatus != "" {
+		state.StoreStatus = database.NullStoreStatus{StoreStatus: database.StoreStatus(payload.StoreStatus), Valid: true}
 	}
 	if payload.OrgAuthVer != nil {
 		state.OrganizationAuthorizationVersion = pgtype.Int8{Int64: *payload.OrgAuthVer, Valid: true}
@@ -120,11 +148,9 @@ func (l *sessionLoader) fromCache(payload *cachedSessionPayload, now time.Time) 
 	return state, nil
 }
 
-func computeCacheTTL(state sessionState, now time.Time) time.Duration {
-	const defaultTTL = 60 * time.Second
-
-	idleTTL := time.Until(state.IdleExpiresAt)
-	absTTL := time.Until(state.AbsoluteExpiresAt)
+func computeCacheTTL(state sessionState, now time.Time, configuredTTL time.Duration) time.Duration {
+	idleTTL := state.IdleExpiresAt.Sub(now)
+	absTTL := state.AbsoluteExpiresAt.Sub(now)
 
 	var ttl time.Duration
 	if idleTTL < absTTL {
@@ -133,10 +159,12 @@ func computeCacheTTL(state sessionState, now time.Time) time.Duration {
 		ttl = absTTL
 	}
 
-	if ttl <= 0 || ttl > defaultTTL {
-		return defaultTTL
+	if ttl <= 0 {
+		return 0
 	}
-
+	if configuredTTL > 0 && ttl > configuredTTL {
+		return configuredTTL
+	}
 	return ttl
 }
 

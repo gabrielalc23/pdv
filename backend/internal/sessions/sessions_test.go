@@ -167,8 +167,10 @@ type mockQuerier struct {
 	getRefreshTokenForUpdateFn   func(ctx context.Context, id pgtype.UUID) (database.AuthRefreshToken, error)
 	consumeAndReplaceFn          func(ctx context.Context, arg database.ConsumeAndReplaceRefreshTokenParams) (database.ConsumeAndReplaceRefreshTokenRow, error)
 	revokeSessionRefreshTokensFn func(ctx context.Context, sessionID pgtype.UUID) ([]database.RevokeSessionRefreshTokensRow, error)
+	revokeAllUserRefreshTokensFn func(ctx context.Context, userID pgtype.UUID) (int64, error)
 	revokeSessionFn              func(ctx context.Context, arg database.RevokeSessionParams) (database.RevokeSessionRow, error)
 	revokeAllUserSessionsFn      func(ctx context.Context, arg database.RevokeAllUserSessionsParams) ([]database.RevokeAllUserSessionsRow, error)
+	revokeAllActiveSessionsFn    func(ctx context.Context, arg database.RevokeAllActiveUserSessionsParams) ([]pgtype.UUID, error)
 	markSessionCompromisedFn     func(ctx context.Context, arg database.MarkSessionCompromisedParams) (database.MarkSessionCompromisedRow, error)
 	listUserSessionsFn           func(ctx context.Context, userID pgtype.UUID) ([]database.AuthSession, error)
 	getAuthSessionByIDFn         func(ctx context.Context, id pgtype.UUID) (database.AuthSession, error)
@@ -198,12 +200,20 @@ func (m *mockQuerier) RevokeSessionRefreshTokens(ctx context.Context, sessionID 
 	return m.revokeSessionRefreshTokensFn(ctx, sessionID)
 }
 
+func (m *mockQuerier) RevokeAllUserRefreshTokens(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	return m.revokeAllUserRefreshTokensFn(ctx, userID)
+}
+
 func (m *mockQuerier) RevokeSession(ctx context.Context, arg database.RevokeSessionParams) (database.RevokeSessionRow, error) {
 	return m.revokeSessionFn(ctx, arg)
 }
 
 func (m *mockQuerier) RevokeAllUserSessions(ctx context.Context, arg database.RevokeAllUserSessionsParams) ([]database.RevokeAllUserSessionsRow, error) {
 	return m.revokeAllUserSessionsFn(ctx, arg)
+}
+
+func (m *mockQuerier) RevokeAllActiveUserSessions(ctx context.Context, arg database.RevokeAllActiveUserSessionsParams) ([]pgtype.UUID, error) {
+	return m.revokeAllActiveSessionsFn(ctx, arg)
 }
 
 func (m *mockQuerier) MarkSessionCompromised(ctx context.Context, arg database.MarkSessionCompromisedParams) (database.MarkSessionCompromisedRow, error) {

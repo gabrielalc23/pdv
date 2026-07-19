@@ -13,150 +13,143 @@ import (
 )
 
 func (s *Service) RevokeCurrentSession(ctx context.Context, userID, sessionID pgtype.UUID, reqMeta requestmeta.RequestMetadata) (RevokeResult, error) {
-	var result RevokeResult
-
-	err := s.provider.WithTx(ctx, func(q Querier) error {
-		row, err := q.RevokeSession(ctx, database.RevokeSessionParams{
-			SessionID:    sessionID,
-			UserID:       userID,
-			RevokeReason: pgtype.Text{String: "user_logged_out", Valid: true},
-		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrSessionNotFound
-			}
-			return fmt.Errorf("%w: revoke session: %w", ErrDependencyUnavailable, err)
-		}
-
-		_, err = q.RevokeSessionRefreshTokens(ctx, sessionID)
-		if err != nil {
-			return fmt.Errorf("%w: revoke refresh tokens: %w", ErrDependencyUnavailable, err)
-		}
-
-		_ = writeAuditEvent(ctx, q, "auth.logged_out", database.AuditOutcomeSUCCESS, map[string]any{
-			"reason": "user_logged_out",
-		}, reqMeta)
-
-		result = RevokeResult{
-			Session: sessionFromDBRow(database.AuthSession{
-				ID:           row.ID,
-				UserID:       row.UserID,
-				Status:       row.Status,
-				RevokedAt:    pgtype.Timestamptz{Time: row.RevokedAt.Time, Valid: row.RevokedAt.Valid},
-				RevokeReason: row.RevokeReason,
-			}),
-			MustClearCookies: true,
-		}
-
-		return nil
-	})
-
-	return result, err
+	return s.revokeSession(ctx, userID, sessionID, sessionID, "user_logged_out", "auth.logged_out", reqMeta)
 }
 
+// RevokeSession preserves the original API. Call RevokeSessionWithCurrent when
+// the caller needs MustClearCookies to identify the current session.
 func (s *Service) RevokeSession(ctx context.Context, actorUserID, targetSessionID pgtype.UUID, reqMeta requestmeta.RequestMetadata) (RevokeResult, error) {
+	return s.RevokeSessionWithCurrent(ctx, actorUserID, targetSessionID, pgtype.UUID{}, reqMeta)
+}
+
+func (s *Service) RevokeSessionWithCurrent(ctx context.Context, actorUserID, targetSessionID, currentSessionID pgtype.UUID, reqMeta requestmeta.RequestMetadata) (RevokeResult, error) {
+	return s.revokeSession(ctx, actorUserID, targetSessionID, currentSessionID, "user_revoked", "session.revoked", reqMeta)
+}
+
+func (s *Service) revokeSession(
+	ctx context.Context,
+	actorUserID pgtype.UUID,
+	targetSessionID pgtype.UUID,
+	currentSessionID pgtype.UUID,
+	reason string,
+	eventType string,
+	reqMeta requestmeta.RequestMetadata,
+) (RevokeResult, error) {
 	var result RevokeResult
 
 	err := s.provider.WithTx(ctx, func(q Querier) error {
-		session, err := q.GetAuthSessionByID(ctx, targetSessionID)
+		row, err := q.GetAuthSessionForUpdate(ctx, targetSessionID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrSessionNotFound
+				return fmt.Errorf("%w: target session does not exist", ErrSessionNotFound)
 			}
-			return fmt.Errorf("%w: get session: %w", ErrDependencyUnavailable, err)
+			return fmt.Errorf("%w: get target session: %w", ErrDependencyUnavailable, err)
+		}
+		if row.UserID != actorUserID {
+			return fmt.Errorf("%w: target session does not exist", ErrSessionNotFound)
 		}
 
-		if session.UserID != actorUserID {
-			return ErrSessionNotFound
-		}
-
-		if session.Status != database.AuthSessionStatusACTIVE {
-			result = RevokeResult{
-				Session:          sessionFromDBRow(session),
-				MustClearCookies: session.ID == actorUserID,
+		session := sessionFromDBRow(authSessionFromForUpdate(row))
+		previousStatus := row.Status
+		statusChanged := row.Status == database.AuthSessionStatusACTIVE
+		if statusChanged {
+			revoked, err := q.RevokeSession(ctx, database.RevokeSessionParams{
+				SessionID:    targetSessionID,
+				UserID:       actorUserID,
+				RevokeReason: pgtype.Text{String: reason, Valid: true},
+			})
+			if err != nil {
+				if errors.Is(err, pgx.ErrNoRows) {
+					return fmt.Errorf("%w: target session is not active", ErrSessionNotFound)
+				}
+				return fmt.Errorf("%w: revoke session: %w", ErrDependencyUnavailable, err)
 			}
-			return nil
-		}
 
-		row, err := q.RevokeSession(ctx, database.RevokeSessionParams{
-			SessionID:    targetSessionID,
-			UserID:       actorUserID,
-			RevokeReason: pgtype.Text{String: "user_revoked", Valid: true},
-		})
-		if err != nil {
-			if errors.Is(err, pgx.ErrNoRows) {
-				return ErrSessionNotFound
+			session.Status = string(revoked.Status)
+			session.RevokedAt = revoked.RevokedAt
+			session.RevokeReason = revoked.RevokeReason
+			if revoked.UpdatedAt.Valid {
+				session.UpdatedAt = revoked.UpdatedAt.Time
 			}
-			return fmt.Errorf("%w: revoke session: %w", ErrDependencyUnavailable, err)
 		}
 
-		_, err = q.RevokeSessionRefreshTokens(ctx, targetSessionID)
-		if err != nil {
+		if _, err := q.RevokeSessionRefreshTokens(ctx, targetSessionID); err != nil {
 			return fmt.Errorf("%w: revoke refresh tokens: %w", ErrDependencyUnavailable, err)
 		}
 
-		_ = writeAuditEvent(ctx, q, "session.revoked", database.AuditOutcomeSUCCESS, map[string]any{
-			"reason":          "user_revoked",
-			"session_id":      uuidStr(targetSessionID),
-			"previous_status": "ACTIVE",
-			"new_status":      "REVOKED",
-		}, reqMeta)
-
-		isCurrent := targetSessionID == actorUserID
-		result = RevokeResult{
-			Session: sessionFromDBRow(database.AuthSession{
-				ID:           row.ID,
-				UserID:       row.UserID,
-				Status:       row.Status,
-				RevokedAt:    pgtype.Timestamptz{Time: row.RevokedAt.Time, Valid: row.RevokedAt.Valid},
-				RevokeReason: row.RevokeReason,
-			}),
-			MustClearCookies: isCurrent,
+		if statusChanged {
+			if err := writeAuditEventWithSubject(ctx, q, eventType, database.AuditOutcomeSUCCESS, map[string]any{
+				"reason":          reason,
+				"session_id":      uuidStr(targetSessionID),
+				"previous_status": string(previousStatus),
+				"new_status":      string(database.AuthSessionStatusREVOKED),
+			}, reqMeta, auditSubject{UserID: row.UserID, MembershipID: row.CurrentMembershipID, OrganizationID: row.CurrentOrganizationID, StoreID: row.CurrentStoreID, SessionID: row.ID}); err != nil {
+				return fmt.Errorf("%w: write session revoke audit event: %w", ErrDependencyUnavailable, err)
+			}
 		}
 
+		result = RevokeResult{
+			Session:          session,
+			MustClearCookies: targetSessionID == currentSessionID,
+		}
 		return nil
 	})
+	if err != nil {
+		return RevokeResult{}, fmt.Errorf("revoke session transaction: %w", err)
+	}
 
-	return result, err
+	s.invalidateSession(ctx, targetSessionID)
+	return result, nil
 }
 
 func (s *Service) RevokeAllUserSessions(ctx context.Context, userID, currentSessionID pgtype.UUID, reqMeta requestmeta.RequestMetadata) (RevokeAllResult, error) {
 	var result RevokeAllResult
 
 	err := s.provider.WithTx(ctx, func(q Querier) error {
-		rows, err := q.RevokeAllUserSessions(ctx, database.RevokeAllUserSessionsParams{
-			UserID:       userID,
-			RevokeReason: pgtype.Text{String: "user_logged_out_all", Valid: true},
-		})
+		ids, err := s.RevokeAllUserSessionsInTx(ctx, q, userID, "user_logged_out_all")
 		if err != nil {
-			return fmt.Errorf("%w: revoke all user sessions: %w", ErrDependencyUnavailable, err)
+			return err
 		}
+		result.AffectedSessionIDs = ids
 
-		for _, row := range rows {
-			_, revokeErr := q.RevokeSessionRefreshTokens(ctx, row.ID)
-			if revokeErr != nil {
-				return fmt.Errorf("%w: revoke refresh tokens for session %s: %w", ErrDependencyUnavailable, uuidStr(row.ID), revokeErr)
-			}
-			result.AffectedSessionIDs = append(result.AffectedSessionIDs, row.ID)
-		}
-
-		currentRevoked := false
 		for _, id := range result.AffectedSessionIDs {
 			if id == currentSessionID {
-				currentRevoked = true
+				result.MustClearCookies = true
 				break
 			}
 		}
 
-		_ = writeAuditEvent(ctx, q, "auth.logged_out_all", database.AuditOutcomeSUCCESS, map[string]any{
+		if err := writeAuditEventWithSubject(ctx, q, "auth.logged_out_all", database.AuditOutcomeSUCCESS, map[string]any{
 			"reason":                 "user_logged_out_all",
-			"affected_session_count": len(rows),
-		}, reqMeta)
-
-		result.MustClearCookies = currentRevoked
+			"affected_session_count": len(ids),
+		}, reqMeta, auditSubject{UserID: userID, SessionID: currentSessionID}); err != nil {
+			return fmt.Errorf("%w: write revoke-all audit event: %w", ErrDependencyUnavailable, err)
+		}
 
 		return nil
 	})
+	if err != nil {
+		return RevokeAllResult{}, fmt.Errorf("revoke all sessions transaction: %w", err)
+	}
 
-	return result, err
+	for _, id := range result.AffectedSessionIDs {
+		s.invalidateSession(ctx, id)
+	}
+	return result, nil
+}
+
+// RevokeAllUserSessionsInTx composes session and refresh-token revocation into
+// a caller-owned transaction. It does not commit, write audit data, or invalidate caches.
+func (s *Service) RevokeAllUserSessionsInTx(ctx context.Context, q Querier, userID pgtype.UUID, reason string) ([]pgtype.UUID, error) {
+	ids, err := q.RevokeAllActiveUserSessions(ctx, database.RevokeAllActiveUserSessionsParams{
+		UserID:       userID,
+		RevokeReason: pgtype.Text{String: reason, Valid: true},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("%w: revoke all user sessions: %w", ErrDependencyUnavailable, err)
+	}
+	if _, err := q.RevokeAllUserRefreshTokens(ctx, userID); err != nil {
+		return nil, fmt.Errorf("%w: revoke all user refresh tokens: %w", ErrDependencyUnavailable, err)
+	}
+	return ids, nil
 }

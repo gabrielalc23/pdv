@@ -150,6 +150,81 @@ func (q *Queries) GetActiveMembership(ctx context.Context, arg GetActiveMembersh
 	return i, err
 }
 
+const getMembershipContextForUser = `-- name: GetMembershipContextForUser :one
+SELECT
+    m.id,
+    m.organization_id,
+    m.user_id,
+    m.status,
+    m.default_store_id,
+    m.authorization_version,
+    m.joined_at,
+    m.suspended_at,
+    m.removed_at,
+    m.created_by_user_id,
+    m.created_at,
+    m.updated_at,
+    o.name AS organization_name,
+    o.slug AS organization_slug,
+    o.status AS organization_status,
+    o.authorization_version AS organization_authorization_version
+FROM organization_memberships AS m
+JOIN organizations AS o ON o.id = m.organization_id
+WHERE m.organization_id = $1
+  AND m.user_id = $2
+  AND m.status <> 'REMOVED'
+ORDER BY m.joined_at ASC, m.id ASC
+LIMIT 1
+`
+
+type GetMembershipContextForUserParams struct {
+	OrganizationID pgtype.UUID
+	UserID         pgtype.UUID
+}
+
+type GetMembershipContextForUserRow struct {
+	ID                               pgtype.UUID
+	OrganizationID                   pgtype.UUID
+	UserID                           pgtype.UUID
+	Status                           MembershipStatus
+	DefaultStoreID                   pgtype.UUID
+	AuthorizationVersion             int64
+	JoinedAt                         pgtype.Timestamptz
+	SuspendedAt                      pgtype.Timestamptz
+	RemovedAt                        pgtype.Timestamptz
+	CreatedByUserID                  pgtype.UUID
+	CreatedAt                        pgtype.Timestamptz
+	UpdatedAt                        pgtype.Timestamptz
+	OrganizationName                 string
+	OrganizationSlug                 string
+	OrganizationStatus               OrganizationStatus
+	OrganizationAuthorizationVersion int64
+}
+
+func (q *Queries) GetMembershipContextForUser(ctx context.Context, arg GetMembershipContextForUserParams) (GetMembershipContextForUserRow, error) {
+	row := q.db.QueryRow(ctx, getMembershipContextForUser, arg.OrganizationID, arg.UserID)
+	var i GetMembershipContextForUserRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.Status,
+		&i.DefaultStoreID,
+		&i.AuthorizationVersion,
+		&i.JoinedAt,
+		&i.SuspendedAt,
+		&i.RemovedAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OrganizationName,
+		&i.OrganizationSlug,
+		&i.OrganizationStatus,
+		&i.OrganizationAuthorizationVersion,
+	)
+	return i, err
+}
+
 const getMembershipForUpdate = `-- name: GetMembershipForUpdate :one
 SELECT
     id,

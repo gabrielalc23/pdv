@@ -45,3 +45,11 @@ func (s *persistenceStore) touchSession(ctx context.Context, sessionID, userID p
 	}
 	return nil
 }
+
+func (s *persistenceStore) getUserPasswordVersion(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	row, err := s.q.GetUserByID(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("%w: load password version: %w", ErrDependencyUnavailable, err)
+	}
+	return row.PasswordVersion, nil
+}

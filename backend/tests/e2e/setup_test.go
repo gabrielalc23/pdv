@@ -14,7 +14,15 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/app"
+	"github.com/gabrielalc23/pdv/internal/platform/cookie"
+	"github.com/gabrielalc23/pdv/internal/platform/csrf"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/mailer"
+	"github.com/gabrielalc23/pdv/internal/platform/password"
+	"github.com/gabrielalc23/pdv/internal/platform/ratelimit"
+	"github.com/gabrielalc23/pdv/internal/platform/requestmeta"
+	jwt "github.com/gabrielalc23/pdv/internal/platform/token/jwt"
+	"github.com/gabrielalc23/pdv/internal/platform/valkey"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -24,18 +32,25 @@ var (
 	testOrgID        string
 	testStoreID      string
 	testMembershipID string
+	testPool         *pgxpool.Pool
+	testStore        *database.PostgresStore
+	testValkey       *valkey.Client
 )
 
 func TestMain(m *testing.M) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://pdv:pdv@localhost:5432/pdv?sslmode=disable"
+		dsn = "postgres://pdv:pdv@localhost:5433/pdv?sslmode=disable"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	if !tryConnect(ctx, dsn) {
+	valkeyAddr := os.Getenv("VALKEY_ADDR")
+	if valkeyAddr == "" {
+		valkeyAddr = "localhost:6380"
+	}
+	if !tryConnect(ctx, dsn) || !tryValkey(ctx, valkeyAddr) {
 		startDeps(ctx, dsn)
 	}
 
@@ -48,7 +63,7 @@ func TestMain(m *testing.M) {
 	pool.Close()
 
 	testDSN := replaceDBName(dsn, testDBName)
-	testPool := mustConnect(ctx, testDSN)
+	testPool = mustConnect(ctx, testDSN)
 	defer testPool.Close()
 
 	runMigrations(ctx, testPool)
@@ -56,9 +71,19 @@ func TestMain(m *testing.M) {
 	seedPaymentMethods(ctx, testPool, testOrgID, testStoreID)
 
 	store := database.NewStore(testPool)
+	testStore = store
 	lis := mustListen()
 	baseURL = "http://" + lis.Addr().String()
-	server := startServer(store, lis.Addr().String())
+	vk, err := valkey.NewClient(valkey.Config{Addr: valkeyAddr, DB: 15})
+	if err != nil {
+		log.Fatalf("valkey: %v", err)
+	}
+	defer vk.Close()
+	testValkey = vk
+	if _, err := vk.Do(ctx, vk.B().Flushdb().Build()); err != nil {
+		log.Fatalf("flush isolated e2e valkey database: %v", err)
+	}
+	server := startServer(store, vk, lis.Addr().String())
 
 	go func() {
 		if err := server.Serve(lis); err != nil && err != http.ErrServerClosed {
@@ -127,7 +152,7 @@ func tryConnect(ctx context.Context, dsn string) bool {
 func startDeps(ctx context.Context, dsn string) {
 	cmd := exec.CommandContext(ctx,
 		"docker", "compose",
-		"-f", "../docker-compose.test.yml",
+		"-f", "../../docker-compose.test.yml",
 		"up", "-d",
 	)
 	out, err := cmd.CombinedOutput()
@@ -139,9 +164,24 @@ func startDeps(ctx context.Context, dsn string) {
 		if tryConnect(ctx, dsn) {
 			return
 		}
-		time.Sleep(time.Second)
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			log.Fatal("dependency startup cancelled")
+		case <-timer.C:
+		}
 	}
 	log.Fatal("postgres not ready after 30s")
+}
+
+func tryValkey(ctx context.Context, addr string) bool {
+	client, err := valkey.NewClient(valkey.Config{Addr: addr, DB: 15})
+	if err != nil {
+		return false
+	}
+	defer client.Close()
+	return client.Ping(ctx) == nil
 }
 
 func mustConnect(ctx context.Context, dsn string) *pgxpool.Pool {
@@ -309,11 +349,44 @@ func mustListen() net.Listener {
 	return lis
 }
 
-func startServer(store *database.PostgresStore, addr string) *http.Server {
-	handler := app.New(app.Dependencies{
-		Store: store,
-	})
+func startServer(store *database.PostgresStore, vk *valkey.Client, addr string) *http.Server {
+	logMailer, err := mailer.NewLogMailer("test")
+	if err != nil {
+		log.Fatalf("test log mailer: %v", err)
+	}
+	handler := app.New(testDependencies(store, vk, "http://"+addr, true, false, logMailer))
 	return app.NewHTTPServer(addr, handler)
+}
+
+func testDependencies(store *database.PostgresStore, vk *valkey.Client, publicURL string, registrationEnabled, requireVerified bool, authMailer mailer.Mailer) app.Dependencies {
+	hasher, err := password.NewHasher(password.DefaultParams())
+	if err != nil {
+		log.Fatalf("password hasher: %v", err)
+	}
+	keyring, err := jwt.NewEphemeralKeyring("e2e-key")
+	if err != nil {
+		log.Fatalf("keyring: %v", err)
+	}
+	cookies, err := cookie.NewManager(cookie.Config{Secure: false, SameSite: "Lax", RefreshName: "pdv_refresh", CSRFName: "pdv_csrf", Env: "test"})
+	if err != nil {
+		log.Fatalf("cookies: %v", err)
+	}
+	csrfManager, err := csrf.NewManager([]byte("0123456789abcdef0123456789abcdef"), []string{publicURL})
+	if err != nil {
+		log.Fatalf("csrf: %v", err)
+	}
+	meta, err := requestmeta.NewResolver(nil)
+	if err != nil {
+		log.Fatalf("request metadata: %v", err)
+	}
+	fallback := ratelimit.NewFallbackLimiter(10000)
+	return app.Dependencies{
+		Store: store, Valkey: vk, PasswordHasher: hasher, PasswordPolicy: password.DefaultPolicy(), PasswordBlocklist: password.NewBuiltinBlocklist(),
+		CookieManager: cookies, CSRFManager: csrfManager, JWTKeyring: keyring, JWTIssuer: "pdv-auth", JWTAudience: "pdv-api", AccessTokenTTL: 5 * time.Minute, JWTClockSkew: 30 * time.Second,
+		RequestMeta: meta, RateLimiter: ratelimit.NewValkeyLimiter(vk, fallback), RefreshIdleTTL: 30 * 24 * time.Hour, SessionAbsoluteTTL: 90 * 24 * time.Hour,
+		AuthTokenHashKey: []byte("abcdef0123456789abcdef0123456789"), RateLimitKeySecret: []byte("fedcba9876543210fedcba9876543210"),
+		RegistrationEnabled: registrationEnabled, RequireVerifiedEmail: requireVerified, AppPublicURL: publicURL, AuthSessionCacheTTL: time.Minute, AuthSessionTouchInterval: 30 * time.Second, Mailer: authMailer,
+	}
 }
 
 func waitForReady(ctx context.Context) {

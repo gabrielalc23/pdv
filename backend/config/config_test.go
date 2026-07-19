@@ -1,11 +1,32 @@
 package config_test
 
 import (
+	"encoding/base64"
 	"testing"
 	"time"
 
 	"github.com/gabrielalc23/pdv/config"
 )
+
+func setProductionSecrets(t *testing.T) {
+	t.Helper()
+	secret := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	t.Setenv("AUTH_TOKEN_HASH_KEY", secret)
+	t.Setenv("AUTH_CSRF_SECRET", secret)
+	t.Setenv("RATE_LIMIT_KEY_SECRET", secret)
+}
+
+func setProductionMailer(t *testing.T) {
+	t.Helper()
+	t.Setenv("MAIL_DRIVER", "smtp")
+	t.Setenv("MAIL_FROM", "noreply@example.com")
+	t.Setenv("SMTP_HOST", "smtp.example.com")
+	t.Setenv("SMTP_PORT", "587")
+	t.Setenv("SMTP_USERNAME", "")
+	t.Setenv("SMTP_PASSWORD", "")
+	t.Setenv("SMTP_STARTTLS", "true")
+	t.Setenv("APP_PUBLIC_URL", "https://app.example.com")
+}
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
@@ -99,8 +120,12 @@ func TestLoadRequiresDatabaseURL(t *testing.T) {
 func TestLoadValidAppEnv(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
 	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
+	setProductionSecrets(t)
 	for _, env := range []string{"development", "test", "production"} {
 		t.Setenv("APP_ENV", env)
+		if env == "production" {
+			setProductionMailer(t)
+		}
 		if _, err := config.Load(); err != nil {
 			t.Fatalf("expected valid APP_ENV %q: %v", env, err)
 		}
@@ -165,6 +190,8 @@ func TestLoadProductionCookieNames(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
+	setProductionSecrets(t)
+	setProductionMailer(t)
 	t.Setenv("COOKIE_REFRESH_NAME", "")
 	t.Setenv("COOKIE_CSRF_NAME", "")
 
@@ -197,6 +224,8 @@ func TestLoadProductionAllowsEphemeralKey(t *testing.T) {
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("JWT_PRIVATE_KEY_PATH", "")
 	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
+	setProductionSecrets(t)
+	setProductionMailer(t)
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -204,6 +233,80 @@ func TestLoadProductionAllowsEphemeralKey(t *testing.T) {
 	}
 	if !cfg.AuthAllowEphemeralDevKey {
 		t.Fatal("expected AUTH_ALLOW_EPHEMERAL_DEV_KEY to be true")
+	}
+}
+
+func TestLoadProductionMailConfiguration(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
+	setProductionSecrets(t)
+	setProductionMailer(t)
+
+	t.Run("log_driver_rejected", func(t *testing.T) {
+		t.Setenv("MAIL_DRIVER", "log")
+		if _, err := config.Load(); err == nil {
+			t.Fatal("expected MAIL_DRIVER=log to be rejected in production")
+		}
+	})
+
+	t.Run("smtp_valid", func(t *testing.T) {
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("expected valid production smtp configuration: %v", err)
+		}
+		if cfg.MailDriver != "smtp" {
+			t.Fatalf("expected MAIL_DRIVER smtp, got %q", cfg.MailDriver)
+		}
+		if cfg.SMTPHost != "smtp.example.com" || cfg.SMTPPort != 587 {
+			t.Fatalf("expected smtp.example.com:587, got %s:%d", cfg.SMTPHost, cfg.SMTPPort)
+		}
+		if !cfg.SMTPStartTLS {
+			t.Fatal("expected SMTP_STARTTLS true")
+		}
+	})
+
+	t.Run("starttls_required", func(t *testing.T) {
+		t.Setenv("SMTP_STARTTLS", "false")
+		if _, err := config.Load(); err == nil {
+			t.Fatal("expected production SMTP without STARTTLS to be rejected")
+		}
+	})
+
+	t.Run("https_public_url_required", func(t *testing.T) {
+		t.Setenv("APP_PUBLIC_URL", "http://app.example.com")
+		if _, err := config.Load(); err == nil {
+			t.Fatal("expected production HTTP APP_PUBLIC_URL to be rejected")
+		}
+	})
+}
+
+func TestLoadSMTPValidation(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
+	setProductionMailer(t)
+
+	tests := []struct {
+		name  string
+		key   string
+		value string
+	}{
+		{name: "missing_host", key: "SMTP_HOST", value: ""},
+		{name: "zero_port", key: "SMTP_PORT", value: "0"},
+		{name: "port_above_maximum", key: "SMTP_PORT", value: "65536"},
+		{name: "invalid_mail_from", key: "MAIL_FROM", value: "noreply@"},
+		{name: "password_without_username", key: "SMTP_PASSWORD", value: "secret"},
+		{name: "invalid_starttls_text", key: "SMTP_STARTTLS", value: "sometimes"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.key, tt.value)
+			if _, err := config.Load(); err == nil {
+				t.Fatalf("expected error for %s=%q", tt.key, tt.value)
+			}
+		})
 	}
 }
 
@@ -265,28 +368,36 @@ func TestLoadValidSameSite(t *testing.T) {
 	}
 }
 
-func TestLoadAppPublicURL(t *testing.T) {
-	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
-	t.Setenv("APP_PUBLIC_URL", "not-a-url")
-
-	if _, err := config.Load(); err == nil {
-		t.Fatal("expected error for invalid APP_PUBLIC_URL")
-	}
-}
-
-func TestLoadValidAppPublicURL(t *testing.T) {
+func TestLoadAppPublicURLValidation(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://user:pass@localhost:5432/pdv?sslmode=disable")
 	t.Setenv("AUTH_ALLOW_EPHEMERAL_DEV_KEY", "true")
-	t.Setenv("APP_PUBLIC_URL", "https://app.example.com")
 
-	cfg, err := config.Load()
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	for _, tt := range []struct {
+		name  string
+		value string
+	}{
+		{name: "relative", value: "/pdv"},
+		{name: "unsupported_scheme", value: "ftp://app.example.com"},
+		{name: "userinfo", value: "https://user:pass@app.example.com"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("APP_PUBLIC_URL", tt.value)
+			if _, err := config.Load(); err == nil {
+				t.Fatalf("expected error for APP_PUBLIC_URL=%q", tt.value)
+			}
+		})
 	}
 
-	if cfg.AppPublicURL != "https://app.example.com" {
-		t.Fatalf("expected https://app.example.com, got %q", cfg.AppPublicURL)
-	}
+	t.Run("absolute_base_path", func(t *testing.T) {
+		t.Setenv("APP_PUBLIC_URL", "https://app.example.com/pdv")
+		cfg, err := config.Load()
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.AppPublicURL != "https://app.example.com/pdv" {
+			t.Fatalf("expected https://app.example.com/pdv, got %q", cfg.AppPublicURL)
+		}
+	})
 }
 
 func TestLoadSecretDecoding(t *testing.T) {

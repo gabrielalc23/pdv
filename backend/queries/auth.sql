@@ -1,5 +1,6 @@
 -- name: CreateActionToken :one
 INSERT INTO auth_action_tokens (
+    id,
     user_id,
     purpose,
     secret_hash,
@@ -7,6 +8,7 @@ INSERT INTO auth_action_tokens (
     requested_ip
 )
 VALUES (
+    sqlc.arg(id),
     sqlc.arg(user_id),
     sqlc.arg(purpose),
     sqlc.arg(secret_hash),
@@ -37,6 +39,14 @@ FROM auth_action_tokens
 WHERE id = sqlc.arg(id)
   AND purpose = sqlc.arg(purpose)
 FOR UPDATE;
+
+-- name: LockActionTokenOwner :one
+SELECT u.id AS user_id
+FROM auth_action_tokens AS t
+JOIN users AS u ON u.id = t.user_id
+WHERE t.id = sqlc.arg(id)
+  AND t.purpose = sqlc.arg(purpose)
+FOR UPDATE OF u;
 
 -- name: ConsumeActionToken :one
 UPDATE auth_action_tokens

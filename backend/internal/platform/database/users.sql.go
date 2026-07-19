@@ -103,6 +103,40 @@ func (q *Queries) CreateUserWithPassword(ctx context.Context, arg CreateUserWith
 	return i, err
 }
 
+const getUserByID = `-- name: GetUserByID :one
+SELECT
+    id,
+    email,
+    email_normalized,
+    display_name,
+    status,
+    email_verified_at,
+    password_version,
+    last_login_at,
+    created_at,
+    updated_at
+FROM users
+WHERE id = $1
+`
+
+func (q *Queries) GetUserByID(ctx context.Context, userID pgtype.UUID) (User, error) {
+	row := q.db.QueryRow(ctx, getUserByID, userID)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.EmailNormalized,
+		&i.DisplayName,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.PasswordVersion,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserByNormalizedEmail = `-- name: GetUserByNormalizedEmail :one
 SELECT
     u.id,
@@ -158,6 +192,92 @@ func (q *Queries) GetUserByNormalizedEmail(ctx context.Context, emailNormalized 
 	return i, err
 }
 
+const getUserForActionByNormalizedEmail = `-- name: GetUserForActionByNormalizedEmail :one
+SELECT
+    u.id,
+    u.email,
+    u.display_name,
+    u.status,
+    u.email_verified_at,
+    EXISTS (
+        SELECT 1
+        FROM user_passwords AS p
+        WHERE p.user_id = u.id
+    ) AS has_password
+FROM users AS u
+WHERE u.email_normalized = $1
+LIMIT 1
+`
+
+type GetUserForActionByNormalizedEmailRow struct {
+	ID              pgtype.UUID
+	Email           string
+	DisplayName     string
+	Status          UserStatus
+	EmailVerifiedAt pgtype.Timestamptz
+	HasPassword     bool
+}
+
+func (q *Queries) GetUserForActionByNormalizedEmail(ctx context.Context, emailNormalized string) (GetUserForActionByNormalizedEmailRow, error) {
+	row := q.db.QueryRow(ctx, getUserForActionByNormalizedEmail, emailNormalized)
+	var i GetUserForActionByNormalizedEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.HasPassword,
+	)
+	return i, err
+}
+
+const getUserWithPasswordForUpdate = `-- name: GetUserWithPasswordForUpdate :one
+SELECT
+    u.id,
+    u.email,
+    u.email_normalized,
+    u.display_name,
+    u.status,
+    u.email_verified_at,
+    u.password_version,
+    p.password_hash,
+    p.changed_at AS password_changed_at
+FROM users AS u
+JOIN user_passwords AS p ON p.user_id = u.id
+WHERE u.id = $1
+FOR UPDATE OF u, p
+`
+
+type GetUserWithPasswordForUpdateRow struct {
+	ID                pgtype.UUID
+	Email             string
+	EmailNormalized   string
+	DisplayName       string
+	Status            UserStatus
+	EmailVerifiedAt   pgtype.Timestamptz
+	PasswordVersion   int64
+	PasswordHash      string
+	PasswordChangedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetUserWithPasswordForUpdate(ctx context.Context, userID pgtype.UUID) (GetUserWithPasswordForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getUserWithPasswordForUpdate, userID)
+	var i GetUserWithPasswordForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.EmailNormalized,
+		&i.DisplayName,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.PasswordVersion,
+		&i.PasswordHash,
+		&i.PasswordChangedAt,
+	)
+	return i, err
+}
+
 const incrementUserPasswordVersion = `-- name: IncrementUserPasswordVersion :one
 UPDATE users
 SET password_version = password_version + 1
@@ -205,7 +325,7 @@ LEFT JOIN stores AS s
 WHERE m.user_id = $1
   AND m.status = 'ACTIVE'
   AND o.status = 'ACTIVE'
-ORDER BY o.name ASC, o.id ASC, m.id ASC
+ORDER BY m.joined_at ASC, m.id ASC
 `
 
 type ListUserActiveMembershipsRow struct {
@@ -260,6 +380,59 @@ func (q *Queries) ListUserActiveMemberships(ctx context.Context, userID pgtype.U
 	return items, nil
 }
 
+const updateUserDisplayName = `-- name: UpdateUserDisplayName :one
+UPDATE users
+SET display_name = $1
+WHERE id = $2
+RETURNING id, email, display_name, email_verified_at, updated_at
+`
+
+type UpdateUserDisplayNameParams struct {
+	DisplayName string
+	UserID      pgtype.UUID
+}
+
+type UpdateUserDisplayNameRow struct {
+	ID              pgtype.UUID
+	Email           string
+	DisplayName     string
+	EmailVerifiedAt pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateUserDisplayName(ctx context.Context, arg UpdateUserDisplayNameParams) (UpdateUserDisplayNameRow, error) {
+	row := q.db.QueryRow(ctx, updateUserDisplayName, arg.DisplayName, arg.UserID)
+	var i UpdateUserDisplayNameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.DisplayName,
+		&i.EmailVerifiedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserLastLogin = `-- name: UpdateUserLastLogin :one
+UPDATE users
+SET last_login_at = NOW()
+WHERE id = $1
+RETURNING id, last_login_at, updated_at
+`
+
+type UpdateUserLastLoginRow struct {
+	ID          pgtype.UUID
+	LastLoginAt pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateUserLastLogin(ctx context.Context, userID pgtype.UUID) (UpdateUserLastLoginRow, error) {
+	row := q.db.QueryRow(ctx, updateUserLastLogin, userID)
+	var i UpdateUserLastLoginRow
+	err := row.Scan(&i.ID, &i.LastLoginAt, &i.UpdatedAt)
+	return i, err
+}
+
 const updateUserPassword = `-- name: UpdateUserPassword :one
 UPDATE user_passwords
 SET
@@ -293,6 +466,57 @@ func (q *Queries) UpdateUserPassword(ctx context.Context, arg UpdateUserPassword
 		&i.ChangedAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateUserPasswordAndIncrementVersion = `-- name: UpdateUserPasswordAndIncrementVersion :one
+WITH updated_password AS (
+    UPDATE user_passwords
+    SET
+        password_hash = $1,
+        changed_at = NOW()
+    WHERE user_id = $2
+    RETURNING user_id, changed_at
+), updated_user AS (
+    UPDATE users AS u
+    SET password_version = u.password_version + 1
+    FROM updated_password AS p
+    WHERE u.id = p.user_id
+    RETURNING
+        u.id,
+        (u.password_version - 1)::BIGINT AS previous_password_version,
+        u.password_version AS new_password_version
+)
+SELECT
+    u.id,
+    u.previous_password_version,
+    u.new_password_version,
+    p.changed_at
+FROM updated_user AS u
+JOIN updated_password AS p ON p.user_id = u.id
+`
+
+type UpdateUserPasswordAndIncrementVersionParams struct {
+	PasswordHash string
+	UserID       pgtype.UUID
+}
+
+type UpdateUserPasswordAndIncrementVersionRow struct {
+	ID                      pgtype.UUID
+	PreviousPasswordVersion int64
+	NewPasswordVersion      int64
+	ChangedAt               pgtype.Timestamptz
+}
+
+func (q *Queries) UpdateUserPasswordAndIncrementVersion(ctx context.Context, arg UpdateUserPasswordAndIncrementVersionParams) (UpdateUserPasswordAndIncrementVersionRow, error) {
+	row := q.db.QueryRow(ctx, updateUserPasswordAndIncrementVersion, arg.PasswordHash, arg.UserID)
+	var i UpdateUserPasswordAndIncrementVersionRow
+	err := row.Scan(
+		&i.ID,
+		&i.PreviousPasswordVersion,
+		&i.NewPasswordVersion,
+		&i.ChangedAt,
 	)
 	return i, err
 }

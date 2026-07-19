@@ -187,6 +187,30 @@ func (q *Queries) CreateAuditEvent(ctx context.Context, arg CreateAuditEventPara
 	return i, err
 }
 
+const hasSecurityAuditEventForEntity = `-- name: HasSecurityAuditEventForEntity :one
+SELECT EXISTS (
+    SELECT 1
+    FROM security_audit_events
+    WHERE event_type = $1
+      AND entity_type = $2
+      AND entity_id = $3
+      AND outcome = 'SUCCESS'
+)
+`
+
+type HasSecurityAuditEventForEntityParams struct {
+	EventType  string
+	EntityType pgtype.Text
+	EntityID   pgtype.UUID
+}
+
+func (q *Queries) HasSecurityAuditEventForEntity(ctx context.Context, arg HasSecurityAuditEventForEntityParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasSecurityAuditEventForEntity, arg.EventType, arg.EntityType, arg.EntityID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listAuditEvents = `-- name: ListAuditEvents :many
 SELECT
     id,

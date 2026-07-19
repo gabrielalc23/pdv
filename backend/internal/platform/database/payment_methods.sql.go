@@ -765,3 +765,61 @@ func (q *Queries) UpdatePaymentMethodForOrganization(ctx context.Context, arg Up
 	)
 	return i, err
 }
+
+const upsertStorePaymentMethod = `-- name: UpsertStorePaymentMethod :one
+INSERT INTO store_payment_methods (
+    organization_id,
+    store_id,
+    payment_method_id,
+    is_active,
+    sort_order
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5
+)
+ON CONFLICT (organization_id, store_id, payment_method_id)
+DO UPDATE SET
+    is_active = EXCLUDED.is_active,
+    sort_order = EXCLUDED.sort_order
+RETURNING
+    organization_id,
+    store_id,
+    payment_method_id,
+    is_active,
+    sort_order,
+    created_at,
+    updated_at
+`
+
+type UpsertStorePaymentMethodParams struct {
+	OrganizationID  pgtype.UUID
+	StoreID         pgtype.UUID
+	PaymentMethodID pgtype.UUID
+	IsActive        bool
+	SortOrder       int32
+}
+
+func (q *Queries) UpsertStorePaymentMethod(ctx context.Context, arg UpsertStorePaymentMethodParams) (StorePaymentMethod, error) {
+	row := q.db.QueryRow(ctx, upsertStorePaymentMethod,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.PaymentMethodID,
+		arg.IsActive,
+		arg.SortOrder,
+	)
+	var i StorePaymentMethod
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
+		&i.PaymentMethodID,
+		&i.IsActive,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

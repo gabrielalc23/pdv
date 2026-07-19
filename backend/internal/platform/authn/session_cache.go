@@ -15,7 +15,7 @@ import (
 	"github.com/gabrielalc23/pdv/internal/platform/valkey"
 )
 
-const cacheSchemaVersion = 1
+const cacheSchemaVersion = 2
 
 type sessionCache struct {
 	client *valkey.Client
@@ -95,12 +95,24 @@ func (c *sessionCache) set(ctx context.Context, sessionID pgtype.UUID, state ses
 
 	payload := cachedSessionPayload{
 		Version:       cacheSchemaVersion,
+		SessionID:     uuidStr(sessionID),
 		Status:        string(state.SessionStatus),
 		UserID:        uuidStr(state.UserID),
+		UserStatus:    string(state.UserStatus),
+		ClientID:      state.ClientID,
 		ContextKind:   string(state.ContextKind),
 		IdleExpiresAt: state.IdleExpiresAt.Unix(),
 		AbsExpiresAt:  state.AbsoluteExpiresAt.Unix(),
 		PasswordVer:   state.PasswordVersion,
+	}
+	if state.OrganizationStatus.Valid {
+		payload.OrganizationStatus = string(state.OrganizationStatus.OrganizationStatus)
+	}
+	if state.MembershipStatus.Valid {
+		payload.MembershipStatus = string(state.MembershipStatus.MembershipStatus)
+	}
+	if state.StoreStatus.Valid {
+		payload.StoreStatus = string(state.StoreStatus.StoreStatus)
 	}
 
 	if state.OrganizationID.Valid {

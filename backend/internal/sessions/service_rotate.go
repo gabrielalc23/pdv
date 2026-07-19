@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -15,10 +14,13 @@ import (
 func (s *Service) RotateRefreshToken(ctx context.Context, input RotateInput) (RotateResult, error) {
 	parsed, err := s.codec.Parse(input.RawRefreshToken)
 	if err != nil {
-		return RotateResult{}, err
+		return RotateResult{}, fmt.Errorf("parse refresh token: %w", err)
 	}
 
 	var result RotateResult
+	var reuseDetected bool
+	var invalidatedSessionID pgtype.UUID
+	now := s.clock.Now()
 
 	err = s.provider.WithTx(ctx, func(q Querier) error {
 		token, err := q.GetRefreshTokenForUpdate(ctx, parsed.Selector)
@@ -37,12 +39,17 @@ func (s *Service) RotateRefreshToken(ctx context.Context, input RotateInput) (Ro
 			return fmt.Errorf("%w: token is revoked", ErrRefreshTokenInvalid)
 		}
 
-		if token.ExpiresAt.Valid && s.clock.Now().After(token.ExpiresAt.Time) {
+		if token.ExpiresAt.Valid && now.After(token.ExpiresAt.Time) {
 			return fmt.Errorf("%w: token expired", ErrRefreshTokenExpired)
 		}
 
 		if token.ConsumedAt.Valid {
-			return s.handleReuse(ctx, q, token, input)
+			if err := s.handleReuse(ctx, q, token, input); err != nil {
+				return err
+			}
+			invalidatedSessionID = token.SessionID
+			reuseDetected = true
+			return nil
 		}
 
 		sessionRow, err := q.GetAuthSessionForUpdate(ctx, token.SessionID)
@@ -56,8 +63,13 @@ func (s *Service) RotateRefreshToken(ctx context.Context, input RotateInput) (Ro
 		if sessionRow.Status != database.AuthSessionStatusACTIVE {
 			return fmt.Errorf("%w: session status is %s", errFromSessionStatus(sessionRow.Status), sessionRow.Status)
 		}
+		switch sessionRow.UserStatus {
+		case database.UserStatusSUSPENDED:
+			return fmt.Errorf("%w: user is suspended", ErrUserSuspended)
+		case database.UserStatusDISABLED:
+			return fmt.Errorf("%w: user is disabled", ErrUserDisabled)
+		}
 
-		now := s.clock.Now()
 		if sessionRow.IdleExpiresAt.Valid && now.After(sessionRow.IdleExpiresAt.Time) {
 			return fmt.Errorf("%w: session idle expired", ErrSessionExpired)
 		}
@@ -70,12 +82,17 @@ func (s *Service) RotateRefreshToken(ctx context.Context, input RotateInput) (Ro
 			newIdleExpiresAt = sessionRow.AbsoluteExpiresAt.Time
 		}
 
-		childRaw, childHash, err := s.codec.Generate(token.SessionID)
+		childID, err := newRandomUUID()
+		if err != nil {
+			return fmt.Errorf("generate child token selector: %w", err)
+		}
+		childRaw, childHash, err := s.codec.Generate(childID)
 		if err != nil {
 			return fmt.Errorf("generate child token: %w", err)
 		}
 
 		child, err := q.CreateRefreshToken(ctx, database.CreateRefreshTokenParams{
+			ID:            childID,
 			SessionID:     token.SessionID,
 			ParentTokenID: token.ID,
 			SecretHash:    childHash,
@@ -83,6 +100,9 @@ func (s *Service) RotateRefreshToken(ctx context.Context, input RotateInput) (Ro
 		})
 		if err != nil {
 			return fmt.Errorf("create child refresh token: %w", err)
+		}
+		if child.ID != childID {
+			return fmt.Errorf("create child refresh token: persisted selector does not match generated selector")
 		}
 
 		_, err = q.ConsumeAndReplaceRefreshToken(ctx, database.ConsumeAndReplaceRefreshTokenParams{
@@ -92,38 +112,52 @@ func (s *Service) RotateRefreshToken(ctx context.Context, input RotateInput) (Ro
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				return fmt.Errorf("%w: token already consumed", ErrRefreshTokenReused)
+				return fmt.Errorf("%w: token could not be consumed", ErrRefreshTokenInvalid)
 			}
 			return fmt.Errorf("consume and replace refresh token: %w", err)
 		}
 
-		_, _ = q.TouchSession(ctx, database.TouchSessionParams{
+		_, err = q.TouchSession(ctx, database.TouchSessionParams{
 			SessionID:     token.SessionID,
 			UserID:        sessionRow.UserID,
 			IdleExpiresAt: pgtype.Timestamptz{Time: newIdleExpiresAt, Valid: true},
 		})
+		if err != nil {
+			return fmt.Errorf("touch session: %w", err)
+		}
 
 		meta := map[string]any{
 			"previous_token_id": uuidStr(token.ID),
 			"new_token_id":      uuidStr(child.ID),
 		}
-		_ = writeAuditEvent(ctx, q, "auth.refreshed", database.AuditOutcomeSUCCESS, meta, input.RequestMeta)
+		if err := writeAuditEventWithSubject(ctx, q, "auth.refreshed", database.AuditOutcomeSUCCESS, meta, input.RequestMeta, auditSubject{UserID: sessionRow.UserID, MembershipID: sessionRow.CurrentMembershipID, OrganizationID: sessionRow.CurrentOrganizationID, StoreID: sessionRow.CurrentStoreID, SessionID: sessionRow.ID}); err != nil {
+			return fmt.Errorf("write refresh audit event: %w", err)
+		}
 
 		result = RotateResult{
 			Session:          sessionFromDBRow(authSessionFromForUpdate(sessionRow)),
 			RawRefreshToken:  childRaw,
-			ExpiresIn:        time.Until(newIdleExpiresAt),
+			ExpiresIn:        newIdleExpiresAt.Sub(now),
 			MustClearCookies: false,
 		}
+		invalidatedSessionID = token.SessionID
 
 		return nil
 	})
+	if err != nil {
+		return RotateResult{}, fmt.Errorf("rotate refresh token transaction: %w", err)
+	}
 
-	return result, err
+	s.invalidateSession(ctx, invalidatedSessionID)
+	if reuseDetected {
+		return RotateResult{}, fmt.Errorf("%w: token was already consumed", ErrRefreshTokenReused)
+	}
+
+	return result, nil
 }
 
 func (s *Service) handleReuse(ctx context.Context, q Querier, token database.AuthRefreshToken, input RotateInput) error {
-	_, err := q.MarkSessionCompromised(ctx, database.MarkSessionCompromisedParams{
+	marked, err := q.MarkSessionCompromised(ctx, database.MarkSessionCompromisedParams{
 		SessionID:    token.SessionID,
 		RevokeReason: pgtype.Text{String: "refresh_token_reused", Valid: true},
 	})
@@ -139,14 +173,16 @@ func (s *Service) handleReuse(ctx context.Context, q Querier, token database.Aut
 		return fmt.Errorf("%w: revoke session refresh tokens: %w", ErrDependencyUnavailable, err)
 	}
 
-	_ = writeAuditEvent(ctx, q, "auth.refresh.reused", database.AuditOutcomeFAILURE, map[string]any{
+	if err := writeAuditEventWithSubject(ctx, q, "auth.refresh.reused", database.AuditOutcomeFAILURE, map[string]any{
 		"token_id":        uuidStr(token.ID),
 		"session_id":      uuidStr(token.SessionID),
 		"previous_status": "ACTIVE",
 		"new_status":      "COMPROMISED",
-	}, input.RequestMeta)
+	}, input.RequestMeta, auditSubject{UserID: marked.UserID, MembershipID: marked.CurrentMembershipID, OrganizationID: marked.CurrentOrganizationID, StoreID: marked.CurrentStoreID, SessionID: marked.ID}); err != nil {
+		return fmt.Errorf("%w: write refresh reuse audit event: %w", ErrDependencyUnavailable, err)
+	}
 
-	return fmt.Errorf("%w: token was already consumed", ErrRefreshTokenReused)
+	return nil
 }
 
 func errFromSessionStatus(status database.AuthSessionStatus) error {

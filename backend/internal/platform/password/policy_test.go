@@ -19,7 +19,7 @@ func TestPolicyMinLength(t *testing.T) {
 func TestPolicyMaxLength(t *testing.T) {
 	p := password.DefaultPolicy()
 	var long string
-	for i := 0; i < 130; i++ {
+	for range 130 {
 		long += "a"
 	}
 	blocklist := password.NewBuiltinBlocklist()

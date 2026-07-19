@@ -121,7 +121,7 @@ func TestUserAgentTruncated(t *testing.T) {
 	resolver, _ := requestmeta.NewResolver(nil)
 
 	longUA := ""
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		longUA += "a"
 	}
 

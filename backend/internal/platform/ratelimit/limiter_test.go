@@ -92,7 +92,7 @@ func TestWindowExpiration(t *testing.T) {
 		t.Log("still rate limited (50ms hasn't passed)")
 	}
 
-	time.Sleep(60 * time.Millisecond)
+	<-time.After(60 * time.Millisecond)
 
 	result, err := limiter.Allow(ctx, "exp-key", 2, 50*time.Millisecond)
 	if err != nil {
@@ -153,8 +153,14 @@ func TestFallbackCapacity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Allow: %v", err)
 	}
-	if !result.Allowed {
-		t.Fatal("expected fallback to allow when at capacity")
+	if result.Allowed {
+		t.Fatal("expected fallback to deny when at capacity")
+	}
+	if result.Remaining != 0 {
+		t.Fatalf("expected 0 remaining at capacity, got %d", result.Remaining)
+	}
+	if result.ResetAt.IsZero() {
+		t.Fatal("expected non-zero ResetAt at capacity")
 	}
 }
 

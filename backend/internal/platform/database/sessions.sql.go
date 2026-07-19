@@ -168,6 +168,7 @@ func (q *Queries) CreateAuthSession(ctx context.Context, arg CreateAuthSessionPa
 
 const createRefreshToken = `-- name: CreateRefreshToken :one
 INSERT INTO auth_refresh_tokens (
+    id,
     session_id,
     parent_token_id,
     secret_hash,
@@ -177,7 +178,8 @@ VALUES (
     $1,
     $2,
     $3,
-    $4
+    $4,
+    $5
 )
 RETURNING
     id,
@@ -192,6 +194,7 @@ RETURNING
 `
 
 type CreateRefreshTokenParams struct {
+	ID            pgtype.UUID
 	SessionID     pgtype.UUID
 	ParentTokenID pgtype.UUID
 	SecretHash    []byte
@@ -200,6 +203,7 @@ type CreateRefreshTokenParams struct {
 
 func (q *Queries) CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) (AuthRefreshToken, error) {
 	row := q.db.QueryRow(ctx, createRefreshToken,
+		arg.ID,
 		arg.SessionID,
 		arg.ParentTokenID,
 		arg.SecretHash,
@@ -514,6 +518,156 @@ func (q *Queries) GetAuthSessionState(ctx context.Context, sessionID pgtype.UUID
 	return i, err
 }
 
+const getAuthSessionView = `-- name: GetAuthSessionView :one
+SELECT
+    s.id,
+    s.user_id,
+    s.status,
+    s.client_id,
+    s.device_name,
+    s.context_kind,
+    s.current_organization_id,
+    s.current_membership_id,
+    s.current_store_id,
+    s.idle_expires_at,
+    s.absolute_expires_at,
+    s.last_seen_at,
+    s.created_at,
+    u.email,
+    u.display_name,
+    u.status AS user_status,
+    u.email_verified_at,
+    u.password_version,
+    o.name AS organization_name,
+    o.slug AS organization_slug,
+    o.status AS organization_status,
+    o.authorization_version AS organization_authorization_version,
+    m.status AS membership_status,
+    m.authorization_version AS membership_authorization_version,
+    st.code AS store_code,
+    st.name AS store_name,
+    st.status AS store_status
+FROM auth_sessions AS s
+JOIN users AS u ON u.id = s.user_id
+LEFT JOIN organizations AS o ON o.id = s.current_organization_id
+LEFT JOIN organization_memberships AS m
+  ON m.organization_id = s.current_organization_id
+ AND m.id = s.current_membership_id
+ AND m.user_id = s.user_id
+LEFT JOIN stores AS st
+  ON st.organization_id = s.current_organization_id
+ AND st.id = s.current_store_id
+WHERE s.id = $1
+`
+
+type GetAuthSessionViewRow struct {
+	ID                               pgtype.UUID
+	UserID                           pgtype.UUID
+	Status                           AuthSessionStatus
+	ClientID                         string
+	DeviceName                       pgtype.Text
+	ContextKind                      AuthContextKind
+	CurrentOrganizationID            pgtype.UUID
+	CurrentMembershipID              pgtype.UUID
+	CurrentStoreID                   pgtype.UUID
+	IdleExpiresAt                    pgtype.Timestamptz
+	AbsoluteExpiresAt                pgtype.Timestamptz
+	LastSeenAt                       pgtype.Timestamptz
+	CreatedAt                        pgtype.Timestamptz
+	Email                            string
+	DisplayName                      string
+	UserStatus                       UserStatus
+	EmailVerifiedAt                  pgtype.Timestamptz
+	PasswordVersion                  int64
+	OrganizationName                 pgtype.Text
+	OrganizationSlug                 pgtype.Text
+	OrganizationStatus               NullOrganizationStatus
+	OrganizationAuthorizationVersion pgtype.Int8
+	MembershipStatus                 NullMembershipStatus
+	MembershipAuthorizationVersion   pgtype.Int8
+	StoreCode                        pgtype.Text
+	StoreName                        pgtype.Text
+	StoreStatus                      NullStoreStatus
+}
+
+func (q *Queries) GetAuthSessionView(ctx context.Context, sessionID pgtype.UUID) (GetAuthSessionViewRow, error) {
+	row := q.db.QueryRow(ctx, getAuthSessionView, sessionID)
+	var i GetAuthSessionViewRow
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Status,
+		&i.ClientID,
+		&i.DeviceName,
+		&i.ContextKind,
+		&i.CurrentOrganizationID,
+		&i.CurrentMembershipID,
+		&i.CurrentStoreID,
+		&i.IdleExpiresAt,
+		&i.AbsoluteExpiresAt,
+		&i.LastSeenAt,
+		&i.CreatedAt,
+		&i.Email,
+		&i.DisplayName,
+		&i.UserStatus,
+		&i.EmailVerifiedAt,
+		&i.PasswordVersion,
+		&i.OrganizationName,
+		&i.OrganizationSlug,
+		&i.OrganizationStatus,
+		&i.OrganizationAuthorizationVersion,
+		&i.MembershipStatus,
+		&i.MembershipAuthorizationVersion,
+		&i.StoreCode,
+		&i.StoreName,
+		&i.StoreStatus,
+	)
+	return i, err
+}
+
+const getLastActiveSessionContextForClient = `-- name: GetLastActiveSessionContextForClient :one
+SELECT
+    id,
+    context_kind,
+    current_organization_id,
+    current_membership_id,
+    current_store_id
+FROM auth_sessions
+WHERE user_id = $1
+  AND client_id = $2
+  AND status = 'ACTIVE'
+  AND idle_expires_at > NOW()
+  AND absolute_expires_at > NOW()
+ORDER BY last_seen_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLastActiveSessionContextForClientParams struct {
+	UserID   pgtype.UUID
+	ClientID string
+}
+
+type GetLastActiveSessionContextForClientRow struct {
+	ID                    pgtype.UUID
+	ContextKind           AuthContextKind
+	CurrentOrganizationID pgtype.UUID
+	CurrentMembershipID   pgtype.UUID
+	CurrentStoreID        pgtype.UUID
+}
+
+func (q *Queries) GetLastActiveSessionContextForClient(ctx context.Context, arg GetLastActiveSessionContextForClientParams) (GetLastActiveSessionContextForClientRow, error) {
+	row := q.db.QueryRow(ctx, getLastActiveSessionContextForClient, arg.UserID, arg.ClientID)
+	var i GetLastActiveSessionContextForClientRow
+	err := row.Scan(
+		&i.ID,
+		&i.ContextKind,
+		&i.CurrentOrganizationID,
+		&i.CurrentMembershipID,
+		&i.CurrentStoreID,
+	)
+	return i, err
+}
+
 const getRefreshTokenForUpdate = `-- name: GetRefreshTokenForUpdate :one
 SELECT
     id,
@@ -545,6 +699,33 @@ func (q *Queries) GetRefreshTokenForUpdate(ctx context.Context, id pgtype.UUID) 
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const listAllUserSessionIDs = `-- name: ListAllUserSessionIDs :many
+SELECT id
+FROM auth_sessions
+WHERE user_id = $1
+ORDER BY id
+`
+
+func (q *Queries) ListAllUserSessionIDs(ctx context.Context, userID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listAllUserSessionIDs, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listUserSessions = `-- name: ListUserSessions :many
@@ -663,6 +844,62 @@ func (q *Queries) MarkSessionCompromised(ctx context.Context, arg MarkSessionCom
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const revokeAllActiveUserSessions = `-- name: RevokeAllActiveUserSessions :many
+UPDATE auth_sessions
+SET
+    status = 'REVOKED',
+    revoked_at = NOW(),
+    revoke_reason = $1
+WHERE user_id = $2
+  AND status = 'ACTIVE'
+RETURNING id
+`
+
+type RevokeAllActiveUserSessionsParams struct {
+	RevokeReason pgtype.Text
+	UserID       pgtype.UUID
+}
+
+func (q *Queries) RevokeAllActiveUserSessions(ctx context.Context, arg RevokeAllActiveUserSessionsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeAllActiveUserSessions, arg.RevokeReason, arg.UserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeAllUserRefreshTokens = `-- name: RevokeAllUserRefreshTokens :execrows
+UPDATE auth_refresh_tokens AS t
+SET revoked_at = NOW()
+WHERE t.revoked_at IS NULL
+  AND EXISTS (
+      SELECT 1
+      FROM auth_sessions AS s
+      WHERE s.id = t.session_id
+        AND s.user_id = $1
+  )
+`
+
+func (q *Queries) RevokeAllUserRefreshTokens(ctx context.Context, userID pgtype.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, revokeAllUserRefreshTokens, userID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const revokeAllUserSessions = `-- name: RevokeAllUserSessions :many
@@ -895,7 +1132,8 @@ SET
     context_kind = $1,
     current_organization_id = $2,
     current_membership_id = $3,
-    current_store_id = $4
+    current_store_id = $4,
+    last_seen_at = NOW()
 WHERE id = $5
   AND user_id = $6
   AND status = 'ACTIVE'
