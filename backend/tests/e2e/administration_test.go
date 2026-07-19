@@ -8,13 +8,13 @@ import (
 	"testing"
 )
 
-const task12Password = "Task 12 secure password 2026!"
+const administrationPassword = "Task 12 secure password 2026!"
 
-func TestTask12AdministrationHTTP(t *testing.T) {
-	resetTask11CRateState(t)
+func TestAdministration(t *testing.T) {
+	resetRateLimitState(t)
 	mail := &captureMailer{}
 	serverURL, client := auxiliaryAuthServer(t, true, false, mail)
-	owner := task11CRegister(t, client, serverURL, "owner.task12@example.com", "owner-task12", task12Password)
+	owner := registerOwner(t, client, serverURL, "owner.task12@example.com", "owner-task12", administrationPassword)
 	if owner.Context.Organization == nil || owner.Context.Store == nil || owner.Context.MembershipID == nil {
 		t.Fatalf("owner registration returned incomplete tenant context: %+v", owner.Context)
 	}
@@ -56,8 +56,8 @@ func TestTask12AdministrationHTTP(t *testing.T) {
 	})
 
 	t.Run("admin route requires access token", func(t *testing.T) {
-		response := authRequestAt(t, task11CClient(t), serverURL, http.MethodGet, "/me/organizations", nil, "", "")
-		assertTask12Error(t, response, http.StatusUnauthorized, "ACCESS_TOKEN_MISSING")
+		response := authRequestAt(t, newHTTPClient(t), serverURL, http.MethodGet, "/me/organizations", nil, "", "")
+		assertErrorResponse(t, response, http.StatusUnauthorized, "ACCESS_TOKEN_MISSING")
 		if response.Header.Get("WWW-Authenticate") != "Bearer" {
 			t.Fatalf("unauthorized route challenge=%q", response.Header.Get("WWW-Authenticate"))
 		}
@@ -68,7 +68,7 @@ func TestTask12AdministrationHTTP(t *testing.T) {
 			t.Fatal("cross-tenant fixture unexpectedly belongs to the owner organization")
 		}
 		response := authRequestAt(t, client, serverURL, http.MethodGet, "/v1/members/"+testMembershipID, nil, "", owner.AccessToken)
-		assertTask12Error(t, response, http.StatusNotFound, "MEMBERSHIP_NOT_FOUND")
+		assertErrorResponse(t, response, http.StatusNotFound, "MEMBERSHIP_NOT_FOUND")
 	})
 
 	t.Run("disabled tenant creation rejects create without persistence", func(t *testing.T) {
@@ -82,7 +82,7 @@ func TestTask12AdministrationHTTP(t *testing.T) {
 			},
 			"store": map[string]any{"code": "MATRIZ", "name": "Matriz", "timezone": "America/Sao_Paulo"},
 		}, "", owner.AccessToken)
-		assertTask12Error(t, response, http.StatusForbidden, "TENANT_CREATION_DISABLED")
+		assertErrorResponse(t, response, http.StatusForbidden, "TENANT_CREATION_DISABLED")
 		if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM organizations WHERE created_by_user_id=$1`, owner.User.ID).Scan(&after); err != nil {
 			t.Fatal(err)
 		}
@@ -117,7 +117,7 @@ func TestTask12AdministrationHTTP(t *testing.T) {
 		}
 
 		response := authRequestAt(t, client, serverURL, http.MethodPost, "/v1/roles/"+ownerRoleID+"/deactivate", nil, "", owner.AccessToken)
-		assertTask12Error(t, response, http.StatusConflict, "SYSTEM_ROLE_IMMUTABLE")
+		assertErrorResponse(t, response, http.StatusConflict, "SYSTEM_ROLE_IMMUTABLE")
 		var active bool
 		if err := testPool.QueryRow(context.Background(), `SELECT is_active FROM roles WHERE organization_id=$1 AND id=$2`, organizationID, ownerRoleID).Scan(&active); err != nil {
 			t.Fatal(err)
@@ -149,12 +149,12 @@ func TestTask12AdministrationHTTP(t *testing.T) {
 		}
 		link := mail.invitationLinks[0]
 		mail.mu.Unlock()
-		rawToken := task11CTokenFromFragment(t, link)
+		rawToken := tokenFromFragment(t, link)
 
-		inviteeClient := task11CClient(t)
+		inviteeClient := newHTTPClient(t)
 		csrfToken := getCSRFTokenAt(t, inviteeClient, serverURL)
 		accepted := authRequestAt(t, inviteeClient, serverURL, http.MethodPost, "/auth/invitations/accept", map[string]any{
-			"token": rawToken, "displayName": "Task 12 Cashier", "password": task12Password,
+			"token": rawToken, "displayName": "Task 12 Cashier", "password": administrationPassword,
 			"clientId": "pdv-admin", "deviceName": "Task 12 E2E",
 		}, csrfToken, "")
 		if accepted.StatusCode != http.StatusOK {
@@ -192,7 +192,7 @@ func TestTask12AdministrationHTTP(t *testing.T) {
 	})
 
 	t.Run("missing scope returns forbidden", func(t *testing.T) {
-		limitedOrganizationID, limitedStoreID := createTask12LimitedContext(t, owner.User.ID)
+		limitedOrganizationID, limitedStoreID := createLimitedOrgContext(t, owner.User.ID)
 		contextResponse := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/context", map[string]any{
 			"organizationId": limitedOrganizationID,
 			"storeId":        limitedStoreID,
@@ -207,7 +207,7 @@ func TestTask12AdministrationHTTP(t *testing.T) {
 		}
 
 		response := authRequestAt(t, client, serverURL, http.MethodGet, "/v1/roles", nil, "", limited.AccessToken)
-		assertTask12Error(t, response, http.StatusForbidden, "INSUFFICIENT_SCOPE")
+		assertErrorResponse(t, response, http.StatusForbidden, "INSUFFICIENT_SCOPE")
 	})
 }
 
@@ -217,7 +217,7 @@ func decodeJSONBytes(t *testing.T, body string, target any) {
 	decodeResponse(t, response, target)
 }
 
-func createTask12LimitedContext(t *testing.T, userID string) (organizationID, storeID string) {
+func createLimitedOrgContext(t *testing.T, userID string) (organizationID, storeID string) {
 	t.Helper()
 	ctx := context.Background()
 	if err := testPool.QueryRow(ctx, `
@@ -261,7 +261,7 @@ func createTask12LimitedContext(t *testing.T, userID string) (organizationID, st
 	return organizationID, storeID
 }
 
-func assertTask12Error(t *testing.T, response *http.Response, status int, code string) {
+func assertErrorResponse(t *testing.T, response *http.Response, status int, code string) {
 	t.Helper()
 	if response.StatusCode != status {
 		t.Fatalf("response status=%d, want %d: %s", response.StatusCode, status, readBody(response))

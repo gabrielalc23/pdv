@@ -17,20 +17,20 @@ import (
 )
 
 const (
-	task11COldPassword = "Task 11C old password 2026!"
-	task11CNewPassword = "Task 11C new password 2027!"
+	actionTokenOldPassword = "Task 11C old password 2026!"
+	actionTokenNewPassword = "Task 11C new password 2027!"
 )
 
-func TestTask11CAuthHTTP(t *testing.T) {
+func TestAuthActionTokens(t *testing.T) {
 	t.Run("CSRF bearer and sensitive header contracts", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		serverURL, client := auxiliaryAuthServer(t, true, false, &captureMailer{})
 		publicCases := []struct {
 			path string
 			body map[string]any
 		}{
 			{path: "/auth/password/forgot", body: map[string]any{"email": "csrf.task11c@example.com"}},
-			{path: "/auth/password/reset", body: map[string]any{"token": "prt_invalid", "newPassword": task11CNewPassword}},
+			{path: "/auth/password/reset", body: map[string]any{"token": "prt_invalid", "newPassword": actionTokenNewPassword}},
 			{path: "/auth/email/verify", body: map[string]any{"token": "evt_invalid"}},
 			{path: "/auth/email/resend-verification", body: map[string]any{"email": "csrf.task11c@example.com"}},
 		}
@@ -49,7 +49,7 @@ func TestTask11CAuthHTTP(t *testing.T) {
 			body         map[string]any
 		}{
 			{method: http.MethodPatch, path: "/me", body: map[string]any{"displayName": "Name"}},
-			{method: http.MethodPost, path: "/me/password", body: map[string]any{"currentPassword": task11COldPassword, "newPassword": task11CNewPassword}},
+			{method: http.MethodPost, path: "/me/password", body: map[string]any{"currentPassword": actionTokenOldPassword, "newPassword": actionTokenNewPassword}},
 		} {
 			resp := authRequestAt(t, client, serverURL, tt.method, tt.path, tt.body, "", "")
 			if resp.StatusCode != http.StatusUnauthorized || resp.Header.Get("WWW-Authenticate") != "Bearer" {
@@ -60,7 +60,7 @@ func TestTask11CAuthHTTP(t *testing.T) {
 	})
 
 	t.Run("unknown forgot is indistinguishable and creates no token or mail", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		mail := &captureMailer{}
 		serverURL, client := auxiliaryAuthServer(t, true, false, mail)
 
@@ -68,9 +68,9 @@ func TestTask11CAuthHTTP(t *testing.T) {
 		if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM auth_action_tokens`).Scan(&tokensBefore); err != nil {
 			t.Fatal(err)
 		}
-		linksBefore, _ := task11CPasswordLinks(mail)
-		task11CAcceptedEmailAction(t, client, serverURL, "/auth/password/forgot", "unknown-forgot.task11c@example.com")
-		linksAfter, _ := task11CPasswordLinks(mail)
+		linksBefore, _ := passwordResetLinks(mail)
+		acceptedEmailAction(t, client, serverURL, "/auth/password/forgot", "unknown-forgot.task11c@example.com")
+		linksAfter, _ := passwordResetLinks(mail)
 		if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM auth_action_tokens`).Scan(&tokensAfter); err != nil {
 			t.Fatal(err)
 		}
@@ -95,18 +95,18 @@ func TestTask11CAuthHTTP(t *testing.T) {
 	})
 
 	t.Run("known forgot sends post-commit link and stores only HMAC", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		mail := &captureMailer{}
 		serverURL, client := auxiliaryAuthServer(t, true, false, mail)
-		auth := task11CRegister(t, client, serverURL, "known-forgot.task11c@example.com", "known-forgot-task11c", task11COldPassword)
+		auth := registerOwner(t, client, serverURL, "known-forgot.task11c@example.com", "known-forgot-task11c", actionTokenOldPassword)
 
-		task11CAcceptedEmailAction(t, client, serverURL, "/auth/password/forgot", auth.User.Email)
-		links, committed := task11CPasswordLinks(mail)
+		acceptedEmailAction(t, client, serverURL, "/auth/password/forgot", auth.User.Email)
+		links, committed := passwordResetLinks(mail)
 		if len(links) != 1 || !committed {
 			t.Fatalf("known forgot mail count=%d committed=%v", len(links), committed)
 		}
-		rawToken := task11CTokenFromFragment(t, links[0])
-		codec := task11CActionTokenCodec(t)
+		rawToken := tokenFromFragment(t, links[0])
+		codec := testActionTokenCodec(t)
 		parsed, err := codec.Parse(rawToken, authmodule.ActionTokenPurposePasswordReset)
 		if err != nil {
 			t.Fatal("password reset link contained an invalid token")
@@ -159,20 +159,20 @@ func TestTask11CAuthHTTP(t *testing.T) {
 	})
 
 	t.Run("second forgot invalidates the first token", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		mail := &captureMailer{}
 		serverURL, client := auxiliaryAuthServer(t, true, false, mail)
-		auth := task11CRegister(t, client, serverURL, "forgot-rotation.task11c@example.com", "forgot-rotation-task11c", task11COldPassword)
+		auth := registerOwner(t, client, serverURL, "forgot-rotation.task11c@example.com", "forgot-rotation-task11c", actionTokenOldPassword)
 
-		task11CAcceptedEmailAction(t, client, serverURL, "/auth/password/forgot", auth.User.Email)
-		task11CAcceptedEmailAction(t, client, serverURL, "/auth/password/forgot", auth.User.Email)
-		links, _ := task11CPasswordLinks(mail)
+		acceptedEmailAction(t, client, serverURL, "/auth/password/forgot", auth.User.Email)
+		acceptedEmailAction(t, client, serverURL, "/auth/password/forgot", auth.User.Email)
+		links, _ := passwordResetLinks(mail)
 		if len(links) != 2 {
 			t.Fatalf("password reset mail count=%d", len(links))
 		}
-		firstRaw := task11CTokenFromFragment(t, links[0])
-		secondRaw := task11CTokenFromFragment(t, links[1])
-		codec := task11CActionTokenCodec(t)
+		firstRaw := tokenFromFragment(t, links[0])
+		secondRaw := tokenFromFragment(t, links[1])
+		codec := testActionTokenCodec(t)
 		first, firstErr := codec.Parse(firstRaw, authmodule.ActionTokenPurposePasswordReset)
 		second, secondErr := codec.Parse(secondRaw, authmodule.ActionTokenPurposePasswordReset)
 		if firstErr != nil || secondErr != nil || first.Selector == second.Selector {
@@ -191,7 +191,7 @@ func TestTask11CAuthHTTP(t *testing.T) {
 		}
 
 		csrfToken := getCSRFTokenAt(t, client, serverURL)
-		invalidated := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/password/reset", map[string]any{"token": firstRaw, "newPassword": task11CNewPassword}, csrfToken, "")
+		invalidated := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/password/reset", map[string]any{"token": firstRaw, "newPassword": actionTokenNewPassword}, csrfToken, "")
 		if invalidated.StatusCode != http.StatusBadRequest {
 			t.Fatalf("invalidated reset status=%d", invalidated.StatusCode)
 		}
@@ -201,39 +201,39 @@ func TestTask11CAuthHTTP(t *testing.T) {
 	})
 
 	t.Run("valid reset changes credentials and revokes every session", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		mail := &captureMailer{}
 		serverURL, primaryClient := auxiliaryAuthServer(t, true, false, mail)
 		email := "valid-reset.task11c@example.com"
-		registered := task11CRegister(t, primaryClient, serverURL, email, "valid-reset-task11c", task11COldPassword)
-		secondaryClient := task11CClient(t)
-		secondary := task11CLogin(t, secondaryClient, serverURL, email, task11COldPassword, "Reset Secondary")
+		registered := registerOwner(t, primaryClient, serverURL, email, "valid-reset-task11c", actionTokenOldPassword)
+		secondaryClient := newHTTPClient(t)
+		secondary := loginOwner(t, secondaryClient, serverURL, email, actionTokenOldPassword, "Reset Secondary")
 
 		var versionBefore int64
 		if err := testPool.QueryRow(context.Background(), `SELECT password_version FROM users WHERE id=$1`, registered.User.ID).Scan(&versionBefore); err != nil {
 			t.Fatal(err)
 		}
-		publicClient := task11CClient(t)
-		task11CAcceptedEmailAction(t, publicClient, serverURL, "/auth/password/forgot", email)
-		links, _ := task11CPasswordLinks(mail)
+		publicClient := newHTTPClient(t)
+		acceptedEmailAction(t, publicClient, serverURL, "/auth/password/forgot", email)
+		links, _ := passwordResetLinks(mail)
 		if len(links) != 1 {
 			t.Fatalf("password reset mail count=%d", len(links))
 		}
-		rawToken := task11CTokenFromFragment(t, links[0])
-		parsed, err := task11CActionTokenCodec(t).Parse(rawToken, authmodule.ActionTokenPurposePasswordReset)
+		rawToken := tokenFromFragment(t, links[0])
+		parsed, err := testActionTokenCodec(t).Parse(rawToken, authmodule.ActionTokenPurposePasswordReset)
 		if err != nil {
 			t.Fatal("password reset link contained an invalid token")
 		}
 
 		csrfToken := getCSRFTokenAt(t, primaryClient, serverURL)
-		if !task11CHasCookie(primaryClient.Jar, serverURL, "pdv_refresh") {
+		if !hasCookie(primaryClient.Jar, serverURL, "pdv_refresh") {
 			t.Fatal("reset setup did not retain the authenticated refresh cookie")
 		}
-		reset := authRequestAt(t, primaryClient, serverURL, http.MethodPost, "/auth/password/reset", map[string]any{"token": rawToken, "newPassword": task11CNewPassword}, csrfToken, "")
+		reset := authRequestAt(t, primaryClient, serverURL, http.MethodPost, "/auth/password/reset", map[string]any{"token": rawToken, "newPassword": actionTokenNewPassword}, csrfToken, "")
 		if reset.StatusCode != http.StatusNoContent {
 			t.Fatalf("valid reset status=%d: %s", reset.StatusCode, readBody(reset))
 		}
-		task11CAssertCookiesCleared(t, primaryClient, serverURL, reset)
+		assertCookiesCleared(t, primaryClient, serverURL, reset)
 		reset.Body.Close()
 
 		var versionAfter int64
@@ -244,13 +244,13 @@ func TestTask11CAuthHTTP(t *testing.T) {
 		if err := testPool.QueryRow(context.Background(), `SELECT consumed_at IS NOT NULL FROM auth_action_tokens WHERE id=$1`, parsed.Selector).Scan(&consumed); err != nil {
 			t.Fatal(err)
 		}
-		stats := task11CSessionStatsForUser(t, registered.User.ID)
+		stats := sessionStatsForUser(t, registered.User.ID)
 		if versionAfter != versionBefore+1 || !consumed || stats.totalSessions != 2 || stats.activeSessions != 0 || stats.totalRefresh != 2 || stats.unrevokedRefresh != 0 || stats.expectedReasons != 2 {
 			t.Fatalf("reset persistence mismatch: version=%d->%d consumed=%v stats=%+v", versionBefore, versionAfter, consumed, stats)
 		}
 
 		for name, oldAuth := range map[string]authResponse{"registered": registered, "secondary": secondary} {
-			oldMe := authRequestAt(t, task11CClient(t), serverURL, http.MethodGet, "/me", nil, "", oldAuth.AccessToken)
+			oldMe := authRequestAt(t, newHTTPClient(t), serverURL, http.MethodGet, "/me", nil, "", oldAuth.AccessToken)
 			if oldMe.StatusCode != http.StatusUnauthorized {
 				t.Fatalf("%s old access status=%d", name, oldMe.StatusCode)
 			}
@@ -266,16 +266,16 @@ func TestTask11CAuthHTTP(t *testing.T) {
 			t.Fatalf("reused reset code=%q", code)
 		}
 
-		loginClient := task11CClient(t)
+		loginClient := newHTTPClient(t)
 		csrfToken = getCSRFTokenAt(t, loginClient, serverURL)
-		oldLogin := authRequestAt(t, loginClient, serverURL, http.MethodPost, "/auth/login", task11CLoginPayload(email, task11COldPassword, "Old Reset Password"), csrfToken, "")
+		oldLogin := authRequestAt(t, loginClient, serverURL, http.MethodPost, "/auth/login", loginPayload(email, actionTokenOldPassword, "Old Reset Password"), csrfToken, "")
 		if oldLogin.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("old password login status=%d", oldLogin.StatusCode)
 		}
 		if code := responseErrorCode(t, oldLogin); code != "INVALID_CREDENTIALS" {
 			t.Fatalf("old password login code=%q", code)
 		}
-		newLogin := task11CLogin(t, loginClient, serverURL, email, task11CNewPassword, "New Reset Password")
+		newLogin := loginOwner(t, loginClient, serverURL, email, actionTokenNewPassword, "New Reset Password")
 		if newLogin.AccessToken == "" {
 			t.Fatal("new password login did not issue access")
 		}
@@ -290,10 +290,10 @@ func TestTask11CAuthHTTP(t *testing.T) {
 	})
 
 	t.Run("patch me changes only display name and get me reflects it", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		serverURL, client := auxiliaryAuthServer(t, true, false, &captureMailer{})
 		email := "profile.task11c@example.com"
-		registered := task11CRegister(t, client, serverURL, email, "profile-task11c", task11COldPassword)
+		registered := registerOwner(t, client, serverURL, email, "profile-task11c", actionTokenOldPassword)
 
 		type persistedIdentity struct {
 			email, normalized, displayName, status, verifiedAt, passwordHash string
@@ -349,18 +349,18 @@ func TestTask11CAuthHTTP(t *testing.T) {
 	})
 
 	t.Run("authenticated password change verifies current password and revokes every session", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		serverURL, primaryClient := auxiliaryAuthServer(t, true, false, &captureMailer{})
 		email := "password-change.task11c@example.com"
-		registered := task11CRegister(t, primaryClient, serverURL, email, "password-change-task11c", task11COldPassword)
-		secondaryClient := task11CClient(t)
-		secondary := task11CLogin(t, secondaryClient, serverURL, email, task11COldPassword, "Password Secondary")
+		registered := registerOwner(t, primaryClient, serverURL, email, "password-change-task11c", actionTokenOldPassword)
+		secondaryClient := newHTTPClient(t)
+		secondary := loginOwner(t, secondaryClient, serverURL, email, actionTokenOldPassword, "Password Secondary")
 
 		var versionBefore int64
 		if err := testPool.QueryRow(context.Background(), `SELECT password_version FROM users WHERE id=$1`, registered.User.ID).Scan(&versionBefore); err != nil {
 			t.Fatal(err)
 		}
-		wrong := authRequestAt(t, primaryClient, serverURL, http.MethodPost, "/me/password", map[string]any{"currentPassword": "Task 11C definitely wrong 2026!", "newPassword": task11CNewPassword}, "", registered.AccessToken)
+		wrong := authRequestAt(t, primaryClient, serverURL, http.MethodPost, "/me/password", map[string]any{"currentPassword": "Task 11C definitely wrong 2026!", "newPassword": actionTokenNewPassword}, "", registered.AccessToken)
 		if wrong.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("wrong current password status=%d", wrong.StatusCode)
 		}
@@ -371,45 +371,45 @@ func TestTask11CAuthHTTP(t *testing.T) {
 		if err := testPool.QueryRow(context.Background(), `SELECT password_version FROM users WHERE id=$1`, registered.User.ID).Scan(&versionAfterWrong); err != nil {
 			t.Fatal(err)
 		}
-		wrongStats := task11CSessionStatsForUser(t, registered.User.ID)
-		if versionAfterWrong != versionBefore || wrongStats.activeSessions != 2 || !task11CHasCookie(primaryClient.Jar, serverURL, "pdv_refresh") {
+		wrongStats := sessionStatsForUser(t, registered.User.ID)
+		if versionAfterWrong != versionBefore || wrongStats.activeSessions != 2 || !hasCookie(primaryClient.Jar, serverURL, "pdv_refresh") {
 			t.Fatalf("wrong current password changed state: version=%d->%d stats=%+v", versionBefore, versionAfterWrong, wrongStats)
 		}
 
-		changed := authRequestAt(t, primaryClient, serverURL, http.MethodPost, "/me/password", map[string]any{"currentPassword": task11COldPassword, "newPassword": task11CNewPassword}, "", registered.AccessToken)
+		changed := authRequestAt(t, primaryClient, serverURL, http.MethodPost, "/me/password", map[string]any{"currentPassword": actionTokenOldPassword, "newPassword": actionTokenNewPassword}, "", registered.AccessToken)
 		if changed.StatusCode != http.StatusNoContent {
 			t.Fatalf("password change status=%d: %s", changed.StatusCode, readBody(changed))
 		}
-		task11CAssertCookiesCleared(t, primaryClient, serverURL, changed)
+		assertCookiesCleared(t, primaryClient, serverURL, changed)
 		changed.Body.Close()
 
 		var versionAfter int64
 		if err := testPool.QueryRow(context.Background(), `SELECT password_version FROM users WHERE id=$1`, registered.User.ID).Scan(&versionAfter); err != nil {
 			t.Fatal(err)
 		}
-		stats := task11CSessionStatsForUserWithReason(t, registered.User.ID, "password_changed")
+		stats := sessionStatsForUserWithReason(t, registered.User.ID, "password_changed")
 		if versionAfter != versionBefore+1 || stats.totalSessions != 2 || stats.activeSessions != 0 || stats.totalRefresh != 2 || stats.unrevokedRefresh != 0 || stats.expectedReasons != 2 {
 			t.Fatalf("password change persistence mismatch: version=%d->%d stats=%+v", versionBefore, versionAfter, stats)
 		}
 
 		for name, oldAuth := range map[string]authResponse{"registered": registered, "secondary": secondary} {
-			oldMe := authRequestAt(t, task11CClient(t), serverURL, http.MethodGet, "/me", nil, "", oldAuth.AccessToken)
+			oldMe := authRequestAt(t, newHTTPClient(t), serverURL, http.MethodGet, "/me", nil, "", oldAuth.AccessToken)
 			if oldMe.StatusCode != http.StatusUnauthorized {
 				t.Fatalf("%s old access status=%d", name, oldMe.StatusCode)
 			}
 			oldMe.Body.Close()
 		}
 
-		loginClient := task11CClient(t)
+		loginClient := newHTTPClient(t)
 		csrfToken := getCSRFTokenAt(t, loginClient, serverURL)
-		oldLogin := authRequestAt(t, loginClient, serverURL, http.MethodPost, "/auth/login", task11CLoginPayload(email, task11COldPassword, "Old Changed Password"), csrfToken, "")
+		oldLogin := authRequestAt(t, loginClient, serverURL, http.MethodPost, "/auth/login", loginPayload(email, actionTokenOldPassword, "Old Changed Password"), csrfToken, "")
 		if oldLogin.StatusCode != http.StatusUnauthorized {
 			t.Fatalf("old changed password login status=%d", oldLogin.StatusCode)
 		}
 		if code := responseErrorCode(t, oldLogin); code != "INVALID_CREDENTIALS" {
 			t.Fatalf("old changed password login code=%q", code)
 		}
-		newLogin := task11CLogin(t, loginClient, serverURL, email, task11CNewPassword, "New Changed Password")
+		newLogin := loginOwner(t, loginClient, serverURL, email, actionTokenNewPassword, "New Changed Password")
 		if newLogin.AccessToken == "" {
 			t.Fatal("changed password login did not issue access")
 		}
@@ -424,29 +424,29 @@ func TestTask11CAuthHTTP(t *testing.T) {
 	})
 
 	t.Run("verification resend rotates token and verification is idempotent", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		mail := &captureMailer{}
 		serverURL, client := auxiliaryAuthServer(t, true, true, mail)
 		email := "verification.task11c@example.com"
-		task11CRegisterVerificationRequired(t, client, serverURL, email, "verification-task11c", task11COldPassword)
+		registerWithVerification(t, client, serverURL, email, "verification-task11c", actionTokenOldPassword)
 
-		verificationLinks, committed := task11CVerificationLinks(mail)
+		verificationLinks, committed := verificationEmailLinks(mail)
 		if len(verificationLinks) != 1 || !committed {
 			t.Fatalf("registration verification mail count=%d committed=%v", len(verificationLinks), committed)
 		}
-		oldRaw := task11CTokenFromFragment(t, verificationLinks[0])
-		codec := task11CActionTokenCodec(t)
+		oldRaw := tokenFromFragment(t, verificationLinks[0])
+		codec := testActionTokenCodec(t)
 		oldParsed, err := codec.Parse(oldRaw, authmodule.ActionTokenPurposeEmailVerification)
 		if err != nil {
 			t.Fatal("registration verification link contained an invalid token")
 		}
 
-		task11CAcceptedEmailAction(t, client, serverURL, "/auth/email/resend-verification", email)
-		verificationLinks, committed = task11CVerificationLinks(mail)
+		acceptedEmailAction(t, client, serverURL, "/auth/email/resend-verification", email)
+		verificationLinks, committed = verificationEmailLinks(mail)
 		if len(verificationLinks) != 2 || !committed {
 			t.Fatalf("resend verification mail count=%d committed=%v", len(verificationLinks), committed)
 		}
-		newRaw := task11CTokenFromFragment(t, verificationLinks[1])
+		newRaw := tokenFromFragment(t, verificationLinks[1])
 		newParsed, err := codec.Parse(newRaw, authmodule.ActionTokenPurposeEmailVerification)
 		if err != nil || oldParsed.Selector == newParsed.Selector {
 			t.Fatal("resend verification produced an invalid or duplicate selector")
@@ -498,30 +498,30 @@ func TestTask11CAuthHTTP(t *testing.T) {
 		if !verifiedAt || audits != 1 {
 			t.Fatalf("verification persistence verified=%v audits=%d", verifiedAt, audits)
 		}
-		verificationLinks, _ = task11CVerificationLinks(mail)
+		verificationLinks, _ = verificationEmailLinks(mail)
 		if len(verificationLinks) != 2 {
 			t.Fatalf("unexpected verification mail count after verify=%d", len(verificationLinks))
 		}
-		loggedIn := task11CLogin(t, task11CClient(t), serverURL, email, task11COldPassword, "Verified Login")
+		loggedIn := loginOwner(t, newHTTPClient(t), serverURL, email, actionTokenOldPassword, "Verified Login")
 		if !loggedIn.User.EmailVerified {
 			t.Fatal("verified login did not reflect verified email")
 		}
 	})
 
 	t.Run("expired reset token returns gone", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		serverURL, client := auxiliaryAuthServer(t, true, false, &captureMailer{})
-		registered := task11CRegister(t, client, serverURL, "expired-reset.task11c@example.com", "expired-reset-task11c", task11COldPassword)
-		userID := task11CUUID(t, registered.User.ID)
+		registered := registerOwner(t, client, serverURL, "expired-reset.task11c@example.com", "expired-reset-task11c", actionTokenOldPassword)
+		userID := parseUUID(t, registered.User.ID)
 		now := time.Now().UTC()
-		rawToken, selector := task11CCreateResetToken(t, userID, now.Add(-2*time.Hour), now.Add(-time.Hour))
+		rawToken, selector := createDirectResetToken(t, userID, now.Add(-2*time.Hour), now.Add(-time.Hour))
 
 		var versionBefore int64
 		if err := testPool.QueryRow(context.Background(), `SELECT password_version FROM users WHERE id=$1`, userID).Scan(&versionBefore); err != nil {
 			t.Fatal(err)
 		}
 		csrfToken := getCSRFTokenAt(t, client, serverURL)
-		expired := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/password/reset", map[string]any{"token": rawToken, "newPassword": task11CNewPassword}, csrfToken, "")
+		expired := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/password/reset", map[string]any{"token": rawToken, "newPassword": actionTokenNewPassword}, csrfToken, "")
 		if expired.StatusCode != http.StatusGone {
 			t.Fatalf("expired reset status=%d", expired.StatusCode)
 		}
@@ -543,26 +543,26 @@ func TestTask11CAuthHTTP(t *testing.T) {
 	})
 
 	t.Run("concurrent reset consumes once without deadlock", func(t *testing.T) {
-		resetTask11CRateState(t)
+		resetRateLimitState(t)
 		serverURL, primaryClient := auxiliaryAuthServer(t, true, false, &captureMailer{})
 		email := "concurrent-reset.task11c@example.com"
-		registered := task11CRegister(t, primaryClient, serverURL, email, "concurrent-reset-task11c", task11COldPassword)
-		secondaryClient := task11CClient(t)
-		secondary := task11CLogin(t, secondaryClient, serverURL, email, task11COldPassword, "Concurrent Secondary")
-		userID := task11CUUID(t, registered.User.ID)
+		registered := registerOwner(t, primaryClient, serverURL, email, "concurrent-reset-task11c", actionTokenOldPassword)
+		secondaryClient := newHTTPClient(t)
+		secondary := loginOwner(t, secondaryClient, serverURL, email, actionTokenOldPassword, "Concurrent Secondary")
+		userID := parseUUID(t, registered.User.ID)
 		now := time.Now().UTC()
-		rawToken, selector := task11CCreateResetToken(t, userID, now, now.Add(30*time.Minute))
+		rawToken, selector := createDirectResetToken(t, userID, now, now.Add(30*time.Minute))
 
 		var versionBefore int64
 		if err := testPool.QueryRow(context.Background(), `SELECT password_version FROM users WHERE id=$1`, userID).Scan(&versionBefore); err != nil {
 			t.Fatal(err)
 		}
-		raceClients := []*http.Client{task11CClient(t), task11CClient(t)}
+		raceClients := []*http.Client{newHTTPClient(t), newHTTPClient(t)}
 		csrfTokens := []string{
 			getCSRFTokenAt(t, raceClients[0], serverURL),
 			getCSRFTokenAt(t, raceClients[1], serverURL),
 		}
-		payload, err := json.Marshal(map[string]any{"token": rawToken, "newPassword": task11CNewPassword})
+		payload, err := json.Marshal(map[string]any{"token": rawToken, "newPassword": actionTokenNewPassword})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -627,7 +627,7 @@ func TestTask11CAuthHTTP(t *testing.T) {
 		if err := testPool.QueryRow(context.Background(), `SELECT consumed_at IS NOT NULL FROM auth_action_tokens WHERE id=$1`, selector).Scan(&consumed); err != nil {
 			t.Fatal(err)
 		}
-		stats := task11CSessionStatsForUser(t, registered.User.ID)
+		stats := sessionStatsForUser(t, registered.User.ID)
 		var audits int
 		if err := testPool.QueryRow(context.Background(), `SELECT COUNT(*) FROM security_audit_events WHERE actor_user_id=$1 AND event_type='auth.password.reset_completed' AND outcome='SUCCESS'`, userID).Scan(&audits); err != nil {
 			t.Fatal(err)
@@ -636,7 +636,7 @@ func TestTask11CAuthHTTP(t *testing.T) {
 			t.Fatalf("concurrent reset persistence mismatch: version=%d->%d consumed=%v audits=%d stats=%+v", versionBefore, versionAfter, consumed, audits, stats)
 		}
 		for name, oldAuth := range map[string]authResponse{"registered": registered, "secondary": secondary} {
-			oldMe := authRequestAt(t, task11CClient(t), serverURL, http.MethodGet, "/me", nil, "", oldAuth.AccessToken)
+			oldMe := authRequestAt(t, newHTTPClient(t), serverURL, http.MethodGet, "/me", nil, "", oldAuth.AccessToken)
 			if oldMe.StatusCode != http.StatusUnauthorized {
 				t.Fatalf("%s concurrent-reset old access status=%d", name, oldMe.StatusCode)
 			}
@@ -655,7 +655,7 @@ func TestTask11CAuthHTTP(t *testing.T) {
 			{name: "resend", path: "/auth/email/resend-verification", emailPrefix: "resend-rate"},
 		} {
 			t.Run(endpoint.name+" email", func(t *testing.T) {
-				resetTask11CRateState(t)
+				resetRateLimitState(t)
 				csrfToken := getCSRFTokenAt(t, client, serverURL)
 				email := endpoint.emailPrefix + "-email.task11c@example.com"
 				for attempt := 1; attempt <= 3; attempt++ {
@@ -666,11 +666,11 @@ func TestTask11CAuthHTTP(t *testing.T) {
 					resp.Body.Close()
 				}
 				limited := authRequestAt(t, client, serverURL, http.MethodPost, endpoint.path, map[string]any{"email": email}, csrfToken, "")
-				task11CAssertRateLimited(t, endpoint.name+" email", limited)
+				assertRateLimited(t, endpoint.name+" email", limited)
 			})
 
 			t.Run(endpoint.name+" IP", func(t *testing.T) {
-				resetTask11CRateState(t)
+				resetRateLimitState(t)
 				csrfToken := getCSRFTokenAt(t, client, serverURL)
 				for attempt := range 10 {
 					email := fmt.Sprintf("%s-ip-%02d.task11c@example.com", endpoint.emailPrefix, attempt)
@@ -682,19 +682,19 @@ func TestTask11CAuthHTTP(t *testing.T) {
 				}
 				limitedEmail := endpoint.emailPrefix + "-ip-limited.task11c@example.com"
 				limited := authRequestAt(t, client, serverURL, http.MethodPost, endpoint.path, map[string]any{"email": limitedEmail}, csrfToken, "")
-				task11CAssertRateLimited(t, endpoint.name+" IP", limited)
+				assertRateLimited(t, endpoint.name+" IP", limited)
 			})
 		}
 
-		passwordLinks, _ := task11CPasswordLinks(mail)
-		verificationLinks, _ := task11CVerificationLinks(mail)
+		passwordLinks, _ := passwordResetLinks(mail)
+		verificationLinks, _ := verificationEmailLinks(mail)
 		if len(passwordLinks) != 0 || len(verificationLinks) != 0 {
 			t.Fatalf("unknown rate-limit requests sent mail: password=%d verification=%d", len(passwordLinks), len(verificationLinks))
 		}
 	})
 }
 
-func task11CClient(t *testing.T) *http.Client {
+func newHTTPClient(t *testing.T) *http.Client {
 	t.Helper()
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -703,10 +703,10 @@ func task11CClient(t *testing.T) *http.Client {
 	return &http.Client{Jar: jar, Timeout: 10 * time.Second}
 }
 
-func task11CRegister(t *testing.T, client *http.Client, serverURL, email, slug, password string) authResponse {
+func registerOwner(t *testing.T, client *http.Client, serverURL, email, slug, password string) authResponse {
 	t.Helper()
 	csrfToken := getCSRFTokenAt(t, client, serverURL)
-	resp := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/register", task11CRegisterPayload(email, slug, password), csrfToken, "")
+	resp := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/register", ownerRegisterPayload(email, slug, password), csrfToken, "")
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("register %s status=%d: %s", email, resp.StatusCode, readBody(resp))
 	}
@@ -718,10 +718,10 @@ func task11CRegister(t *testing.T, client *http.Client, serverURL, email, slug, 
 	return result
 }
 
-func task11CRegisterVerificationRequired(t *testing.T, client *http.Client, serverURL, email, slug, password string) {
+func registerWithVerification(t *testing.T, client *http.Client, serverURL, email, slug, password string) {
 	t.Helper()
 	csrfToken := getCSRFTokenAt(t, client, serverURL)
-	resp := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/register", task11CRegisterPayload(email, slug, password), csrfToken, "")
+	resp := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/register", ownerRegisterPayload(email, slug, password), csrfToken, "")
 	if resp.StatusCode != http.StatusAccepted {
 		t.Fatalf("verification-required register %s status=%d: %s", email, resp.StatusCode, readBody(resp))
 	}
@@ -734,7 +734,7 @@ func task11CRegisterVerificationRequired(t *testing.T, client *http.Client, serv
 	}
 }
 
-func task11CRegisterPayload(email, slug, password string) map[string]any {
+func ownerRegisterPayload(email, slug, password string) map[string]any {
 	return map[string]any{
 		"email": email, "password": password, "displayName": "Task 11C Owner",
 		"organization": map[string]any{"name": "Task 11C " + slug, "slug": slug, "timezone": "America/Sao_Paulo", "locale": "pt-BR", "currency": "BRL"},
@@ -743,14 +743,14 @@ func task11CRegisterPayload(email, slug, password string) map[string]any {
 	}
 }
 
-func task11CLoginPayload(email, password, deviceName string) map[string]any {
+func loginPayload(email, password, deviceName string) map[string]any {
 	return map[string]any{"email": email, "password": password, "clientId": "pdv-admin", "deviceName": deviceName}
 }
 
-func task11CLogin(t *testing.T, client *http.Client, serverURL, email, password, deviceName string) authResponse {
+func loginOwner(t *testing.T, client *http.Client, serverURL, email, password, deviceName string) authResponse {
 	t.Helper()
 	csrfToken := getCSRFTokenAt(t, client, serverURL)
-	resp := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/login", task11CLoginPayload(email, password, deviceName), csrfToken, "")
+	resp := authRequestAt(t, client, serverURL, http.MethodPost, "/auth/login", loginPayload(email, password, deviceName), csrfToken, "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("login %s status=%d: %s", email, resp.StatusCode, readBody(resp))
 	}
@@ -762,7 +762,7 @@ func task11CLogin(t *testing.T, client *http.Client, serverURL, email, password,
 	return result
 }
 
-func task11CAcceptedEmailAction(t *testing.T, client *http.Client, serverURL, path, email string) {
+func acceptedEmailAction(t *testing.T, client *http.Client, serverURL, path, email string) {
 	t.Helper()
 	csrfToken := getCSRFTokenAt(t, client, serverURL)
 	resp := authRequestAt(t, client, serverURL, http.MethodPost, path, map[string]any{"email": email}, csrfToken, "")
@@ -778,7 +778,7 @@ func task11CAcceptedEmailAction(t *testing.T, client *http.Client, serverURL, pa
 	}
 }
 
-func task11CTokenFromFragment(t *testing.T, link string) string {
+func tokenFromFragment(t *testing.T, link string) string {
 	t.Helper()
 	parsed, err := url.Parse(link)
 	if err != nil || parsed.RawQuery != "" || parsed.Fragment == "" {
@@ -795,19 +795,19 @@ func task11CTokenFromFragment(t *testing.T, link string) string {
 	return values[0]
 }
 
-func task11CPasswordLinks(mail *captureMailer) ([]string, bool) {
+func passwordResetLinks(mail *captureMailer) ([]string, bool) {
 	mail.mu.Lock()
 	defer mail.mu.Unlock()
 	return append([]string(nil), mail.passwordResetLinks...), mail.committed
 }
 
-func task11CVerificationLinks(mail *captureMailer) ([]string, bool) {
+func verificationEmailLinks(mail *captureMailer) ([]string, bool) {
 	mail.mu.Lock()
 	defer mail.mu.Unlock()
 	return append([]string(nil), mail.verificationLinks...), mail.committed
 }
 
-func task11CActionTokenCodec(t *testing.T) authmodule.ActionTokenCodec {
+func testActionTokenCodec(t *testing.T) authmodule.ActionTokenCodec {
 	t.Helper()
 	codec, err := authmodule.NewActionTokenCodec([]byte("abcdef0123456789abcdef0123456789"))
 	if err != nil {
@@ -816,7 +816,7 @@ func task11CActionTokenCodec(t *testing.T) authmodule.ActionTokenCodec {
 	return codec
 }
 
-func task11CUUID(t *testing.T, value string) pgtype.UUID {
+func parseUUID(t *testing.T, value string) pgtype.UUID {
 	t.Helper()
 	var id pgtype.UUID
 	if err := id.Scan(value); err != nil || !id.Valid {
@@ -825,13 +825,13 @@ func task11CUUID(t *testing.T, value string) pgtype.UUID {
 	return id
 }
 
-func task11CCreateResetToken(t *testing.T, userID pgtype.UUID, createdAt, expiresAt time.Time) (string, pgtype.UUID) {
+func createDirectResetToken(t *testing.T, userID pgtype.UUID, createdAt, expiresAt time.Time) (string, pgtype.UUID) {
 	t.Helper()
 	var selector pgtype.UUID
 	if err := testPool.QueryRow(context.Background(), `SELECT uuidv7()`).Scan(&selector); err != nil {
 		t.Fatal(err)
 	}
-	rawToken, secretHash, err := task11CActionTokenCodec(t).Generate(authmodule.ActionTokenPurposePasswordReset, selector)
+	rawToken, secretHash, err := testActionTokenCodec(t).Generate(authmodule.ActionTokenPurposePasswordReset, selector)
 	if err != nil {
 		t.Fatal("could not generate direct password reset token")
 	}
@@ -844,18 +844,18 @@ func task11CCreateResetToken(t *testing.T, userID pgtype.UUID, createdAt, expire
 	return rawToken, selector
 }
 
-type task11CSessionStats struct {
+type sessionStats struct {
 	totalSessions, activeSessions, totalRefresh, unrevokedRefresh, expectedReasons int
 }
 
-func task11CSessionStatsForUser(t *testing.T, userID string) task11CSessionStats {
+func sessionStatsForUser(t *testing.T, userID string) sessionStats {
 	t.Helper()
-	return task11CSessionStatsForUserWithReason(t, userID, "password_reset")
+	return sessionStatsForUserWithReason(t, userID, "password_reset")
 }
 
-func task11CSessionStatsForUserWithReason(t *testing.T, userID, reason string) task11CSessionStats {
+func sessionStatsForUserWithReason(t *testing.T, userID, reason string) sessionStats {
 	t.Helper()
-	var stats task11CSessionStats
+	var stats sessionStats
 	if err := testPool.QueryRow(context.Background(), `
 		SELECT
 			(SELECT COUNT(*) FROM auth_sessions WHERE user_id=$1),
@@ -869,7 +869,7 @@ func task11CSessionStatsForUserWithReason(t *testing.T, userID, reason string) t
 	return stats
 }
 
-func task11CAssertCookiesCleared(t *testing.T, client *http.Client, serverURL string, resp *http.Response) {
+func assertCookiesCleared(t *testing.T, client *http.Client, serverURL string, resp *http.Response) {
 	t.Helper()
 	deleted := map[string]bool{"pdv_refresh": false, "pdv_csrf": false}
 	for _, cookie := range resp.Cookies() {
@@ -880,12 +880,12 @@ func task11CAssertCookiesCleared(t *testing.T, client *http.Client, serverURL st
 	if !deleted["pdv_refresh"] || !deleted["pdv_csrf"] {
 		t.Fatalf("auth cookie deletion headers missing: %+v", deleted)
 	}
-	if task11CHasCookie(client.Jar, serverURL, "pdv_refresh") || task11CHasCookie(client.Jar, serverURL, "pdv_csrf") {
+	if hasCookie(client.Jar, serverURL, "pdv_refresh") || hasCookie(client.Jar, serverURL, "pdv_csrf") {
 		t.Fatal("auth cookies remained in cookie jar after credential change")
 	}
 }
 
-func task11CHasCookie(jar http.CookieJar, serverURL, name string) bool {
+func hasCookie(jar http.CookieJar, serverURL, name string) bool {
 	parsed, err := url.Parse(serverURL)
 	if err != nil {
 		return false
@@ -898,7 +898,7 @@ func task11CHasCookie(jar http.CookieJar, serverURL, name string) bool {
 	return false
 }
 
-func task11CAssertRateLimited(t *testing.T, name string, resp *http.Response) {
+func assertRateLimited(t *testing.T, name string, resp *http.Response) {
 	t.Helper()
 	if resp.StatusCode != http.StatusTooManyRequests || strings.TrimSpace(resp.Header.Get("Retry-After")) == "" {
 		t.Fatalf("%s rate limit status=%d retry-after=%q: %s", name, resp.StatusCode, resp.Header.Get("Retry-After"), readBody(resp))
@@ -908,7 +908,7 @@ func task11CAssertRateLimited(t *testing.T, name string, resp *http.Response) {
 	}
 }
 
-func resetTask11CRateState(t *testing.T) {
+func resetRateLimitState(t *testing.T) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
