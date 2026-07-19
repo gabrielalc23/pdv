@@ -5,13 +5,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) List(ctx context.Context, scope tenancy.StoreScope, input ListCatalogInput) (CatalogListResponse, error) {
+func (s *Service) List(ctx context.Context, actor authn.StoreActor, input ListCatalogInput) (CatalogListResponse, error) {
+	scope := actor.ToStoreScope()
+
 	page, pageSize, err := normalizePagination(input.Page, input.PageSize)
 	if err != nil {
 		return CatalogListResponse{}, err
@@ -67,7 +69,9 @@ func (s *Service) List(ctx context.Context, scope tenancy.StoreScope, input List
 	}, nil
 }
 
-func (s *Service) GetByID(ctx context.Context, scope tenancy.StoreScope, rawID string) (CatalogProductResponse, error) {
+func (s *Service) GetByID(ctx context.Context, actor authn.StoreActor, rawID string) (CatalogProductResponse, error) {
+	scope := actor.ToStoreScope()
+
 	productID, err := parseUUID(rawID, "id")
 	if err != nil {
 		return CatalogProductResponse{}, err
@@ -84,7 +88,9 @@ func (s *Service) GetByID(ctx context.Context, scope tenancy.StoreScope, rawID s
 	return ToCatalogProductResponse(toCatalogProductDataFromIDRow(row))
 }
 
-func (s *Service) GetByBarcode(ctx context.Context, scope tenancy.StoreScope, rawBarcode string) (CatalogProductResponse, error) {
+func (s *Service) GetByBarcode(ctx context.Context, actor authn.StoreActor, rawBarcode string) (CatalogProductResponse, error) {
+	scope := actor.ToStoreScope()
+
 	barcode, err := normalizeRequiredText("barcode", rawBarcode)
 	if err != nil {
 		return CatalogProductResponse{}, err

@@ -5,13 +5,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) ListInventory(ctx context.Context, scope tenancy.StoreScope, input ListInventoryInput) (InventoryListResponse, error) {
+func (s *Service) List(ctx context.Context, actor authn.StoreActor, input ListInventoryInput) (InventoryListResponse, error) {
+	scope := actor.ToStoreScope()
 	page, pageSize, err := normalizePagination(input.Page, input.PageSize)
 	if err != nil {
 		return InventoryListResponse{}, err
@@ -51,7 +53,8 @@ func (s *Service) ListInventory(ctx context.Context, scope tenancy.StoreScope, i
 	}, nil
 }
 
-func (s *Service) GetProductInventory(ctx context.Context, scope tenancy.StoreScope, rawID string) (InventoryResponse, error) {
+func (s *Service) GetByProductID(ctx context.Context, actor authn.StoreActor, rawID string) (InventoryResponse, error) {
+	scope := actor.ToStoreScope()
 	productID, err := parseUUID(rawID, "id")
 	if err != nil {
 		return InventoryResponse{}, err
@@ -70,7 +73,8 @@ func (s *Service) GetProductInventory(ctx context.Context, scope tenancy.StoreSc
 	return toInventoryDetailsResponse(product, inventory)
 }
 
-func (s *Service) ListMovements(ctx context.Context, scope tenancy.StoreScope, rawID string, input ListInventoryMovementsInput) (InventoryMovementListResponse, error) {
+func (s *Service) ListMovements(ctx context.Context, actor authn.StoreActor, rawID string) (InventoryMovementListResponse, error) {
+	scope := actor.ToStoreScope()
 	productID, err := parseUUID(rawID, "id")
 	if err != nil {
 		return InventoryMovementListResponse{}, err
@@ -80,19 +84,12 @@ func (s *Service) ListMovements(ctx context.Context, scope tenancy.StoreScope, r
 		return InventoryMovementListResponse{}, err
 	}
 
-	page, pageSize, err := normalizePagination(input.Page, input.PageSize)
-	if err != nil {
-		return InventoryMovementListResponse{}, err
-	}
-
-	movementType, err := parseMovementTypeFilter(input.Type)
-	if err != nil {
-		return InventoryMovementListResponse{}, err
-	}
+	page := int32(1)
+	pageSize := int32(20)
 
 	total, err := s.store.CountInventoryMovementsByProductID(ctx, scope, database.CountInventoryMovementsByProductIDForStoreParams{
 		ProductID:          productID,
-		MovementTypeFilter: movementType,
+		MovementTypeFilter: database.NullInventoryMovementType{Valid: false},
 	})
 	if err != nil {
 		return InventoryMovementListResponse{}, fmt.Errorf("count inventory movements: %w", err)
@@ -100,9 +97,9 @@ func (s *Service) ListMovements(ctx context.Context, scope tenancy.StoreScope, r
 
 	rows, err := s.store.ListInventoryMovementsByProductID(ctx, scope, database.ListInventoryMovementsByProductIDForStoreParams{
 		ProductID:          productID,
-		MovementTypeFilter: movementType,
-		PageOffset:         int32((page - 1) * pageSize),
-		PageSize:           int32(pageSize),
+		MovementTypeFilter: database.NullInventoryMovementType{Valid: false},
+		PageOffset:         (page - 1) * pageSize,
+		PageSize:           pageSize,
 	})
 	if err != nil {
 		return InventoryMovementListResponse{}, fmt.Errorf("list inventory movements: %w", err)
@@ -119,7 +116,7 @@ func (s *Service) ListMovements(ctx context.Context, scope tenancy.StoreScope, r
 
 	return InventoryMovementListResponse{
 		Data:       items,
-		Pagination: paginationResponse(page, pageSize, total),
+		Pagination: paginationResponse(int(page), int(pageSize), total),
 	}, nil
 }
 

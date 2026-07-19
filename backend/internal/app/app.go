@@ -31,7 +31,6 @@ import (
 	"github.com/gabrielalc23/pdv/internal/platform/password"
 	"github.com/gabrielalc23/pdv/internal/platform/ratelimit"
 	"github.com/gabrielalc23/pdv/internal/platform/requestmeta"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	jwt "github.com/gabrielalc23/pdv/internal/platform/token/jwt"
 	"github.com/gabrielalc23/pdv/internal/platform/valkey"
 	"github.com/gabrielalc23/pdv/internal/products"
@@ -218,57 +217,60 @@ func New(deps Dependencies) http.Handler {
 		registerAdministrationRoutes(router, deps, authComponents)
 	}
 
-	router.Group(func(r chi.Router) {
-		r.Use(tenancy.Middleware)
+	if authComponents != nil {
+		router.Group(func(business chi.Router) {
+			business.Use(authComponents.AuthN.RequireAccessToken)
 
-		productStore := products.NewStore(deps.Store.Queries)
-		productService := products.NewService(productStore)
-		productHandler := products.NewHandler(productService, tenancy.NewContextResolver())
-		products.RegisterRoutes(r, productHandler)
+			productStore := products.NewStore(deps.Store.Queries)
+			productService := products.NewService(productStore)
+			productHandler := products.NewHandler(productService)
+			products.RegisterRoutes(business, productHandler, authComponents.AuthZ)
 
-		categoryStore := categories.NewStore(deps.Store.Queries)
-		categoryService := categories.NewService(categoryStore)
-		categoryHandler := categories.NewHandler(categoryService, tenancy.NewContextResolver())
-		categories.RegisterRoutes(r, categoryHandler)
+			categoryStore := categories.NewStore(deps.Store.Queries)
+			categoryService := categories.NewService(categoryStore)
+			categoryHandler := categories.NewHandler(categoryService)
+			categories.RegisterRoutes(business, categoryHandler, authComponents.AuthZ)
 
-		inventoryReadStore := inventory.NewReadStore(deps.Store.Queries)
-		inventoryTxManager := inventory.NewTxManager(deps.Store)
-		inventoryService := inventory.NewService(inventoryReadStore, inventoryTxManager)
-		inventoryHandler := inventory.NewHandler(inventoryService, tenancy.NewContextResolver())
-		inventory.RegisterRoutes(r, inventoryHandler)
+			catalogStore := catalog.NewStore(deps.Store.Queries)
+			catalogService := catalog.NewService(catalogStore)
 
-		catalogStore := catalog.NewStore(deps.Store.Queries)
-		catalogService := catalog.NewService(catalogStore)
-		catalogHandler := catalog.NewHandler(catalogService, tenancy.NewContextResolver())
-		catalog.RegisterRoutes(r, catalogHandler)
+			inventoryReadStore := inventory.NewReadStore(deps.Store.Queries)
+			inventoryTxManager := inventory.NewTxManager(deps.Store)
+			inventoryService := inventory.NewService(inventoryReadStore, inventoryTxManager)
+			inventoryHandler := inventory.NewHandler(inventoryService, catalogService)
+			inventory.RegisterRoutes(business, inventoryHandler, authComponents.AuthZ)
 
-		salesReadStore := sales.NewReadStore(deps.Store.Queries)
-		salesTxManager := sales.NewTxManager(deps.Store)
-		salesService := sales.NewService(salesReadStore, salesTxManager)
-		salesHandler := sales.NewHandler(salesService, tenancy.NewContextResolver())
-		sales.RegisterRoutes(r, salesHandler)
+			catalogHandler := catalog.NewHandler(catalogService)
+			catalog.RegisterRoutes(business, catalogHandler, authComponents.AuthZ)
 
-		fiscalProvider := &fiscal.MockProvider{}
+			salesReadStore := sales.NewReadStore(deps.Store.Queries)
+			salesTxManager := sales.NewTxManager(deps.Store)
+			salesService := sales.NewService(salesReadStore, salesTxManager)
+			salesHandler := sales.NewHandler(salesService)
+			sales.RegisterRoutes(business, salesHandler, authComponents.AuthZ)
 
-		checkoutTxManager := checkout.NewTxManager(deps.Store)
-		checkoutService := checkout.NewService(checkoutTxManager, fiscalProvider)
-		checkoutHandler := checkout.NewHandler(checkoutService, tenancy.NewContextResolver())
-		checkout.RegisterRoutes(r, checkoutHandler)
+			fiscalProvider := &fiscal.MockProvider{}
 
-		paymentsStore := payments.NewStore(deps.Store.Queries)
-		paymentsService := payments.NewService(paymentsStore)
-		paymentsHandler := payments.NewHandler(paymentsService, tenancy.NewContextResolver())
-		payments.RegisterRoutes(r, paymentsHandler)
+			checkoutTxManager := checkout.NewTxManager(deps.Store)
+			checkoutService := checkout.NewService(checkoutTxManager, fiscalProvider)
+			checkoutHandler := checkout.NewHandler(checkoutService)
+			checkout.RegisterRoutes(business, checkoutHandler, authComponents.AuthZ)
 
-		fiscalService := fiscal.NewService(fiscal.NewStore(deps.Store.Queries), fiscalProvider)
-		fiscalHandler := fiscal.NewHandler(fiscalService, tenancy.NewContextResolver())
-		fiscal.RegisterRoutes(r, fiscalHandler)
+			paymentsStore := payments.NewStore(deps.Store.Queries)
+			paymentsService := payments.NewService(paymentsStore)
+			paymentsHandler := payments.NewHandler(paymentsService)
+			payments.RegisterRoutes(business, paymentsHandler, authComponents.AuthZ)
 
-		receiptStore := receipt.NewStore(deps.Store.Queries)
-		receiptService := receipt.NewService(receiptStore)
-		receiptHandler := receipt.NewHandler(receiptService, tenancy.NewContextResolver())
-		receipt.RegisterRoutes(r, receiptHandler)
-	})
+			fiscalService := fiscal.NewService(fiscal.NewStore(deps.Store.Queries), fiscalProvider)
+			fiscalHandler := fiscal.NewHandler(fiscalService)
+			fiscal.RegisterRoutes(business, fiscalHandler, authComponents.AuthZ)
+
+			receiptStore := receipt.NewStore(deps.Store.Queries)
+			receiptService := receipt.NewService(receiptStore)
+			receiptHandler := receipt.NewHandler(receiptService)
+			receipt.RegisterRoutes(business, receiptHandler, authComponents.AuthZ)
+		})
+	}
 
 	return router
 }

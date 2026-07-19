@@ -3,35 +3,36 @@ package catalog
 import (
 	"net/http"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authcontext"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
-	service  *Service
-	resolver tenancy.Resolver
+	service *Service
 }
 
-func NewHandler(service *Service, resolver tenancy.Resolver) *Handler {
-	return &Handler{service: service, resolver: resolver}
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
-func (h *Handler) resolveStore(w http.ResponseWriter, r *http.Request) (tenancy.StoreScope, bool) {
-	if h.resolver == nil {
-		apphttp.WriteError(w, http.StatusInternalServerError, "tenant_context_unavailable", "tenant resolver not configured", "")
-		return tenancy.StoreScope{}, false
-	}
-	scope, err := h.resolver.Store(r.Context())
+func (h *Handler) resolveActor(w http.ResponseWriter, r *http.Request) (authn.StoreActor, bool) {
+	p, err := authcontext.MustPrincipal(r.Context())
 	if err != nil {
-		apphttp.WriteError(w, http.StatusUnauthorized, "tenant_context_unavailable", "store scope is required", "")
-		return tenancy.StoreScope{}, false
+		apphttp.WriteError(w, http.StatusUnauthorized, "access_token_missing", "authentication required", "")
+		return authn.StoreActor{}, false
 	}
-	return scope, true
+	actor, err := authn.StoreActorFromPrincipal(p)
+	if err != nil {
+		apphttp.WriteError(w, http.StatusBadRequest, "store_context_required", "store context is required", "")
+		return authn.StoreActor{}, false
+	}
+	return actor, true
 }
 
 func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveStore(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
@@ -41,42 +42,38 @@ func (h *Handler) ListCatalog(w http.ResponseWriter, r *http.Request) {
 		h.writeValidationError(w, err, http.StatusBadRequest)
 		return
 	}
-
-	result, err := h.service.List(r.Context(), scope, input)
+	result, err := h.service.List(r.Context(), actor, input)
 	if err != nil {
-		h.writeServiceError(w, err, http.StatusBadRequest)
+		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) GetCatalogProduct(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveStore(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
 
-	result, err := h.service.GetByID(r.Context(), scope, chi.URLParam(r, "id"))
+	result, err := h.service.GetByID(r.Context(), actor, chi.URLParam(r, "id"))
 	if err != nil {
-		h.writeServiceError(w, err, http.StatusBadRequest)
+		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) GetCatalogProductByBarcode(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveStore(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
 
-	result, err := h.service.GetByBarcode(r.Context(), scope, chi.URLParam(r, "barcode"))
+	result, err := h.service.GetByBarcode(r.Context(), actor, chi.URLParam(r, "barcode"))
 	if err != nil {
-		h.writeServiceError(w, err, http.StatusBadRequest)
+		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusOK, result)
 }

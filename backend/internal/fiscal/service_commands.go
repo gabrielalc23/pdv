@@ -5,13 +5,14 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) Authorize(ctx context.Context, scope tenancy.StoreScope, rawSaleID string, input AuthorizationInput) (FiscalDocumentResponse, error) {
+func (s *Service) Authorize(ctx context.Context, actor authn.StoreActor, rawSaleID string, input AuthorizationInput) (FiscalDocumentResponse, error) {
+	scope := actor.ToStoreScope()
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return FiscalDocumentResponse{}, err

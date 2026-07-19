@@ -3,72 +3,56 @@ package payments
 import (
 	"net/http"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authcontext"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
-	service  *Service
-	resolver tenancy.Resolver
+	service *Service
 }
 
-func NewHandler(service *Service, resolver tenancy.Resolver) *Handler {
-	return &Handler{service: service, resolver: resolver}
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
-func (h *Handler) resolveOrg(w http.ResponseWriter, r *http.Request) (tenancy.OrganizationScope, bool) {
-	if h.resolver == nil {
-		apphttp.WriteError(w, http.StatusInternalServerError, "tenant_context_unavailable", "tenant resolver not configured", "")
-		return tenancy.OrganizationScope{}, false
-	}
-	scope, err := h.resolver.Organization(r.Context())
+func (h *Handler) resolveActor(w http.ResponseWriter, r *http.Request) (authn.StoreActor, bool) {
+	p, err := authcontext.MustPrincipal(r.Context())
 	if err != nil {
-		apphttp.WriteError(w, http.StatusUnauthorized, "tenant_context_unavailable", "organization scope is required", "")
-		return tenancy.OrganizationScope{}, false
+		apphttp.WriteError(w, http.StatusUnauthorized, "access_token_missing", "authentication required", "")
+		return authn.StoreActor{}, false
 	}
-	return scope, true
-}
-
-func (h *Handler) resolveStore(w http.ResponseWriter, r *http.Request) (tenancy.StoreScope, bool) {
-	if h.resolver == nil {
-		apphttp.WriteError(w, http.StatusInternalServerError, "tenant_context_unavailable", "tenant resolver not configured", "")
-		return tenancy.StoreScope{}, false
-	}
-	scope, err := h.resolver.Store(r.Context())
+	actor, err := authn.StoreActorFromPrincipal(p)
 	if err != nil {
-		apphttp.WriteError(w, http.StatusUnauthorized, "tenant_context_unavailable", "store scope is required", "")
-		return tenancy.StoreScope{}, false
+		apphttp.WriteError(w, http.StatusBadRequest, "store_context_required", "store context is required", "")
+		return authn.StoreActor{}, false
 	}
-	return scope, true
+	return actor, true
 }
 
 func (h *Handler) ListPaymentMethods(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveOrg(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
-
-	result, err := h.service.ListPaymentMethods(r.Context(), scope)
+	result, err := h.service.ListPaymentMethods(r.Context(), actor)
 	if err != nil {
 		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) ListSalePayments(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveStore(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
-
-	result, err := h.service.ListSalePayments(r.Context(), scope, chi.URLParam(r, "id"))
+	result, err := h.service.ListSalePayments(r.Context(), actor, chi.URLParam(r, "id"))
 	if err != nil {
 		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusOK, result)
 }

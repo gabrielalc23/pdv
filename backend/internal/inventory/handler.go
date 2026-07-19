@@ -3,141 +3,113 @@ package inventory
 import (
 	"net/http"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authcontext"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/go-chi/chi/v5"
+
+	"github.com/gabrielalc23/pdv/internal/catalog"
 )
 
 type Handler struct {
-	service  *Service
-	resolver tenancy.Resolver
+	service        *Service
+	catalogQuerier *catalog.Service
 }
 
-func NewHandler(service *Service, resolver tenancy.Resolver) *Handler {
-	return &Handler{service: service, resolver: resolver}
+func NewHandler(service *Service, catalogQuerier *catalog.Service) *Handler {
+	return &Handler{service: service, catalogQuerier: catalogQuerier}
 }
 
-func (h *Handler) resolveActor(w http.ResponseWriter, r *http.Request) (tenancy.ActorScope, bool) {
-	if h.resolver == nil {
-		apphttp.WriteError(w, http.StatusInternalServerError, "tenant_context_unavailable", "tenant resolver not configured", "")
-		return tenancy.ActorScope{}, false
-	}
-	scope, err := h.resolver.Actor(r.Context())
+func (h *Handler) resolveActor(w http.ResponseWriter, r *http.Request) (authn.StoreActor, bool) {
+	p, err := authcontext.MustPrincipal(r.Context())
 	if err != nil {
-		apphttp.WriteError(w, http.StatusUnauthorized, "tenant_context_unavailable", "actor scope is required", "")
-		return tenancy.ActorScope{}, false
+		apphttp.WriteError(w, http.StatusUnauthorized, "access_token_missing", "authentication required", "")
+		return authn.StoreActor{}, false
 	}
-	return scope, true
-}
-
-func (h *Handler) resolveStore(w http.ResponseWriter, r *http.Request) (tenancy.StoreScope, bool) {
-	if h.resolver == nil {
-		apphttp.WriteError(w, http.StatusInternalServerError, "tenant_context_unavailable", "tenant resolver not configured", "")
-		return tenancy.StoreScope{}, false
-	}
-	scope, err := h.resolver.Store(r.Context())
+	actor, err := authn.StoreActorFromPrincipal(p)
 	if err != nil {
-		apphttp.WriteError(w, http.StatusUnauthorized, "tenant_context_unavailable", "store scope is required", "")
-		return tenancy.StoreScope{}, false
+		apphttp.WriteError(w, http.StatusBadRequest, "store_context_required", "store context is required", "")
+		return authn.StoreActor{}, false
 	}
-	return scope, true
+	return actor, true
 }
 
 func (h *Handler) ListInventory(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveStore(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
-
 	input, err := parseListInventoryQuery(r)
 	if err != nil {
-		h.writeValidationError(w, err, http.StatusBadRequest)
+		h.writeValidationError(w, err)
 		return
 	}
-
-	result, err := h.service.ListInventory(r.Context(), scope, input)
+	result, err := h.service.List(r.Context(), actor, input)
 	if err != nil {
-		h.writeServiceError(w, err, http.StatusBadRequest)
+		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) GetProductInventory(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveStore(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
-
-	result, err := h.service.GetProductInventory(r.Context(), scope, chi.URLParam(r, "id"))
+	result, err := h.service.GetByProductID(r.Context(), actor, chi.URLParam(r, "id"))
 	if err != nil {
-		h.writeServiceError(w, err, http.StatusBadRequest)
+		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusOK, result)
 }
 
 func (h *Handler) CreateEntry(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveActor(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
-
 	var input CreateInventoryEntryInput
 	if err := apphttp.DecodeJSONBody(r, &input); err != nil {
 		apphttp.WriteError(w, http.StatusBadRequest, "invalid_json", "request body must contain a single valid JSON document", "")
 		return
 	}
-
-	result, err := h.service.CreateEntry(r.Context(), scope, input)
+	result, err := h.service.CreateEntry(r.Context(), actor, input)
 	if err != nil {
-		h.writeServiceError(w, err, http.StatusUnprocessableEntity)
+		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusCreated, result)
 }
 
 func (h *Handler) CreateAdjustment(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveActor(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
-
 	var input CreateInventoryAdjustmentInput
 	if err := apphttp.DecodeJSONBody(r, &input); err != nil {
 		apphttp.WriteError(w, http.StatusBadRequest, "invalid_json", "request body must contain a single valid JSON document", "")
 		return
 	}
-
-	result, err := h.service.CreateAdjustment(r.Context(), scope, input)
+	result, err := h.service.CreateAdjustment(r.Context(), actor, input)
 	if err != nil {
-		h.writeServiceError(w, err, http.StatusUnprocessableEntity)
+		h.writeServiceError(w, err)
 		return
 	}
-
 	apphttp.WriteJSON(w, http.StatusCreated, result)
 }
 
 func (h *Handler) ListMovements(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveStore(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
-
-	input, err := parseListMovementsQuery(r)
+	result, err := h.service.ListMovements(r.Context(), actor, chi.URLParam(r, "id"))
 	if err != nil {
-		h.writeValidationError(w, err, http.StatusBadRequest)
+		h.writeServiceError(w, err)
 		return
 	}
-
-	result, err := h.service.ListMovements(r.Context(), scope, chi.URLParam(r, "id"), input)
-	if err != nil {
-		h.writeServiceError(w, err, http.StatusBadRequest)
-		return
-	}
-
 	apphttp.WriteJSON(w, http.StatusOK, result)
 }

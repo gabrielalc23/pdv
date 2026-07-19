@@ -5,14 +5,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) ensureNameAvailable(ctx context.Context, scope tenancy.OrganizationScope, name, currentID string) error {
+func (s *Service) ensureNameAvailable(ctx context.Context, actor authn.OrganizationActor, name, currentID string) error {
+	scope := actor.ToOrganizationScope()
 	category, err := s.store.GetCategoryByName(ctx, scope, name)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -26,7 +27,8 @@ func (s *Service) ensureNameAvailable(ctx context.Context, scope tenancy.Organiz
 	return ErrCategoryNameExists
 }
 
-func (s *Service) ensureSlugAvailable(ctx context.Context, scope tenancy.OrganizationScope, slug, currentID string) error {
+func (s *Service) ensureSlugAvailable(ctx context.Context, actor authn.OrganizationActor, slug, currentID string) error {
+	scope := actor.ToOrganizationScope()
 	category, err := s.store.GetCategoryBySlug(ctx, scope, slug)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -40,16 +42,17 @@ func (s *Service) ensureSlugAvailable(ctx context.Context, scope tenancy.Organiz
 	return ErrCategorySlugExists
 }
 
-func (s *Service) Create(ctx context.Context, scope tenancy.OrganizationScope, input UpsertCategoryInput) (CategoryResponse, error) {
+func (s *Service) Create(ctx context.Context, actor authn.OrganizationActor, input UpsertCategoryInput) (CategoryResponse, error) {
 	name, err := normalizeName(input.Name)
 	if err != nil {
 		return CategoryResponse{}, err
 	}
 	slug := slugify(name)
-	if err := s.ensureNameAvailable(ctx, scope, name, ""); err != nil {
+	scope := actor.ToOrganizationScope()
+	if err := s.ensureNameAvailable(ctx, actor, name, ""); err != nil {
 		return CategoryResponse{}, err
 	}
-	if err := s.ensureSlugAvailable(ctx, scope, slug, ""); err != nil {
+	if err := s.ensureSlugAvailable(ctx, actor, slug, ""); err != nil {
 		return CategoryResponse{}, err
 	}
 
@@ -60,7 +63,7 @@ func (s *Service) Create(ctx context.Context, scope tenancy.OrganizationScope, i
 	return toCategoryResponse(row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt), nil
 }
 
-func (s *Service) Update(ctx context.Context, scope tenancy.OrganizationScope, rawID string, input UpsertCategoryInput) (CategoryResponse, error) {
+func (s *Service) Update(ctx context.Context, actor authn.OrganizationActor, rawID string, input UpsertCategoryInput) (CategoryResponse, error) {
 	id, err := parseUUID(rawID)
 	if err != nil {
 		return CategoryResponse{}, err
@@ -70,10 +73,11 @@ func (s *Service) Update(ctx context.Context, scope tenancy.OrganizationScope, r
 		return CategoryResponse{}, err
 	}
 	slug := slugify(name)
-	if err := s.ensureNameAvailable(ctx, scope, name, rawID); err != nil {
+	scope := actor.ToOrganizationScope()
+	if err := s.ensureNameAvailable(ctx, actor, name, rawID); err != nil {
 		return CategoryResponse{}, err
 	}
-	if err := s.ensureSlugAvailable(ctx, scope, slug, rawID); err != nil {
+	if err := s.ensureSlugAvailable(ctx, actor, slug, rawID); err != nil {
 		return CategoryResponse{}, err
 	}
 
@@ -86,19 +90,20 @@ func (s *Service) Update(ctx context.Context, scope tenancy.OrganizationScope, r
 	return toCategoryResponse(row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt), nil
 }
 
-func (s *Service) Activate(ctx context.Context, scope tenancy.OrganizationScope, rawID string) (CategoryResponse, error) {
-	return s.setActive(ctx, scope, rawID, true)
+func (s *Service) Activate(ctx context.Context, actor authn.OrganizationActor, rawID string) (CategoryResponse, error) {
+	return s.setActive(ctx, actor, rawID, true)
 }
 
-func (s *Service) Deactivate(ctx context.Context, scope tenancy.OrganizationScope, rawID string) (CategoryResponse, error) {
-	return s.setActive(ctx, scope, rawID, false)
+func (s *Service) Deactivate(ctx context.Context, actor authn.OrganizationActor, rawID string) (CategoryResponse, error) {
+	return s.setActive(ctx, actor, rawID, false)
 }
 
-func (s *Service) setActive(ctx context.Context, scope tenancy.OrganizationScope, rawID string, active bool) (CategoryResponse, error) {
+func (s *Service) setActive(ctx context.Context, actor authn.OrganizationActor, rawID string, active bool) (CategoryResponse, error) {
 	id, err := parseUUID(rawID)
 	if err != nil {
 		return CategoryResponse{}, err
 	}
+	scope := actor.ToOrganizationScope()
 
 	var row struct {
 		ID        pgtype.UUID

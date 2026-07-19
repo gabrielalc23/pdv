@@ -7,9 +7,9 @@ import (
 
 func parseListQuery(r *http.Request) (ListCatalogInput, error) {
 	query := r.URL.Query()
+
 	input := ListCatalogInput{
 		Search:     query.Get("search"),
-		ActiveOnly: true,
 		CategoryID: query.Get("categoryId"),
 	}
 

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/payments"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
@@ -14,10 +15,16 @@ import (
 )
 
 var (
-	orgID      = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b801")
-	storeID    = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b802")
-	orgScope   = tenancy.OrganizationScope{OrganizationID: orgID}
-	storeScope = tenancy.StoreScope{OrganizationID: orgID, StoreID: storeID}
+	orgID   = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b801")
+	storeID = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b802")
+	actor   = authn.StoreActor{
+		UserID:         mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b803"),
+		SessionID:      mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b804"),
+		OrganizationID: orgID,
+		MembershipID:   mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b805"),
+		StoreID:        storeID,
+		ClientID:       "test-client",
+	}
 )
 
 func TestListPaymentMethodsReturnsActiveOnlyAndEmptySlice(t *testing.T) {
@@ -28,7 +35,7 @@ func TestListPaymentMethodsReturnsActiveOnlyAndEmptySlice(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.ListPaymentMethods(context.Background(), orgScope)
+	resp, err := svc.ListPaymentMethods(context.Background(), actor)
 	if err != nil {
 		t.Fatalf("ListPaymentMethods returned error: %v", err)
 	}
@@ -47,7 +54,7 @@ func TestListPaymentMethodsPropagatesError(t *testing.T) {
 		},
 	})
 
-	_, err := svc.ListPaymentMethods(context.Background(), orgScope)
+	_, err := svc.ListPaymentMethods(context.Background(), actor)
 	if err == nil || err.Error() != "list active payment methods: db down" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,7 +87,7 @@ func TestListSalePaymentsReturnsOrderedPayments(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.ListSalePayments(context.Background(), storeScope, saleID.String())
+	resp, err := svc.ListSalePayments(context.Background(), actor, saleID.String())
 	if err != nil {
 		t.Fatalf("ListSalePayments returned error: %v", err)
 	}
@@ -106,7 +113,7 @@ func TestListSalePaymentsReturnsEmptySliceWhenNone(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.ListSalePayments(context.Background(), storeScope, saleID.String())
+	resp, err := svc.ListSalePayments(context.Background(), actor, saleID.String())
 	if err != nil {
 		t.Fatalf("ListSalePayments returned error: %v", err)
 	}
@@ -126,7 +133,7 @@ func TestListSalePaymentsSaleNotFound(t *testing.T) {
 		},
 	})
 
-	_, err := svc.ListSalePayments(context.Background(), storeScope, saleID.String())
+	_, err := svc.ListSalePayments(context.Background(), actor, saleID.String())
 	if !errors.Is(err, payments.ErrSaleNotFound) {
 		t.Fatalf("expected payments.ErrSaleNotFound, got %v", err)
 	}
@@ -149,7 +156,7 @@ func TestListSalePaymentsMethodMissingFails(t *testing.T) {
 		},
 	})
 
-	_, err := svc.ListSalePayments(context.Background(), storeScope, saleID.String())
+	_, err := svc.ListSalePayments(context.Background(), actor, saleID.String())
 	if err == nil {
 		t.Fatalf("expected error")
 	}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
@@ -17,7 +18,7 @@ type inventorySnapshot struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
-func (s *Service) CreateEntry(ctx context.Context, scope tenancy.ActorScope, input CreateInventoryEntryInput) (InventoryChangeResponse, error) {
+func (s *Service) CreateEntry(ctx context.Context, actor authn.StoreActor, input CreateInventoryEntryInput) (InventoryChangeResponse, error) {
 	normalized, err := normalizeEntryInput(input)
 	if err != nil {
 		return InventoryChangeResponse{}, err
@@ -25,12 +26,13 @@ func (s *Service) CreateEntry(ctx context.Context, scope tenancy.ActorScope, inp
 
 	var response InventoryChangeResponse
 
-	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
-		if _, err := s.getProductInTx(ctx, tx, scope.StoreScope(), normalized.ProductID); err != nil {
+	err = s.txManager.WithTx(ctx, actor.ToActorScope(), func(tx TxQueries) error {
+		storeScope := actor.ToStoreScope()
+		if _, err := s.getProductInTx(ctx, tx, storeScope, normalized.ProductID); err != nil {
 			return err
 		}
 
-		inventory, err := tx.IncreaseInventory(ctx, scope.StoreScope(), database.IncreaseInventoryForStoreParams{
+		inventory, err := tx.IncreaseInventory(ctx, storeScope, database.IncreaseInventoryForStoreParams{
 			ProductID: normalized.ProductID,
 			Quantity:  normalized.Quantity,
 		})
@@ -38,9 +40,10 @@ func (s *Service) CreateEntry(ctx context.Context, scope tenancy.ActorScope, inp
 			return fmt.Errorf("increase inventory: %w", err)
 		}
 
-		movement, err := tx.CreateInventoryMovement(ctx, scope, database.CreateInventoryMovementForStoreParams{
+		actorScope := actor.ToActorScope()
+		movement, err := tx.CreateInventoryMovement(ctx, actorScope, database.CreateInventoryMovementForStoreParams{
 			ProductID:         normalized.ProductID,
-			ActorMembershipID: scope.ActorMembershipID,
+			ActorMembershipID: actor.MembershipID,
 			MovementType:      database.InventoryMovementTypePURCHASE,
 			Quantity:          normalized.Quantity,
 			PreviousQuantity:  inventory.PreviousQuantity,
@@ -80,7 +83,7 @@ func (s *Service) CreateEntry(ctx context.Context, scope tenancy.ActorScope, inp
 	return response, nil
 }
 
-func (s *Service) CreateAdjustment(ctx context.Context, scope tenancy.ActorScope, input CreateInventoryAdjustmentInput) (InventoryChangeResponse, error) {
+func (s *Service) CreateAdjustment(ctx context.Context, actor authn.StoreActor, input CreateInventoryAdjustmentInput) (InventoryChangeResponse, error) {
 	normalized, err := normalizeAdjustmentInput(input)
 	if err != nil {
 		return InventoryChangeResponse{}, err
@@ -88,19 +91,21 @@ func (s *Service) CreateAdjustment(ctx context.Context, scope tenancy.ActorScope
 
 	var response InventoryChangeResponse
 
-	err = s.txManager.WithTx(ctx, scope, func(tx TxQueries) error {
-		if _, err := s.getProductInTx(ctx, tx, scope.StoreScope(), normalized.ProductID); err != nil {
+	err = s.txManager.WithTx(ctx, actor.ToActorScope(), func(tx TxQueries) error {
+		storeScope := actor.ToStoreScope()
+		if _, err := s.getProductInTx(ctx, tx, storeScope, normalized.ProductID); err != nil {
 			return err
 		}
 
-		snapshot, movementType, err := applyAdjustment(ctx, tx, scope.StoreScope(), normalized)
+		snapshot, movementType, err := applyAdjustment(ctx, tx, storeScope, normalized)
 		if err != nil {
 			return err
 		}
 
-		movement, err := tx.CreateInventoryMovement(ctx, scope, database.CreateInventoryMovementForStoreParams{
+		actorScope := actor.ToActorScope()
+		movement, err := tx.CreateInventoryMovement(ctx, actorScope, database.CreateInventoryMovementForStoreParams{
 			ProductID:         normalized.ProductID,
-			ActorMembershipID: scope.ActorMembershipID,
+			ActorMembershipID: actor.MembershipID,
 			MovementType:      movementType,
 			Quantity:          normalized.Quantity,
 			PreviousQuantity:  snapshot.PreviousQuantity,

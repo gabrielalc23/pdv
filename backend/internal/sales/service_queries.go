@@ -4,12 +4,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) List(ctx context.Context, scope tenancy.ActorScope, input ListSalesInput) (SaleListResponse, error) {
+func (s *Service) List(ctx context.Context, actor authn.StoreActor, input ListSalesInput) (SaleListResponse, error) {
 	page, pageSize, err := normalizePagination(input.Page, input.PageSize)
 	if err != nil {
 		return SaleListResponse{}, err
@@ -20,14 +20,14 @@ func (s *Service) List(ctx context.Context, scope tenancy.ActorScope, input List
 		return SaleListResponse{}, err
 	}
 
-	total, err := s.store.CountSales(ctx, scope.StoreScope(), database.CountSalesForStoreParams{
+	total, err := s.store.CountSales(ctx, actor.ToStoreScope(), database.CountSalesForStoreParams{
 		Status: statusFilter,
 	})
 	if err != nil {
 		return SaleListResponse{}, fmt.Errorf("count sales: %w", err)
 	}
 
-	rows, err := s.store.ListSales(ctx, scope.StoreScope(), database.ListSalesForStoreParams{
+	rows, err := s.store.ListSales(ctx, actor.ToStoreScope(), database.ListSalesForStoreParams{
 		Status:     statusFilter,
 		PageOffset: int32((page - 1) * pageSize),
 		PageSize:   int32(pageSize),
@@ -51,13 +51,13 @@ func (s *Service) List(ctx context.Context, scope tenancy.ActorScope, input List
 	}, nil
 }
 
-func (s *Service) Get(ctx context.Context, scope tenancy.ActorScope, rawID string) (SaleResponse, error) {
+func (s *Service) Get(ctx context.Context, actor authn.StoreActor, rawID string) (SaleResponse, error) {
 	saleID, err := parseUUID(rawID, "id")
 	if err != nil {
 		return SaleResponse{}, err
 	}
 
-	sale, items, err := s.getSaleWithItems(ctx, scope, saleID)
+	sale, items, err := s.getSaleWithItems(ctx, actor, saleID)
 	if err != nil {
 		return SaleResponse{}, err
 	}
@@ -71,8 +71,8 @@ func (s *Service) Get(ctx context.Context, scope tenancy.ActorScope, rawID strin
 	)
 }
 
-func (s *Service) getSaleByID(ctx context.Context, scope tenancy.ActorScope, id pgtype.UUID) (database.Sale, error) {
-	sale, err := s.store.GetSaleByID(ctx, scope.StoreScope(), id)
+func (s *Service) getSaleByID(ctx context.Context, actor authn.StoreActor, id pgtype.UUID) (database.Sale, error) {
+	sale, err := s.store.GetSaleByID(ctx, actor.ToStoreScope(), id)
 	if err != nil {
 		return database.Sale{}, translateSaleReadError(err)
 	}
@@ -80,13 +80,13 @@ func (s *Service) getSaleByID(ctx context.Context, scope tenancy.ActorScope, id 
 	return sale, nil
 }
 
-func (s *Service) getSaleWithItems(ctx context.Context, scope tenancy.ActorScope, id pgtype.UUID) (database.Sale, []database.SaleItem, error) {
-	sale, err := s.getSaleByID(ctx, scope, id)
+func (s *Service) getSaleWithItems(ctx context.Context, actor authn.StoreActor, id pgtype.UUID) (database.Sale, []database.SaleItem, error) {
+	sale, err := s.getSaleByID(ctx, actor, id)
 	if err != nil {
 		return database.Sale{}, nil, err
 	}
 
-	items, err := s.store.ListSaleItemsBySaleID(ctx, scope.StoreScope(), id)
+	items, err := s.store.ListSaleItemsBySaleID(ctx, actor.ToStoreScope(), id)
 	if err != nil {
 		return database.Sale{}, nil, fmt.Errorf("list sale items: %w", err)
 	}
@@ -94,8 +94,8 @@ func (s *Service) getSaleWithItems(ctx context.Context, scope tenancy.ActorScope
 	return sale, items, nil
 }
 
-func (s *Service) getSaleItemByID(ctx context.Context, tx TxQueries, scope tenancy.StoreScope, saleID, itemID pgtype.UUID) (database.SaleItem, error) {
-	item, err := tx.GetSaleItemByID(ctx, scope, database.GetSaleItemByIDForStoreParams{
+func (s *Service) getSaleItemByID(ctx context.Context, tx TxQueries, scope authn.StoreActor, saleID, itemID pgtype.UUID) (database.SaleItem, error) {
+	item, err := tx.GetSaleItemByID(ctx, scope.ToStoreScope(), database.GetSaleItemByIDForStoreParams{
 		SaleID: saleID,
 		ID:     itemID,
 	})
@@ -106,8 +106,8 @@ func (s *Service) getSaleItemByID(ctx context.Context, tx TxQueries, scope tenan
 	return item, nil
 }
 
-func (s *Service) getProductByIDInTx(ctx context.Context, tx TxQueries, scope tenancy.StoreScope, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
-	product, err := tx.GetProductByID(ctx, scope, id)
+func (s *Service) getProductByIDInTx(ctx context.Context, tx TxQueries, scope authn.StoreActor, id pgtype.UUID) (database.GetProductByIDForStoreRow, error) {
+	product, err := tx.GetProductByID(ctx, scope.ToStoreScope(), id)
 	if err != nil {
 		return database.GetProductByIDForStoreRow{}, translateProductReadError(err)
 	}

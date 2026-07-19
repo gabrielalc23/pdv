@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/gabrielalc23/pdv/internal/platform/authcontext"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 )
 
 type IdentityActor struct {
@@ -29,6 +30,22 @@ type StoreActor struct {
 	MembershipID   pgtype.UUID
 	StoreID        pgtype.UUID
 	ClientID       string
+}
+
+func (a OrganizationActor) ToOrganizationScope() tenancy.OrganizationScope {
+	return tenancy.OrganizationScope{OrganizationID: a.OrganizationID}
+}
+
+func (a StoreActor) ToStoreScope() tenancy.StoreScope {
+	return tenancy.StoreScope{OrganizationID: a.OrganizationID, StoreID: a.StoreID}
+}
+
+func (a StoreActor) ToActorScope() tenancy.ActorScope {
+	return tenancy.ActorScope{
+		OrganizationID:    a.OrganizationID,
+		StoreID:           a.StoreID,
+		ActorMembershipID: a.MembershipID,
+	}
 }
 
 func IdentityActorFromPrincipal(p authcontext.Principal) (IdentityActor, error) {

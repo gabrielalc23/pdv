@@ -5,17 +5,18 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) Get(ctx context.Context, scope tenancy.OrganizationScope, rawID string) (CategoryResponse, error) {
+func (s *Service) Get(ctx context.Context, actor authn.OrganizationActor, rawID string) (CategoryResponse, error) {
 	id, err := parseUUID(rawID)
 	if err != nil {
 		return CategoryResponse{}, err
 	}
 
+	scope := actor.ToOrganizationScope()
 	row, err := s.store.GetCategoryByID(ctx, scope, id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -27,7 +28,8 @@ func (s *Service) Get(ctx context.Context, scope tenancy.OrganizationScope, rawI
 	return toCategoryResponse(row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt), nil
 }
 
-func (s *Service) List(ctx context.Context, scope tenancy.OrganizationScope, input ListCategoriesInput) (CategoryListResponse, error) {
+func (s *Service) List(ctx context.Context, actor authn.OrganizationActor, input ListCategoriesInput) (CategoryListResponse, error) {
+	scope := actor.ToOrganizationScope()
 	rows, err := s.store.ListCategories(ctx, scope, database.ListCategoriesForOrganizationParams{
 		Search:     optionalText(input.Search),
 		ActiveOnly: input.ActiveOnly,

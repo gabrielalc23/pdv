@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
@@ -39,7 +40,9 @@ func (s *Service) ensureBarcodeAvailable(ctx context.Context, scope tenancy.Orga
 	return ErrBarcodeAlreadyExists
 }
 
-func (s *Service) Create(ctx context.Context, scope tenancy.OrganizationScope, input UpsertProductInput) (ProductResponse, error) {
+func (s *Service) Create(ctx context.Context, actor authn.OrganizationActor, input UpsertProductInput) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	normalized, err := normalizeUpsertInput(input)
 	if err != nil {
 		return ProductResponse{}, err
@@ -71,7 +74,9 @@ func (s *Service) Create(ctx context.Context, scope tenancy.OrganizationScope, i
 	return toProductResponse(productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt))
 }
 
-func (s *Service) Update(ctx context.Context, scope tenancy.OrganizationScope, id string, input UpsertProductInput) (ProductResponse, error) {
+func (s *Service) Update(ctx context.Context, actor authn.OrganizationActor, id string, input UpsertProductInput) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	productID, err := parseUUID(id, "id")
 	if err != nil {
 		return ProductResponse{}, err
@@ -117,7 +122,9 @@ func (s *Service) Update(ctx context.Context, scope tenancy.OrganizationScope, i
 	return toProductResponse(productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt))
 }
 
-func (s *Service) Activate(ctx context.Context, scope tenancy.OrganizationScope, id string) (ProductResponse, error) {
+func (s *Service) Activate(ctx context.Context, actor authn.OrganizationActor, id string) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	productID, err := parseUUID(id, "id")
 	if err != nil {
 		return ProductResponse{}, err
@@ -140,7 +147,9 @@ func (s *Service) Activate(ctx context.Context, scope tenancy.OrganizationScope,
 	return toProductResponse(productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt))
 }
 
-func (s *Service) Deactivate(ctx context.Context, scope tenancy.OrganizationScope, id string) (ProductResponse, error) {
+func (s *Service) Deactivate(ctx context.Context, actor authn.OrganizationActor, id string) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	productID, err := parseUUID(id, "id")
 	if err != nil {
 		return ProductResponse{}, err

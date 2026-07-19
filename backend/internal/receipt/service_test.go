@@ -5,6 +5,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/gabrielalc23/pdv/internal/receipt"
@@ -13,9 +14,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var testScope = tenancy.StoreScope{
-	OrganizationID: testutil.UUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b800"),
-	StoreID:        testutil.UUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b801"),
+var testActor = authn.StoreActor{
+	UserID:         testutil.UUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b800"),
+	SessionID:      testutil.UUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b801"),
+	OrganizationID: testutil.UUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b802"),
+	MembershipID:   testutil.UUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b803"),
+	StoreID:        testutil.UUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b804"),
+	ClientID:       "01972d6b-bf3a-7f1f-a4f8-1d2f31c3b805",
 }
 
 func TestGetReceiptReturnsCompletedSaleWithCalculatedSubtotal(t *testing.T) {
@@ -42,7 +47,7 @@ func TestGetReceiptReturnsCompletedSaleWithCalculatedSubtotal(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.Get(context.Background(), testScope, saleID.String())
+	resp, err := svc.GetReceipt(context.Background(), testActor, saleID.String())
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}
@@ -84,7 +89,7 @@ func TestGetReceiptUnavailableForOpenOrCancelled(t *testing.T) {
 				},
 			})
 
-			_, err := svc.Get(context.Background(), testScope, saleID.String())
+			_, err := svc.GetReceipt(context.Background(), testActor, saleID.String())
 			if !errors.Is(err, receipt.ErrReceiptNotAvailable) {
 				t.Fatalf("expected ErrReceiptNotAvailable, got %v", err)
 			}
@@ -100,7 +105,7 @@ func TestGetReceiptSaleNotFound(t *testing.T) {
 		},
 	})
 
-	_, err := svc.Get(context.Background(), testScope, saleID.String())
+	_, err := svc.GetReceipt(context.Background(), testActor, saleID.String())
 	if !errors.Is(err, receipt.ErrSaleNotFound) {
 		t.Fatalf("expected ErrSaleNotFound, got %v", err)
 	}
@@ -165,7 +170,7 @@ func TestGetReceiptPropagatesItemAndPaymentErrors(t *testing.T) {
 				}
 			}
 			svc := receipt.NewService(tc.store)
-			_, err := svc.Get(context.Background(), testScope, saleID.String())
+			_, err := svc.GetReceipt(context.Background(), testActor, saleID.String())
 			if err == nil {
 				t.Fatalf("expected error")
 			}

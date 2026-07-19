@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/gabrielalc23/pdv/internal/products"
@@ -14,7 +15,13 @@ import (
 )
 
 var testOrgID = mustParseUUID("00000000-0000-0000-0000-000000000001")
-var testScope = tenancy.OrganizationScope{OrganizationID: testOrgID}
+var testActor = authn.OrganizationActor{
+	UserID:         pgtype.UUID{Bytes: [16]byte{1}, Valid: true},
+	SessionID:      pgtype.UUID{Bytes: [16]byte{2}, Valid: true},
+	OrganizationID: testOrgID,
+	MembershipID:   pgtype.UUID{Bytes: [16]byte{4}, Valid: true},
+	ClientID:       "test",
+}
 
 func mustParseUUID(s string) pgtype.UUID {
 	var id pgtype.UUID
@@ -140,7 +147,7 @@ func TestCreateProductValid(t *testing.T) {
 
 	svc := products.NewService(store)
 
-	resp, err := svc.Create(context.Background(), testScope, products.UpsertProductInput{
+	resp, err := svc.Create(context.Background(), testActor, products.UpsertProductInput{
 		SKU:     " COCA-2L ",
 		Barcode: strPtr(" 7890000000000 "),
 		Name:    " Coca-Cola 2L ",
@@ -181,7 +188,7 @@ func TestCreateProductDuplicateSKU(t *testing.T) {
 	}
 
 	svc := products.NewService(store)
-	_, err := svc.Create(context.Background(), testScope, products.UpsertProductInput{
+	_, err := svc.Create(context.Background(), testActor, products.UpsertProductInput{
 		SKU:   "COCA-2L",
 		Name:  "Coca-Cola 2L",
 		Price: "12.90",
@@ -212,7 +219,7 @@ func TestCreateProductDuplicateBarcode(t *testing.T) {
 	}
 
 	svc := products.NewService(store)
-	_, err := svc.Create(context.Background(), testScope, products.UpsertProductInput{
+	_, err := svc.Create(context.Background(), testActor, products.UpsertProductInput{
 		SKU:     "COCA-2L",
 		Barcode: strPtr("7890000000000"),
 		Name:    "Coca-Cola 2L",
@@ -242,7 +249,7 @@ func TestCreateProductInvalidInput(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.Create(context.Background(), testScope, tc.input)
+			_, err := svc.Create(context.Background(), testActor, tc.input)
 			if err == nil {
 				t.Fatal("expected validation error")
 			}
@@ -273,7 +280,7 @@ func TestGetProduct(t *testing.T) {
 	}
 	svc := products.NewService(store)
 
-	resp, err := svc.Get(context.Background(), testScope, expectedID.String())
+	resp, err := svc.Get(context.Background(), testActor, expectedID.String())
 	if err != nil {
 		t.Fatalf("Get returned error: %v", err)
 	}
@@ -290,7 +297,7 @@ func TestGetProductNotFound(t *testing.T) {
 	}
 	svc := products.NewService(store)
 
-	_, err := svc.Get(context.Background(), testScope, "00000000-0000-0000-0000-000000000999")
+	_, err := svc.Get(context.Background(), testActor, "00000000-0000-0000-0000-000000000999")
 	if err == nil {
 		t.Fatal("expected error for not found")
 	}
@@ -339,7 +346,7 @@ func TestUpdateProduct(t *testing.T) {
 	}
 	svc := products.NewService(store)
 
-	resp, err := svc.Update(context.Background(), testScope, existingID.String(), products.UpsertProductInput{
+	resp, err := svc.Update(context.Background(), testActor, existingID.String(), products.UpsertProductInput{
 		SKU:     "COCA-2L",
 		Barcode: strPtr("7890000000000"),
 		Name:    "Coca-Cola 2L Updated",
@@ -387,7 +394,7 @@ func TestActivateProduct(t *testing.T) {
 	}
 	svc := products.NewService(store)
 
-	resp, err := svc.Activate(context.Background(), testScope, productID.String())
+	resp, err := svc.Activate(context.Background(), testActor, productID.String())
 	if err != nil {
 		t.Fatalf("Activate returned error: %v", err)
 	}
@@ -426,7 +433,7 @@ func TestDeactivateProduct(t *testing.T) {
 	}
 	svc := products.NewService(store)
 
-	resp, err := svc.Deactivate(context.Background(), testScope, productID.String())
+	resp, err := svc.Deactivate(context.Background(), testActor, productID.String())
 	if err != nil {
 		t.Fatalf("Deactivate returned error: %v", err)
 	}

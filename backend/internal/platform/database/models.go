@@ -37,7 +37,7 @@ type NullAuditOutcome struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullAuditOutcome) Scan(value interface{}) error {
+func (ns *NullAuditOutcome) Scan(value any) error {
 	if value == nil {
 		ns.AuditOutcome, ns.Valid = "", false
 		return nil
@@ -88,7 +88,7 @@ type NullAuthActionTokenPurpose struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullAuthActionTokenPurpose) Scan(value interface{}) error {
+func (ns *NullAuthActionTokenPurpose) Scan(value any) error {
 	if value == nil {
 		ns.AuthActionTokenPurpose, ns.Valid = "", false
 		return nil
@@ -140,7 +140,7 @@ type NullAuthContextKind struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullAuthContextKind) Scan(value interface{}) error {
+func (ns *NullAuthContextKind) Scan(value any) error {
 	if value == nil {
 		ns.AuthContextKind, ns.Valid = "", false
 		return nil
@@ -194,7 +194,7 @@ type NullAuthSessionStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullAuthSessionStatus) Scan(value interface{}) error {
+func (ns *NullAuthSessionStatus) Scan(value any) error {
 	if value == nil {
 		ns.AuthSessionStatus, ns.Valid = "", false
 		return nil
@@ -251,7 +251,7 @@ type NullFiscalDocumentStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullFiscalDocumentStatus) Scan(value interface{}) error {
+func (ns *NullFiscalDocumentStatus) Scan(value any) error {
 	if value == nil {
 		ns.FiscalDocumentStatus, ns.Valid = "", false
 		return nil
@@ -306,7 +306,7 @@ type NullFiscalEnvironment struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullFiscalEnvironment) Scan(value interface{}) error {
+func (ns *NullFiscalEnvironment) Scan(value any) error {
 	if value == nil {
 		ns.FiscalEnvironment, ns.Valid = "", false
 		return nil
@@ -360,7 +360,7 @@ type NullInventoryMovementType struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullInventoryMovementType) Scan(value interface{}) error {
+func (ns *NullInventoryMovementType) Scan(value any) error {
 	if value == nil {
 		ns.InventoryMovementType, ns.Valid = "", false
 		return nil
@@ -416,7 +416,7 @@ type NullInvitationStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullInvitationStatus) Scan(value interface{}) error {
+func (ns *NullInvitationStatus) Scan(value any) error {
 	if value == nil {
 		ns.InvitationStatus, ns.Valid = "", false
 		return nil
@@ -470,7 +470,7 @@ type NullMembershipStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullMembershipStatus) Scan(value interface{}) error {
+func (ns *NullMembershipStatus) Scan(value any) error {
 	if value == nil {
 		ns.MembershipStatus, ns.Valid = "", false
 		return nil
@@ -523,7 +523,7 @@ type NullOrganizationStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullOrganizationStatus) Scan(value interface{}) error {
+func (ns *NullOrganizationStatus) Scan(value any) error {
 	if value == nil {
 		ns.OrganizationStatus, ns.Valid = "", false
 		return nil
@@ -580,7 +580,7 @@ type NullPaymentMethodKind struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullPaymentMethodKind) Scan(value interface{}) error {
+func (ns *NullPaymentMethodKind) Scan(value any) error {
 	if value == nil {
 		ns.PaymentMethodKind, ns.Valid = "", false
 		return nil
@@ -638,7 +638,7 @@ type NullPaymentStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullPaymentStatus) Scan(value interface{}) error {
+func (ns *NullPaymentStatus) Scan(value any) error {
 	if value == nil {
 		ns.PaymentStatus, ns.Valid = "", false
 		return nil
@@ -691,7 +691,7 @@ type NullPermissionScopeLevel struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullPermissionScopeLevel) Scan(value interface{}) error {
+func (ns *NullPermissionScopeLevel) Scan(value any) error {
 	if value == nil {
 		ns.PermissionScopeLevel, ns.Valid = "", false
 		return nil
@@ -742,7 +742,7 @@ type NullRoleAssignmentScope struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullRoleAssignmentScope) Scan(value interface{}) error {
+func (ns *NullRoleAssignmentScope) Scan(value any) error {
 	if value == nil {
 		ns.RoleAssignmentScope, ns.Valid = "", false
 		return nil
@@ -794,7 +794,7 @@ type NullSaleStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullSaleStatus) Scan(value interface{}) error {
+func (ns *NullSaleStatus) Scan(value any) error {
 	if value == nil {
 		ns.SaleStatus, ns.Valid = "", false
 		return nil
@@ -847,7 +847,7 @@ type NullStoreStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullStoreStatus) Scan(value interface{}) error {
+func (ns *NullStoreStatus) Scan(value any) error {
 	if value == nil {
 		ns.StoreStatus, ns.Valid = "", false
 		return nil
@@ -900,7 +900,7 @@ type NullUserStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullUserStatus) Scan(value interface{}) error {
+func (ns *NullUserStatus) Scan(value any) error {
 	if value == nil {
 		ns.UserStatus, ns.Valid = "", false
 		return nil

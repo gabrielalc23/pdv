@@ -6,11 +6,13 @@ import (
 	"fmt"
 
 	"github.com/gabrielalc23/pdv/internal/platform/database"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Service) Get(ctx context.Context, scope tenancy.StoreScope, rawSaleID string) (ReceiptResponse, error) {
+func (s *Service) GetReceipt(ctx context.Context, actor authn.StoreActor, rawSaleID string) (ReceiptResponse, error) {
+	scope := actor.ToStoreScope()
+
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return ReceiptResponse{}, err

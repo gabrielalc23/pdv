@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/inventory"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
@@ -14,10 +15,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var testScope = tenancy.ActorScope{
-	OrganizationID:    mustUUID("00000000-0000-0000-0000-000000000001"),
-	StoreID:           mustUUID("00000000-0000-0000-0000-000000000002"),
-	ActorMembershipID: mustUUID("00000000-0000-0000-0000-000000000003"),
+var testActor = authn.StoreActor{
+	UserID:         mustUUID("00000000-0000-0000-0000-000000000001"),
+	SessionID:      mustUUID("00000000-0000-0000-0000-000000000002"),
+	OrganizationID: mustUUID("00000000-0000-0000-0000-000000000003"),
+	StoreID:        mustUUID("00000000-0000-0000-0000-000000000004"),
+	MembershipID:   mustUUID("00000000-0000-0000-0000-000000000005"),
+	ClientID:       "test",
 }
 
 func TestCreateEntryValid(t *testing.T) {
@@ -45,7 +49,7 @@ func TestCreateEntryValid(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
+	resp, err := svc.CreateEntry(context.Background(), testActor, inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.500",
 		Reason:        strPtr("Compra de fornecedor"),
@@ -89,7 +93,7 @@ func TestCreateAdjustmentValidIn(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
+	resp, err := svc.CreateAdjustment(context.Background(), testActor, inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "IN",
 		Quantity:      "1.500",
@@ -131,7 +135,7 @@ func TestCreateAdjustmentValidOut(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	resp, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
+	resp, err := svc.CreateAdjustment(context.Background(), testActor, inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -164,7 +168,7 @@ func TestCreateEntryProductNotFound(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), testActor, inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "1.000",
 		ReferenceType: "purchase",
@@ -194,7 +198,7 @@ func TestCreateAdjustmentInsufficientInventory(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
+	_, err := svc.CreateAdjustment(context.Background(), testActor, inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -226,7 +230,7 @@ func TestCreateEntryQuantityValidation(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
+			_, err := svc.CreateEntry(context.Background(), testActor, inventory.CreateInventoryEntryInput{
 				ProductID:     productFixture(true).ID.String(),
 				Quantity:      tc.quantity,
 				ReferenceType: "purchase",
@@ -241,7 +245,7 @@ func TestCreateAdjustmentValidation(t *testing.T) {
 	svc := inventory.NewService(&fakeReadStore{}, &fakeTxManager{})
 
 	t.Run("direction invalid", func(t *testing.T) {
-		_, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
+		_, err := svc.CreateAdjustment(context.Background(), testActor, inventory.CreateInventoryAdjustmentInput{
 			ProductID:     productFixture(true).ID.String(),
 			Direction:     "SIDEWAYS",
 			Quantity:      "1.000",
@@ -253,7 +257,7 @@ func TestCreateAdjustmentValidation(t *testing.T) {
 	})
 
 	t.Run("reason blank", func(t *testing.T) {
-		_, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
+		_, err := svc.CreateAdjustment(context.Background(), testActor, inventory.CreateInventoryAdjustmentInput{
 			ProductID:     productFixture(true).ID.String(),
 			Direction:     "OUT",
 			Quantity:      "1.000",
@@ -281,7 +285,7 @@ func TestDuplicateOperation(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), testActor, inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.000",
 		ReferenceType: "purchase",
@@ -310,7 +314,7 @@ func TestListInventoryDefaultPagination(t *testing.T) {
 		},
 	}, &fakeTxManager{})
 
-	resp, err := svc.ListInventory(context.Background(), testScope.StoreScope(), inventory.ListInventoryInput{})
+	resp, err := svc.List(context.Background(), testActor, inventory.ListInventoryInput{})
 	if err != nil {
 		t.Fatalf("ListInventory returned error: %v", err)
 	}
@@ -333,7 +337,7 @@ func TestListInventoryPageSizeMaximum(t *testing.T) {
 	svc := inventory.NewService(&fakeReadStore{}, &fakeTxManager{})
 
 	pageSize := 101
-	_, err := svc.ListInventory(context.Background(), testScope.StoreScope(), inventory.ListInventoryInput{PageSize: &pageSize})
+	_, err := svc.List(context.Background(), testActor, inventory.ListInventoryInput{PageSize: &pageSize})
 	requireValidationField(t, err, "pageSize")
 }
 
@@ -353,7 +357,7 @@ func TestCreateEntryRollbackOnMovementError(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateEntry(context.Background(), testScope, inventory.CreateInventoryEntryInput{
+	_, err := svc.CreateEntry(context.Background(), testActor, inventory.CreateInventoryEntryInput{
 		ProductID:     productFixture(true).ID.String(),
 		Quantity:      "2.000",
 		ReferenceType: "purchase",
@@ -380,7 +384,7 @@ func TestCreateAdjustmentRollbackOnBalanceError(t *testing.T) {
 	txManager := &fakeTxManager{tx: txQueries}
 	svc := inventory.NewService(&fakeReadStore{}, txManager)
 
-	_, err := svc.CreateAdjustment(context.Background(), testScope, inventory.CreateInventoryAdjustmentInput{
+	_, err := svc.CreateAdjustment(context.Background(), testActor, inventory.CreateInventoryAdjustmentInput{
 		ProductID:     productFixture(true).ID.String(),
 		Direction:     "OUT",
 		Quantity:      "2.000",
@@ -513,8 +517,8 @@ func (f *fakeTxManager) WithTx(ctx context.Context, scope tenancy.ActorScope, fn
 
 func productFixture(active bool) database.GetProductByIDForStoreRow {
 	return database.GetProductByIDForStoreRow{
-		OrganizationID: testScope.OrganizationID,
-		StoreID:        testScope.StoreID,
+		OrganizationID: testActor.OrganizationID,
+		StoreID:        testActor.StoreID,
 		ID:             mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
 		SKU:            "COCA-2L",
 		Barcode:        pgtype.Text{String: "7890000000000", Valid: true},
@@ -529,8 +533,8 @@ func productFixture(active bool) database.GetProductByIDForStoreRow {
 
 func inventoryFixture(quantity string) database.Inventory {
 	return database.Inventory{
-		OrganizationID: testScope.OrganizationID,
-		StoreID:        testScope.StoreID,
+		OrganizationID: testActor.OrganizationID,
+		StoreID:        testActor.StoreID,
 		ProductID:      productFixture(true).ID,
 		Quantity:       mustNumeric(quantity),
 		CreatedAt:      mustTime("2026-07-15T10:00:00Z"),
@@ -540,8 +544,8 @@ func inventoryFixture(quantity string) database.Inventory {
 
 func inventoryListRowFixture() database.ListInventoryForStoreRow {
 	return database.ListInventoryForStoreRow{
-		OrganizationID: testScope.OrganizationID,
-		StoreID:        testScope.StoreID,
+		OrganizationID: testActor.OrganizationID,
+		StoreID:        testActor.StoreID,
 		ProductID:      productFixture(true).ID,
 		SKU:            "COCA-2L",
 		Barcode:        pgtype.Text{String: "7890000000000", Valid: true},
@@ -555,8 +559,8 @@ func inventoryListRowFixture() database.ListInventoryForStoreRow {
 
 func increaseRowFixture(previous, current string) database.IncreaseInventoryForStoreRow {
 	return database.IncreaseInventoryForStoreRow{
-		OrganizationID:   testScope.OrganizationID,
-		StoreID:          testScope.StoreID,
+		OrganizationID:   testActor.OrganizationID,
+		StoreID:          testActor.StoreID,
 		ProductID:        productFixture(true).ID,
 		PreviousQuantity: mustNumeric(previous),
 		CurrentQuantity:  mustNumeric(current),
@@ -567,8 +571,8 @@ func increaseRowFixture(previous, current string) database.IncreaseInventoryForS
 
 func decreaseRowFixture(previous, current string) database.DecreaseInventoryForStoreRow {
 	return database.DecreaseInventoryForStoreRow{
-		OrganizationID:   testScope.OrganizationID,
-		StoreID:          testScope.StoreID,
+		OrganizationID:   testActor.OrganizationID,
+		StoreID:          testActor.StoreID,
 		ProductID:        productFixture(true).ID,
 		PreviousQuantity: mustNumeric(previous),
 		CurrentQuantity:  mustNumeric(current),
@@ -579,11 +583,11 @@ func decreaseRowFixture(previous, current string) database.DecreaseInventoryForS
 
 func movementFixture(movementType database.InventoryMovementType, quantity, previous, current string) database.CreateInventoryMovementForStoreRow {
 	return database.CreateInventoryMovementForStoreRow{
-		OrganizationID:    testScope.OrganizationID,
-		StoreID:           testScope.StoreID,
+		OrganizationID:    testActor.OrganizationID,
+		StoreID:           testActor.StoreID,
 		ID:                mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa"),
 		ProductID:         productFixture(true).ID,
-		ActorMembershipID: testScope.ActorMembershipID,
+		ActorMembershipID: testActor.MembershipID,
 		MovementType:      movementType,
 		Quantity:          mustNumeric(quantity),
 		PreviousQuantity:  mustNumeric(previous),

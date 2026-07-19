@@ -7,11 +7,11 @@ import (
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
 )
 
-func (h *Handler) writeServiceError(w http.ResponseWriter, err error, validationStatus int) {
+func (h *Handler) writeServiceError(w http.ResponseWriter, err error) {
 	var validationErr *ValidationError
 	switch {
 	case errors.As(err, &validationErr):
-		status := validationStatus
+		status := http.StatusBadRequest
 		if validationErr.Field == "id" {
 			status = http.StatusBadRequest
 		}
@@ -31,11 +31,11 @@ func (h *Handler) writeServiceError(w http.ResponseWriter, err error, validation
 	}
 }
 
-func (h *Handler) writeValidationError(w http.ResponseWriter, err error, status int) {
+func (h *Handler) writeValidationError(w http.ResponseWriter, err error) {
 	if validationErr, ok := errors.AsType[*ValidationError](err); ok {
-		apphttp.WriteError(w, status, "validation_error", validationErr.Message, validationErr.Field)
+		apphttp.WriteError(w, http.StatusBadRequest, "validation_error", validationErr.Message, validationErr.Field)
 		return
 	}
 
-	apphttp.WriteError(w, status, "validation_error", err.Error(), "")
+	apphttp.WriteError(w, http.StatusBadRequest, "validation_error", err.Error(), "")
 }

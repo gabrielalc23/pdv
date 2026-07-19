@@ -5,13 +5,16 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) Get(ctx context.Context, scope tenancy.OrganizationScope, id string) (ProductResponse, error) {
+func (s *Service) Get(ctx context.Context, actor authn.OrganizationActor, id string) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	product, err := s.productByID(ctx, scope, id)
 	if err != nil {
 		return ProductResponse{}, err
@@ -19,7 +22,9 @@ func (s *Service) Get(ctx context.Context, scope tenancy.OrganizationScope, id s
 	return toProductResponse(product)
 }
 
-func (s *Service) List(ctx context.Context, scope tenancy.OrganizationScope, input ListProductsInput) (ProductListResponse, error) {
+func (s *Service) List(ctx context.Context, actor authn.OrganizationActor, input ListProductsInput) (ProductListResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	page, pageSize, err := normalizePagination(input.Page, input.PageSize)
 	if err != nil {
 		return ProductListResponse{}, err

@@ -7,14 +7,15 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/catalog"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func testScope() tenancy.StoreScope {
-	return tenancy.StoreScope{
+func testActor() authn.StoreActor {
+	return authn.StoreActor{
 		OrganizationID: mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
 		StoreID:        mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9"),
 	}
@@ -35,7 +36,7 @@ func TestListCatalogDefaultPagination(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{})
+	resp, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -70,7 +71,7 @@ func TestListCatalogSearchByName(t *testing.T) {
 		},
 	})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{Search: " coca "})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{Search: " coca "})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestListCatalogSearchBySKU(t *testing.T) {
 		},
 	})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{Search: "coca-2l"})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{Search: "coca-2l"})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestListCatalogSearchByBarcode(t *testing.T) {
 		},
 	})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{Search: "7890000000000"})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{Search: "7890000000000"})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -131,7 +132,7 @@ func TestListCatalogActiveOnlyFalse(t *testing.T) {
 		},
 	})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{ActiveOnly: false, ActiveOnlySet: true})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{ActiveOnly: false, ActiveOnlySet: true})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -154,7 +155,7 @@ func TestListCatalogInStockOnlyTrue(t *testing.T) {
 		},
 	})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{InStockOnly: true})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{InStockOnly: true})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -174,7 +175,7 @@ func TestListCatalogProductWithoutInventoryUsesZeroQuantity(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{})
+	resp, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -193,10 +194,10 @@ func TestListCatalogPageNormalization(t *testing.T) {
 
 	svc := catalog.NewService(&fakeStore{})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{Page: &page})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{Page: &page})
 	requireValidationField(t, err, "page")
 
-	_, err = svc.List(context.Background(), testScope(), catalog.ListCatalogInput{PageSize: &pageSize})
+	_, err = svc.List(context.Background(), testActor(), catalog.ListCatalogInput{PageSize: &pageSize})
 	requireValidationField(t, err, "pageSize")
 }
 
@@ -207,7 +208,7 @@ func TestListCatalogCountError(t *testing.T) {
 		},
 	})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{})
 	if err == nil || err.Error() != "count catalog products: count failed" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -223,7 +224,7 @@ func TestListCatalogListError(t *testing.T) {
 		},
 	})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{})
 	if err == nil || err.Error() != "list catalog products: list failed" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -252,7 +253,7 @@ func TestListCatalogMapperError(t *testing.T) {
 		},
 	})
 
-	_, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{})
+	_, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{})
 	if err == nil || err.Error() == "" {
 		t.Fatalf("expected mapper error, got %v", err)
 	}
@@ -268,7 +269,7 @@ func TestListCatalogEmptySliceNotNil(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.List(context.Background(), testScope(), catalog.ListCatalogInput{})
+	resp, err := svc.List(context.Background(), testActor(), catalog.ListCatalogInput{})
 	if err != nil {
 		t.Fatalf("List returned error: %v", err)
 	}
@@ -287,7 +288,7 @@ func TestGetCatalogProductByID(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.GetByID(context.Background(), testScope(), testProductID.String())
+	resp, err := svc.GetByID(context.Background(), testActor(), testProductID.String())
 	if err != nil {
 		t.Fatalf("GetByID returned error: %v", err)
 	}
@@ -297,7 +298,7 @@ func TestGetCatalogProductByID(t *testing.T) {
 func TestGetCatalogProductByIDInvalidUUID(t *testing.T) {
 	svc := catalog.NewService(&fakeStore{})
 
-	_, err := svc.GetByID(context.Background(), testScope(), "not-a-uuid")
+	_, err := svc.GetByID(context.Background(), testActor(), "not-a-uuid")
 	requireValidationField(t, err, "id")
 }
 
@@ -308,7 +309,7 @@ func TestGetCatalogProductByIDNotFound(t *testing.T) {
 		},
 	})
 
-	_, err := svc.GetByID(context.Background(), testScope(), testProductID.String())
+	_, err := svc.GetByID(context.Background(), testActor(), testProductID.String())
 	if !errors.Is(err, catalog.ErrCatalogProductNotFound) {
 		t.Fatalf("expected catalog.ErrCatalogProductNotFound, got %v", err)
 	}
@@ -321,7 +322,7 @@ func TestGetCatalogProductByIDDBError(t *testing.T) {
 		},
 	})
 
-	_, err := svc.GetByID(context.Background(), testScope(), testProductID.String())
+	_, err := svc.GetByID(context.Background(), testActor(), testProductID.String())
 	if err == nil || err.Error() != "get catalog product by id: db failed" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -347,7 +348,7 @@ func TestGetCatalogProductByIDMapperError(t *testing.T) {
 		},
 	})
 
-	_, err := svc.GetByID(context.Background(), testScope(), testProductID.String())
+	_, err := svc.GetByID(context.Background(), testActor(), testProductID.String())
 	if err == nil {
 		t.Fatalf("expected mapper error")
 	}
@@ -360,7 +361,7 @@ func TestGetCatalogProductByBarcode(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.GetByBarcode(context.Background(), testScope(), " 7890000000000 ")
+	resp, err := svc.GetByBarcode(context.Background(), testActor(), " 7890000000000 ")
 	if err != nil {
 		t.Fatalf("GetByBarcode returned error: %v", err)
 	}
@@ -372,7 +373,7 @@ func TestGetCatalogProductByBarcode(t *testing.T) {
 func TestGetCatalogProductByBarcodeEmpty(t *testing.T) {
 	svc := catalog.NewService(&fakeStore{})
 
-	_, err := svc.GetByBarcode(context.Background(), testScope(), "   ")
+	_, err := svc.GetByBarcode(context.Background(), testActor(), "   ")
 	requireValidationField(t, err, "barcode")
 }
 
@@ -383,7 +384,7 @@ func TestGetCatalogProductByBarcodeNotFound(t *testing.T) {
 		},
 	})
 
-	_, err := svc.GetByBarcode(context.Background(), testScope(), "7890000000000")
+	_, err := svc.GetByBarcode(context.Background(), testActor(), "7890000000000")
 	if !errors.Is(err, catalog.ErrCatalogProductNotFound) {
 		t.Fatalf("expected catalog.ErrCatalogProductNotFound, got %v", err)
 	}
@@ -396,7 +397,7 @@ func TestGetCatalogProductByBarcodeDBError(t *testing.T) {
 		},
 	})
 
-	_, err := svc.GetByBarcode(context.Background(), testScope(), "7890000000000")
+	_, err := svc.GetByBarcode(context.Background(), testActor(), "7890000000000")
 	if err == nil || err.Error() != "get catalog product by barcode: db failed" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -422,7 +423,7 @@ func TestGetCatalogProductByBarcodeMapperError(t *testing.T) {
 		},
 	})
 
-	_, err := svc.GetByBarcode(context.Background(), testScope(), "7890000000000")
+	_, err := svc.GetByBarcode(context.Background(), testActor(), "7890000000000")
 	if err == nil {
 		t.Fatalf("expected mapper error")
 	}

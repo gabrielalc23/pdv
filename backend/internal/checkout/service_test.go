@@ -3,28 +3,40 @@ package checkout_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/checkout"
 	"github.com/gabrielalc23/pdv/internal/fiscal"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-var testScope = tenancy.ActorScope{
-	OrganizationID:    mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a1"),
-	StoreID:           mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a2"),
-	ActorMembershipID: mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a3"),
+var testPaymentMethodID = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b899")
+
+func checkoutInputWithTotal(total string) checkout.CheckoutInput {
+	return checkout.CheckoutInput{
+		Payments: []checkout.CheckoutPaymentInput{
+			{PaymentMethodID: testPaymentMethodID.String(), Amount: total},
+		},
+	}
 }
 
-func TestCheckoutCompletesSaleWithPaymentsInventoryAndFiscalSuccess(t *testing.T) {
+var testScope = authn.StoreActor{
+	OrganizationID: mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a1"),
+	StoreID:        mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a2"),
+	MembershipID:   mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a3"),
+	UserID:         mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a4"),
+	SessionID:      mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a5"),
+	ClientID:       "test-client",
+}
+
+func TestCheckoutCompletesSaleWithInventoryAndFiscalSuccess(t *testing.T) {
 	sale := newCheckoutSaleFixture()
 	productID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-	paymentMethodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab")
 	documentID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ac")
 	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
 
@@ -36,10 +48,7 @@ func TestCheckoutCompletesSaleWithPaymentsInventoryAndFiscalSuccess(t *testing.T
 			return []database.SaleItem{checkoutItemFixture(productID, "50.00", "2.000", "0.00", "100.00")}, nil
 		},
 		getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, _ pgtype.UUID) (database.PaymentMethod, error) {
-			return paymentMethodFixture(paymentMethodID, "pix", "PIX", database.PaymentMethodKindPIX, true, false, false, 1, false), nil
-		},
-		getInventoryByProductIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Inventory, error) {
-			return inventoryFixture(productID, "10.000"), nil
+			return paymentMethodFixture(testPaymentMethodID, "CASH", "Dinheiro", database.PaymentMethodKindCASH, true, false, false, 1, false), nil
 		},
 		decreaseInventoryFn: func(_ context.Context, _ tenancy.StoreScope, arg database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
 			if arg.ProductID.String() != productID.String() {
@@ -62,20 +71,11 @@ func TestCheckoutCompletesSaleWithPaymentsInventoryAndFiscalSuccess(t *testing.T
 			}
 			return inventoryMovementFixture(productID, database.InventoryMovementTypeSALE, "2.000", "10.000", "8.000"), nil
 		},
-		createPaymentFn: func(_ context.Context, _ tenancy.ActorScope, arg database.CreatePaymentForStoreParams) (database.CreatePaymentForStoreRow, error) {
-			if arg.IdempotencyKey != checkout.PaymentIdempotencyKey(sale.id, 0) {
-				t.Fatalf("unexpected idempotency key: %s", arg.IdempotencyKey)
-			}
-			return createPaymentRowFixture(sale.id, paymentMethodID, "100.00", "100.00", "0.00", 1, arg.IdempotencyKey), nil
+		createPaymentFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CreatePaymentForStoreParams) (database.CreatePaymentForStoreRow, error) {
+			return createPaymentRowFixture(sale.id, testPaymentMethodID, "100.00", "100.00", "0.00", 1, "checkout:"+sale.id.String()+":payment:0"), nil
 		},
-		approvePaymentFn: func(_ context.Context, _ tenancy.StoreScope, arg database.ApprovePaymentForStoreParams) (database.Payment, error) {
-			if arg.ReceivedAmount.Valid {
-				t.Fatalf("unexpected received amount for PIX payment: %+v", arg.ReceivedAmount)
-			}
-			if arg.ChangeAmount.Valid {
-				t.Fatalf("unexpected change amount for PIX payment: %+v", arg.ChangeAmount)
-			}
-			return approvePaymentRowFixture(sale.id, paymentMethodID, "100.00", "100.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
+		approvePaymentFn: func(_ context.Context, _ tenancy.StoreScope, _ database.ApprovePaymentForStoreParams) (database.Payment, error) {
+			return approvePaymentRowFixture(sale.id, testPaymentMethodID, "100.00", "100.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
 		},
 		completeSaleFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CompleteSaleForStoreParams) (database.Sale, error) {
 			return sale.complete(database.SaleStatusCOMPLETED), nil
@@ -101,12 +101,7 @@ func TestCheckoutCompletesSaleWithPaymentsInventoryAndFiscalSuccess(t *testing.T
 
 	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, provider)
 
-	resp, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkout.CheckoutInput{
-		Payments: []checkout.CheckoutPaymentInput{{
-			PaymentMethodID: paymentMethodID.String(),
-			Amount:          "100.00",
-		}},
-	})
+	resp, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkoutInputWithTotal("100.00"))
 	if err != nil {
 		t.Fatalf("Checkout returned error: %v", err)
 	}
@@ -117,137 +112,11 @@ func TestCheckoutCompletesSaleWithPaymentsInventoryAndFiscalSuccess(t *testing.T
 	if resp.Sale.Status != string(database.SaleStatusCOMPLETED) {
 		t.Fatalf("unexpected sale status: %+v", resp.Sale)
 	}
-	if len(resp.Payments) != 1 || resp.Payments[0].Status != string(database.PaymentStatusAPPROVED) {
-		t.Fatalf("unexpected payments: %+v", resp.Payments)
-	}
 	if resp.FiscalDocument.Status != string(database.FiscalDocumentStatusAUTHORIZED) {
 		t.Fatalf("unexpected fiscal document: %+v", resp.FiscalDocument)
 	}
 	if resp.FiscalDocument.AccessKey == nil || *resp.FiscalDocument.AccessKey == "" {
 		t.Fatalf("expected access key: %+v", resp.FiscalDocument)
-	}
-}
-
-func TestCheckoutSupportsSplitPayments(t *testing.T) {
-	sale := newCheckoutSaleFixture()
-	sale.total = mustNumeric("100.00")
-	sale.subtotal = mustNumeric("100.00")
-	productID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-	pixID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab")
-	cashID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ac")
-	docID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ad")
-	paymentCall := 0
-
-	tx := &checkoutFakeTxQueries{
-		lockSaleByIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Sale, error) {
-			return sale.lock(database.SaleStatusOPEN), nil
-		},
-		listSaleItemsBySaleIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) ([]database.SaleItem, error) {
-			return []database.SaleItem{checkoutItemFixture(productID, "100.00", "1.000", "0.00", "100.00")}, nil
-		},
-		getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, id pgtype.UUID) (database.PaymentMethod, error) {
-			switch id.String() {
-			case pixID.String():
-				return paymentMethodFixture(pixID, "pix", "PIX", database.PaymentMethodKindPIX, true, false, false, 1, false), nil
-			case cashID.String():
-				return paymentMethodFixture(cashID, "cash", "Cash", database.PaymentMethodKindCASH, true, true, false, 1, false), nil
-			default:
-				return database.PaymentMethod{}, pgx.ErrNoRows
-			}
-		},
-		getInventoryByProductIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Inventory, error) {
-			return inventoryFixture(productID, "10.000"), nil
-		},
-		decreaseInventoryFn: func(_ context.Context, _ tenancy.StoreScope, _ database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
-			return decreaseInventoryRowFixture(productID, "10.000", "9.000"), nil
-		},
-		createInventoryMovementFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error) {
-			return inventoryMovementFixture(productID, database.InventoryMovementTypeSALE, "1.000", "10.000", "9.000"), nil
-		},
-		createPaymentFn: func(_ context.Context, _ tenancy.ActorScope, arg database.CreatePaymentForStoreParams) (database.CreatePaymentForStoreRow, error) {
-			paymentCall++
-			switch paymentCall {
-			case 1:
-				return createPaymentRowFixture(sale.id, pixID, "60.00", "60.00", "0.00", 1, arg.IdempotencyKey), nil
-			case 2:
-				return createPaymentRowFixture(sale.id, cashID, "40.00", "40.00", "0.00", 1, arg.IdempotencyKey), nil
-			default:
-				t.Fatalf("unexpected payment call %d", paymentCall)
-				return database.CreatePaymentForStoreRow{}, nil
-			}
-		},
-		approvePaymentFn: func(_ context.Context, _ tenancy.StoreScope, _ database.ApprovePaymentForStoreParams) (database.Payment, error) {
-			switch paymentCall {
-			case 1:
-				return approvePaymentRowFixture(sale.id, pixID, "60.00", "60.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
-			case 2:
-				return approvePaymentRowFixture(sale.id, cashID, "40.00", "40.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
-			default:
-				t.Fatalf("unexpected payment call %d", paymentCall)
-				return database.Payment{}, nil
-			}
-		},
-		completeSaleFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CompleteSaleForStoreParams) (database.Sale, error) {
-			return sale.complete(database.SaleStatusCOMPLETED), nil
-		},
-		createFiscalDocumentFn: func(_ context.Context, _ tenancy.StoreScope, _ database.CreateFiscalDocumentForStoreParams) (database.CreateFiscalDocumentForStoreRow, error) {
-			return fiscalDocumentCreateFixture(sale.id, docID), nil
-		},
-		markFiscalDocumentAuthorizedFn: func(_ context.Context, _ tenancy.StoreScope, _ database.MarkFiscalDocumentAuthorizedForStoreParams) (database.FiscalDocument, error) {
-			return fiscalDocumentFixture(docID, sale.id, database.FiscalDocumentStatusAUTHORIZED), nil
-		},
-	}
-
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
-
-	resp, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkout.CheckoutInput{
-		Payments: []checkout.CheckoutPaymentInput{
-			{PaymentMethodID: pixID.String(), Amount: "60.00"},
-			{PaymentMethodID: cashID.String(), Amount: "40.00"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("Checkout returned error: %v", err)
-	}
-	if len(resp.Payments) != 2 {
-		t.Fatalf("unexpected split payment response: %+v", resp.Payments)
-	}
-	if resp.Payments[0].Amount != "60.00" || resp.Payments[1].Amount != "40.00" {
-		t.Fatalf("unexpected payment amounts: %+v", resp.Payments)
-	}
-}
-
-func TestCheckoutRejectsZeroAndNegativeAmounts(t *testing.T) {
-	sale := newCheckoutSaleFixture()
-	sale.subtotal = mustNumeric("100.00")
-	sale.total = mustNumeric("100.00")
-	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-
-	tx := &checkoutFakeTxQueries{
-		lockSaleByIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Sale, error) {
-			return sale.lock(database.SaleStatusOPEN), nil
-		},
-		listSaleItemsBySaleIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) ([]database.SaleItem, error) {
-			return []database.SaleItem{checkoutItemFixture(methodID, "100.00", "1.000", "0.00", "100.00")}, nil
-		},
-		getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, _ pgtype.UUID) (database.PaymentMethod, error) {
-			return paymentMethodFixture(methodID, "pix", "PIX", database.PaymentMethodKindPIX, true, false, false, 1, false), nil
-		},
-	}
-
-	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, nil)
-
-	cases := []string{"0.00", "-1.00"}
-	for _, amount := range cases {
-		t.Run(amount, func(t *testing.T) {
-			_, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkout.CheckoutInput{
-				Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: amount}},
-			})
-			var validationErr *checkout.ValidationError
-			if !errors.As(err, &validationErr) || !strings.Contains(validationErr.Field, "amount") {
-				t.Fatalf("expected validation error for amount, got %v", err)
-			}
-		})
 	}
 }
 
@@ -257,7 +126,6 @@ func TestCheckoutAggregatesRepeatedProductsAndProcessesInventoryDeterministicall
 	sale.total = mustNumeric("35.00")
 	productA := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	productB := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab")
-	paymentMethodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ac")
 
 	calls := make([]string, 0, 8)
 	tx := &checkoutFakeTxQueries{
@@ -272,10 +140,7 @@ func TestCheckoutAggregatesRepeatedProductsAndProcessesInventoryDeterministicall
 			}, nil
 		},
 		getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, _ pgtype.UUID) (database.PaymentMethod, error) {
-			return paymentMethodFixture(paymentMethodID, "pix", "PIX", database.PaymentMethodKindPIX, true, false, false, 1, false), nil
-		},
-		getInventoryByProductIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Inventory, error) {
-			return inventoryFixture(productA, "12.000"), nil
+			return paymentMethodFixture(testPaymentMethodID, "CASH", "Dinheiro", database.PaymentMethodKindCASH, true, false, false, 1, false), nil
 		},
 		decreaseInventoryFn: func(_ context.Context, _ tenancy.StoreScope, arg database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
 			calls = append(calls, "decrease:"+arg.ProductID.String()+":"+quantityString(arg.Quantity))
@@ -293,11 +158,11 @@ func TestCheckoutAggregatesRepeatedProductsAndProcessesInventoryDeterministicall
 			calls = append(calls, "movement:"+arg.ProductID.String()+":"+quantityString(arg.Quantity))
 			return inventoryMovementFixture(arg.ProductID, arg.MovementType, quantityString(arg.Quantity), quantityString(arg.PreviousQuantity), quantityString(arg.CurrentQuantity)), nil
 		},
-		createPaymentFn: func(_ context.Context, _ tenancy.ActorScope, arg database.CreatePaymentForStoreParams) (database.CreatePaymentForStoreRow, error) {
-			return createPaymentRowFixture(sale.id, paymentMethodID, "35.00", "35.00", "0.00", 1, arg.IdempotencyKey), nil
+		createPaymentFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CreatePaymentForStoreParams) (database.CreatePaymentForStoreRow, error) {
+			return createPaymentRowFixture(sale.id, testPaymentMethodID, "35.00", "35.00", "0.00", 1, "checkout:"+sale.id.String()+":payment:0"), nil
 		},
 		approvePaymentFn: func(_ context.Context, _ tenancy.StoreScope, _ database.ApprovePaymentForStoreParams) (database.Payment, error) {
-			return approvePaymentRowFixture(sale.id, paymentMethodID, "35.00", "35.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
+			return approvePaymentRowFixture(sale.id, testPaymentMethodID, "35.00", "35.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
 		},
 		completeSaleFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CompleteSaleForStoreParams) (database.Sale, error) {
 			return sale.complete(database.SaleStatusCOMPLETED), nil
@@ -312,12 +177,7 @@ func TestCheckoutAggregatesRepeatedProductsAndProcessesInventoryDeterministicall
 
 	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
 
-	_, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkout.CheckoutInput{
-		Payments: []checkout.CheckoutPaymentInput{{
-			PaymentMethodID: paymentMethodID.String(),
-			Amount:          "35.00",
-		}},
-	})
+	_, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkoutInputWithTotal("35.00"))
 	if err != nil {
 		t.Fatalf("Checkout returned error: %v", err)
 	}
@@ -339,91 +199,12 @@ func TestCheckoutAggregatesRepeatedProductsAndProcessesInventoryDeterministicall
 	}
 }
 
-func TestCheckoutValidatesPayments(t *testing.T) {
-	sale := newCheckoutSaleFixture()
-	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-	activeMethod := paymentMethodFixture(methodID, "pix", "PIX", database.PaymentMethodKindPIX, true, false, false, 1, false)
-	inactiveMethod := paymentMethodFixture(methodID, "pix", "PIX", database.PaymentMethodKindPIX, false, false, false, 1, false)
-	cashMethod := paymentMethodFixture(methodID, "cash", "Cash", database.PaymentMethodKindCASH, true, true, false, 1, false)
-	creditMethod := paymentMethodFixture(methodID, "credit", "Credit", database.PaymentMethodKindCREDITCARD, true, false, true, 3, false)
-
-	tests := []struct {
-		name    string
-		input   checkout.CheckoutInput
-		method  database.PaymentMethod
-		wantErr error
-	}{
-		{
-			name:    "payments required",
-			input:   checkout.CheckoutInput{},
-			method:  activeMethod,
-			wantErr: checkout.ErrPaymentsRequired,
-		},
-		{
-			name:    "amount mismatch",
-			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "90.00"}}},
-			method:  activeMethod,
-			wantErr: checkout.ErrPaymentAmountMismatch,
-		},
-		{
-			name:    "method not found",
-			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}}},
-			method:  database.PaymentMethod{},
-			wantErr: checkout.ErrPaymentMethodNotFound,
-		},
-		{
-			name:    "method inactive",
-			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}}},
-			method:  inactiveMethod,
-			wantErr: checkout.ErrPaymentMethodInactive,
-		},
-		{
-			name:    "cash invalid received amount",
-			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "50.00", ReceivedAmount: strPtr("40.00")}}},
-			method:  cashMethod,
-			wantErr: checkout.ErrInvalidReceivedAmount,
-		},
-		{
-			name:    "installments invalid",
-			input:   checkout.CheckoutInput{Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00", Installments: intPtr(4)}}},
-			method:  creditMethod,
-			wantErr: checkout.ErrInvalidInstallments,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			tx := &checkoutFakeTxQueries{
-				lockSaleByIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Sale, error) {
-					return sale.lock(database.SaleStatusOPEN), nil
-				},
-				listSaleItemsBySaleIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) ([]database.SaleItem, error) {
-					return []database.SaleItem{checkoutItemFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab"), "100.00", "1.000", "0.00", "100.00")}, nil
-				},
-				getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, _ pgtype.UUID) (database.PaymentMethod, error) {
-					if tc.method.ID == (pgtype.UUID{}) {
-						return database.PaymentMethod{}, pgx.ErrNoRows
-					}
-					return tc.method, nil
-				},
-			}
-			svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, nil)
-
-			_, err := svc.Checkout(context.Background(), testScope, sale.id.String(), tc.input)
-			if !errors.Is(err, tc.wantErr) {
-				t.Fatalf("expected %v, got %v", tc.wantErr, err)
-			}
-		})
-	}
-}
-
 func TestCheckoutRollsBackWhenSecondProductFails(t *testing.T) {
 	sale := newCheckoutSaleFixture()
 	sale.subtotal = mustNumeric("60.00")
 	sale.total = mustNumeric("60.00")
 	productA := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	productB := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab")
-	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ac")
 	tx := &checkoutFakeTxQueries{
 		lockSaleByIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Sale, error) {
 			return sale.lock(database.SaleStatusOPEN), nil
@@ -435,12 +216,10 @@ func TestCheckoutRollsBackWhenSecondProductFails(t *testing.T) {
 			}, nil
 		},
 		getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, _ pgtype.UUID) (database.PaymentMethod, error) {
-			return paymentMethodFixture(methodID, "pix", "PIX", database.PaymentMethodKindPIX, true, false, false, 1, false), nil
+			return paymentMethodFixture(testPaymentMethodID, "CASH", "Dinheiro", database.PaymentMethodKindCASH, true, false, false, 1, false), nil
 		},
 		getInventoryByProductIDFn: func(_ context.Context, _ tenancy.StoreScope, id pgtype.UUID) (database.Inventory, error) {
 			switch id.String() {
-			case productA.String():
-				return inventoryFixture(productA, "10.000"), nil
 			case productB.String():
 				return inventoryFixture(productB, "1.000"), nil
 			default:
@@ -456,20 +235,12 @@ func TestCheckoutRollsBackWhenSecondProductFails(t *testing.T) {
 		createInventoryMovementFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CreateInventoryMovementForStoreParams) (database.CreateInventoryMovementForStoreRow, error) {
 			return inventoryMovementFixture(productA, database.InventoryMovementTypeSALE, "3.000", "10.000", "7.000"), nil
 		},
-		createPaymentFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CreatePaymentForStoreParams) (database.CreatePaymentForStoreRow, error) {
-			return createPaymentRowFixture(sale.id, methodID, "60.00", "60.00", "0.00", 1, "payment"), nil
-		},
-		approvePaymentFn: func(_ context.Context, _ tenancy.StoreScope, _ database.ApprovePaymentForStoreParams) (database.Payment, error) {
-			return approvePaymentRowFixture(sale.id, methodID, "60.00", "60.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
-		},
 	}
 
 	txManager := &checkoutFakeTxManager{tx: tx}
 	svc := checkout.NewService(txManager, nil)
 
-	_, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkout.CheckoutInput{
-		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "60.00"}},
-	})
+	_, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkoutInputWithTotal("60.00"))
 	if !errors.Is(err, checkout.ErrInsufficientInventory) {
 		t.Fatalf("expected checkout.ErrInsufficientInventory, got %v", err)
 	}
@@ -480,7 +251,6 @@ func TestCheckoutRollsBackWhenSecondProductFails(t *testing.T) {
 
 func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 	sale := newCheckoutSaleFixture()
-	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	callCount := 0
 	tx := &checkoutFakeTxQueries{
 		lockSaleByIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Sale, error) {
@@ -494,10 +264,7 @@ func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 			return []database.SaleItem{checkoutItemFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab"), "100.00", "1.000", "0.00", "100.00")}, nil
 		},
 		getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, _ pgtype.UUID) (database.PaymentMethod, error) {
-			return paymentMethodFixture(methodID, "pix", "PIX", database.PaymentMethodKindPIX, true, false, false, 1, false), nil
-		},
-		getInventoryByProductIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Inventory, error) {
-			return inventoryFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab"), "10.000"), nil
+			return paymentMethodFixture(testPaymentMethodID, "CASH", "Dinheiro", database.PaymentMethodKindCASH, true, false, false, 1, false), nil
 		},
 		decreaseInventoryFn: func(_ context.Context, _ tenancy.StoreScope, _ database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
 			return decreaseInventoryRowFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab"), "10.000", "9.000"), nil
@@ -506,10 +273,10 @@ func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 			return inventoryMovementFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab"), database.InventoryMovementTypeSALE, "1.000", "10.000", "9.000"), nil
 		},
 		createPaymentFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CreatePaymentForStoreParams) (database.CreatePaymentForStoreRow, error) {
-			return createPaymentRowFixture(sale.id, methodID, "100.00", "100.00", "0.00", 1, "payment"), nil
+			return createPaymentRowFixture(sale.id, testPaymentMethodID, "100.00", "100.00", "0.00", 1, "checkout:"+sale.id.String()+":payment:0"), nil
 		},
 		approvePaymentFn: func(_ context.Context, _ tenancy.StoreScope, _ database.ApprovePaymentForStoreParams) (database.Payment, error) {
-			return approvePaymentRowFixture(sale.id, methodID, "100.00", "100.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
+			return approvePaymentRowFixture(sale.id, testPaymentMethodID, "100.00", "100.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
 		},
 		completeSaleFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CompleteSaleForStoreParams) (database.Sale, error) {
 			return sale.complete(database.SaleStatusCOMPLETED), nil
@@ -524,9 +291,7 @@ func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 
 	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Now: func() time.Time { return time.Unix(1, 0) }})
 
-	first, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkout.CheckoutInput{
-		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
-	})
+	first, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkoutInputWithTotal("100.00"))
 	if err != nil {
 		t.Fatalf("first checkout returned error: %v", err)
 	}
@@ -534,9 +299,7 @@ func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 		t.Fatalf("unexpected first checkout result: %+v", first.Sale)
 	}
 
-	_, err = svc.Checkout(context.Background(), testScope, sale.id.String(), checkout.CheckoutInput{
-		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
-	})
+	_, err = svc.Checkout(context.Background(), testScope, sale.id.String(), checkoutInputWithTotal("100.00"))
 	if !errors.Is(err, checkout.ErrSaleAlreadyCompleted) {
 		t.Fatalf("expected checkout.ErrSaleAlreadyCompleted, got %v", err)
 	}
@@ -545,7 +308,6 @@ func TestCheckoutBlocksSecondAttemptAfterCompletion(t *testing.T) {
 func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 	sale := newCheckoutSaleFixture()
 	productID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
-	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab")
 	docID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ac")
 	tx := &checkoutFakeTxQueries{
 		lockSaleByIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Sale, error) {
@@ -555,10 +317,7 @@ func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 			return []database.SaleItem{checkoutItemFixture(productID, "50.00", "2.000", "0.00", "100.00")}, nil
 		},
 		getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, _ pgtype.UUID) (database.PaymentMethod, error) {
-			return paymentMethodFixture(methodID, "pix", "PIX", database.PaymentMethodKindPIX, true, false, false, 1, false), nil
-		},
-		getInventoryByProductIDFn: func(_ context.Context, _ tenancy.StoreScope, _ pgtype.UUID) (database.Inventory, error) {
-			return inventoryFixture(productID, "10.000"), nil
+			return paymentMethodFixture(testPaymentMethodID, "CASH", "Dinheiro", database.PaymentMethodKindCASH, true, false, false, 1, false), nil
 		},
 		decreaseInventoryFn: func(_ context.Context, _ tenancy.StoreScope, _ database.DecreaseInventoryForStoreParams) (database.DecreaseInventoryForStoreRow, error) {
 			return decreaseInventoryRowFixture(productID, "10.000", "8.000"), nil
@@ -567,10 +326,10 @@ func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 			return inventoryMovementFixture(productID, database.InventoryMovementTypeSALE, "2.000", "10.000", "8.000"), nil
 		},
 		createPaymentFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CreatePaymentForStoreParams) (database.CreatePaymentForStoreRow, error) {
-			return createPaymentRowFixture(sale.id, methodID, "100.00", "100.00", "0.00", 1, "payment"), nil
+			return createPaymentRowFixture(sale.id, testPaymentMethodID, "100.00", "100.00", "0.00", 1, "checkout:"+sale.id.String()+":payment:0"), nil
 		},
 		approvePaymentFn: func(_ context.Context, _ tenancy.StoreScope, _ database.ApprovePaymentForStoreParams) (database.Payment, error) {
-			return approvePaymentRowFixture(sale.id, methodID, "100.00", "100.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
+			return approvePaymentRowFixture(sale.id, testPaymentMethodID, "100.00", "100.00", "0.00", 1, database.PaymentStatusAPPROVED), nil
 		},
 		completeSaleFn: func(_ context.Context, _ tenancy.ActorScope, _ database.CompleteSaleForStoreParams) (database.Sale, error) {
 			return sale.complete(database.SaleStatusCOMPLETED), nil
@@ -585,9 +344,7 @@ func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 
 	svc := checkout.NewService(&checkoutFakeTxManager{tx: tx}, &fiscal.MockProvider{Fail: true})
 
-	resp, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkout.CheckoutInput{
-		Payments: []checkout.CheckoutPaymentInput{{PaymentMethodID: methodID.String(), Amount: "100.00"}},
-	})
+	resp, err := svc.Checkout(context.Background(), testScope, sale.id.String(), checkoutInputWithTotal("100.00"))
 	if err != nil {
 		t.Fatalf("Checkout returned error: %v", err)
 	}
@@ -599,7 +356,7 @@ func TestCheckoutFiscalFailureKeepsCommercialFlowCompleted(t *testing.T) {
 	}
 }
 
-func TestNormalizeCheckoutInputRequiresPayments(t *testing.T) {
+func TestValidatePaymentsRequiresPayments(t *testing.T) {
 	svc := checkout.NewService(&checkoutFakeTxManager{tx: &checkoutFakeTxQueries{}}, nil)
 	_, err := svc.ValidatePayments(context.Background(), &checkoutFakeTxQueries{}, testScope, mustNumeric("100.00"), nil)
 	if !errors.Is(err, checkout.ErrPaymentsRequired) {

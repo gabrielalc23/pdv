@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) GetBySaleID(ctx context.Context, scope tenancy.StoreScope, rawSaleID string) (FiscalDocumentResponse, error) {
+func (s *Service) GetBySaleID(ctx context.Context, actor authn.StoreActor, rawSaleID string) (FiscalDocumentResponse, error) {
+	scope := actor.ToStoreScope()
+
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return FiscalDocumentResponse{}, err

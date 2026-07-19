@@ -1,10 +1,14 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +18,7 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/app"
+	authmodule "github.com/gabrielalc23/pdv/internal/auth"
 	"github.com/gabrielalc23/pdv/internal/platform/cookie"
 	"github.com/gabrielalc23/pdv/internal/platform/csrf"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
@@ -32,6 +37,7 @@ var (
 	testOrgID        string
 	testStoreID      string
 	testMembershipID string
+	accessToken      string
 	testPool         *pgxpool.Pool
 	testStore        *database.PostgresStore
 	testValkey       *valkey.Client
@@ -68,7 +74,6 @@ func TestMain(m *testing.M) {
 
 	runMigrations(ctx, testPool)
 	testOrgID, testStoreID, testMembershipID = seedTenantData(ctx, testPool)
-	seedPaymentMethods(ctx, testPool, testOrgID, testStoreID)
 
 	store := database.NewStore(testPool)
 	testStore = store
@@ -92,6 +97,8 @@ func TestMain(m *testing.M) {
 	}()
 
 	waitForReady(ctx)
+
+	accessToken = loginAndGetStoreToken(ctx)
 
 	code := m.Run()
 
@@ -242,103 +249,115 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) {
 	}
 }
 
-func seedPaymentMethods(ctx context.Context, pool *pgxpool.Pool, orgID, storeID string) {
-	conn, err := pool.Acquire(ctx)
-	if err != nil {
-		log.Fatalf("acquire: %v", err)
-	}
-	defer conn.Release()
 
-	type methodDef struct {
-		code, name, kind string
-		allowsChange     bool
-		allowsInstall    bool
-		maxInstall       int16
-		sortOrder        int
-	}
-	methods := []methodDef{
-		{"CASH", "Dinheiro", "CASH", true, false, 1, 1},
-		{"PIX", "PIX", "PIX", false, false, 1, 2},
-		{"DEBIT", "Cartão de Débito", "DEBIT_CARD", false, false, 1, 3},
-		{"CREDIT", "Cartão de Crédito", "CREDIT_CARD", false, true, 12, 4},
-		{"VOUCHER", "Vale", "VOUCHER", false, false, 1, 5},
-	}
-
-	now := time.Now()
-	for _, m := range methods {
-		var mid string
-		err := conn.QueryRow(ctx, `
-			INSERT INTO payment_methods (organization_id, code, name, kind, allows_change, allows_installments, max_installments, sort_order, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-			ON CONFLICT (organization_id, code) DO UPDATE SET name = EXCLUDED.name
-			RETURNING id
-		`, orgID, m.code, m.name, m.kind, m.allowsChange, m.allowsInstall, m.maxInstall, m.sortOrder, now, now).Scan(&mid)
-		if err != nil {
-			log.Fatalf("seed payment method %s: %v", m.code, err)
-		}
-		if mid == "" {
-			continue
-		}
-		_, err = conn.Exec(ctx, `
-			INSERT INTO store_payment_methods (organization_id, store_id, payment_method_id, is_active, sort_order, created_at, updated_at)
-			VALUES ($1, $2, $3, TRUE, $4, $5, $6)
-			ON CONFLICT (organization_id, store_id, payment_method_id) DO NOTHING
-		`, orgID, storeID, mid, m.sortOrder, now, now)
-		if err != nil {
-			log.Fatalf("link payment method %s to store: %v", m.code, err)
-		}
-	}
-}
 
 func seedTenantData(ctx context.Context, pool *pgxpool.Pool) (orgID, storeID, membershipID string) {
-	conn, err := pool.Acquire(ctx)
+	cheapHasher, err := password.NewHasher(password.Params{
+		MemoryKiB: 8, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32,
+	})
 	if err != nil {
-		log.Fatalf("acquire: %v", err)
+		log.Fatalf("cheap hasher: %v", err)
 	}
-	defer conn.Release()
-
-	var userID string
-	err = conn.QueryRow(ctx, `
-		INSERT INTO users (email, email_normalized, display_name)
-		VALUES ('e2e@test.local', 'e2e@test.local', 'E2E Test')
-		ON CONFLICT (email_normalized) DO UPDATE SET email = users.email
-		RETURNING id
-	`).Scan(&userID)
+	passwordHash, err := cheapHasher.Hash("e2e-test-password-2026")
 	if err != nil {
-		log.Fatalf("insert user: %v", err)
+		log.Fatalf("hash password: %v", err)
 	}
 
-	err = conn.QueryRow(ctx, `
-		INSERT INTO organizations (name, slug, created_by_user_id)
-		VALUES ('E2E Test Org', 'e2e-test-org', $1)
-		ON CONFLICT (slug) DO UPDATE SET name = organizations.name
-		RETURNING id
-	`, userID).Scan(&orgID)
+	store := database.NewStore(pool)
+	err = store.WithTx(ctx, func(tx *database.Tx) error {
+		user, err := tx.CreateUserWithPassword(ctx, database.CreateUserWithPasswordParams{
+			Email:           "e2e@test.local",
+			EmailNormalized: "e2e@test.local",
+			DisplayName:     "E2E Test",
+			PasswordHash:    passwordHash,
+		})
+		if err != nil {
+			return err
+		}
+		result, err := authmodule.BootstrapOrganization(ctx, tx.Queries, authmodule.OrganizationBootstrapInput{
+			UserID: user.ID,
+			Organization: authmodule.OrganizationRequest{
+				Name: "E2E Test Org", Slug: "e2e-test-org",
+				Timezone: "America/Sao_Paulo", Locale: "pt-BR", Currency: "BRL",
+			},
+			Store: authmodule.StoreRequest{
+				Code: "E2E", Name: "E2E Store", Timezone: "America/Sao_Paulo",
+			},
+		})
+		if err != nil {
+			return err
+		}
+		orgID = result.Organization.ID.String()
+		storeID = result.Store.ID.String()
+		membershipID = result.Membership.ID.String()
+		return nil
+	})
 	if err != nil {
-		log.Fatalf("insert organization: %v", err)
+		log.Fatalf("seed tenant data: %v", err)
 	}
-
-	err = conn.QueryRow(ctx, `
-		INSERT INTO stores (organization_id, code, name, timezone, created_by_user_id)
-		VALUES ($1, 'E2E', 'E2E Store', 'America/Sao_Paulo', $2)
-		ON CONFLICT (organization_id, code) DO UPDATE SET name = stores.name
-		RETURNING id
-	`, orgID, userID).Scan(&storeID)
-	if err != nil {
-		log.Fatalf("insert store: %v", err)
-	}
-
-	err = conn.QueryRow(ctx, `
-		INSERT INTO organization_memberships (organization_id, user_id, created_by_user_id)
-		VALUES ($1, $2, $2)
-		ON CONFLICT (organization_id, user_id) WHERE status <> 'REMOVED' DO UPDATE SET user_id = organization_memberships.user_id
-		RETURNING id
-	`, orgID, userID).Scan(&membershipID)
-	if err != nil {
-		log.Fatalf("insert membership: %v", err)
-	}
-
 	return
+}
+
+func loginAndGetStoreToken(ctx context.Context) string {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		log.Fatalf("cookie jar: %v", err)
+	}
+	client := &http.Client{Jar: jar, Timeout: 10 * time.Second}
+
+	csrfResp, err := client.Get(baseURL + "/auth/csrf")
+	if err != nil {
+		log.Fatalf("csrf request: %v", err)
+	}
+	var csrfBody struct{ CSRFToken string `json:"csrfToken"` }
+	if err := json.NewDecoder(csrfResp.Body).Decode(&csrfBody); err != nil {
+		log.Fatalf("csrf decode: %v", err)
+	}
+	csrfResp.Body.Close()
+
+	loginPayload := map[string]any{
+		"email": "e2e@test.local", "password": "e2e-test-password-2026",
+		"clientId": "pdv-admin",
+	}
+	loginData, err := json.Marshal(loginPayload)
+	if err != nil {
+		log.Fatalf("login marshal: %v", err)
+	}
+	loginReq, err := http.NewRequest(http.MethodPost, baseURL+"/auth/login", bytes.NewReader(loginData))
+	if err != nil {
+		log.Fatalf("login request: %v", err)
+	}
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginReq.Header.Set("Origin", baseURL)
+	loginReq.Header.Set("Sec-Fetch-Site", "same-origin")
+	loginReq.Header.Set("X-CSRF-Token", csrfBody.CSRFToken)
+	resp, err := client.Do(loginReq)
+	if err != nil {
+		log.Fatalf("login do: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Fatalf("login failed: status=%d body=%s", resp.StatusCode, body)
+	}
+
+	var loginResp struct {
+		AccessToken string `json:"accessToken"`
+		Context     struct {
+			Kind  string `json:"kind"`
+			Store *struct {
+				ID string `json:"id"`
+			} `json:"store"`
+		} `json:"context"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
+		log.Fatalf("login decode: %v", err)
+	}
+	if loginResp.Context.Kind != "store" || loginResp.Context.Store == nil {
+		log.Fatalf("expected store context after login, got kind=%s", loginResp.Context.Kind)
+	}
+	return loginResp.AccessToken
 }
 
 func mustListen() net.Listener {

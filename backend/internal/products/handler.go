@@ -3,35 +3,36 @@ package products
 import (
 	"net/http"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authcontext"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
-	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
-	service  *Service
-	resolver tenancy.Resolver
+	service *Service
 }
 
-func NewHandler(service *Service, resolver tenancy.Resolver) *Handler {
-	return &Handler{service: service, resolver: resolver}
+func NewHandler(service *Service) *Handler {
+	return &Handler{service: service}
 }
 
-func (h *Handler) resolveOrg(w http.ResponseWriter, r *http.Request) (tenancy.OrganizationScope, bool) {
-	if h.resolver == nil {
-		apphttp.WriteError(w, http.StatusInternalServerError, "tenant_context_unavailable", "tenant resolver not configured", "")
-		return tenancy.OrganizationScope{}, false
-	}
-	scope, err := h.resolver.Organization(r.Context())
+func (h *Handler) resolveActor(w http.ResponseWriter, r *http.Request) (authn.OrganizationActor, bool) {
+	p, err := authcontext.MustPrincipal(r.Context())
 	if err != nil {
-		apphttp.WriteError(w, http.StatusUnauthorized, "tenant_context_unavailable", "organization scope is required", "")
-		return tenancy.OrganizationScope{}, false
+		apphttp.WriteError(w, http.StatusUnauthorized, "access_token_missing", "authentication required", "")
+		return authn.OrganizationActor{}, false
 	}
-	return scope, true
+	actor, err := authn.OrganizationActorFromPrincipal(p)
+	if err != nil {
+		apphttp.WriteError(w, http.StatusBadRequest, "organization_context_required", "organization context is required", "")
+		return authn.OrganizationActor{}, false
+	}
+	return actor, true
 }
 
 func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveOrg(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
@@ -42,7 +43,7 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	product, err := h.service.Create(r.Context(), scope, input)
+	product, err := h.service.Create(r.Context(), actor, input)
 	if err != nil {
 		h.writeServiceError(w, err, http.StatusUnprocessableEntity)
 		return
@@ -52,12 +53,12 @@ func (h *Handler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveOrg(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
 
-	product, err := h.service.Get(r.Context(), scope, chi.URLParam(r, "id"))
+	product, err := h.service.Get(r.Context(), actor, chi.URLParam(r, "id"))
 	if err != nil {
 		h.writeServiceError(w, err, http.StatusUnprocessableEntity)
 		return
@@ -67,7 +68,7 @@ func (h *Handler) GetProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveOrg(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
@@ -78,7 +79,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.service.List(r.Context(), scope, input)
+	result, err := h.service.List(r.Context(), actor, input)
 	if err != nil {
 		h.writeServiceError(w, err, http.StatusBadRequest)
 		return
@@ -88,7 +89,7 @@ func (h *Handler) ListProducts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveOrg(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
@@ -99,7 +100,7 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	product, err := h.service.Update(r.Context(), scope, chi.URLParam(r, "id"), input)
+	product, err := h.service.Update(r.Context(), actor, chi.URLParam(r, "id"), input)
 	if err != nil {
 		h.writeServiceError(w, err, http.StatusUnprocessableEntity)
 		return
@@ -109,12 +110,12 @@ func (h *Handler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ActivateProduct(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveOrg(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
 
-	product, err := h.service.Activate(r.Context(), scope, chi.URLParam(r, "id"))
+	product, err := h.service.Activate(r.Context(), actor, chi.URLParam(r, "id"))
 	if err != nil {
 		h.writeServiceError(w, err, http.StatusUnprocessableEntity)
 		return
@@ -124,12 +125,12 @@ func (h *Handler) ActivateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) DeactivateProduct(w http.ResponseWriter, r *http.Request) {
-	scope, ok := h.resolveOrg(w, r)
+	actor, ok := h.resolveActor(w, r)
 	if !ok {
 		return
 	}
 
-	product, err := h.service.Deactivate(r.Context(), scope, chi.URLParam(r, "id"))
+	product, err := h.service.Deactivate(r.Context(), actor, chi.URLParam(r, "id"))
 	if err != nil {
 		h.writeServiceError(w, err, http.StatusUnprocessableEntity)
 		return

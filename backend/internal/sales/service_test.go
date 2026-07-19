@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/gabrielalc23/pdv/internal/sales"
@@ -18,10 +19,15 @@ var (
 	testOrgID        = mustUUID("00000000-0000-0000-0000-000000000001")
 	testStoreID      = mustUUID("00000000-0000-0000-0000-000000000002")
 	testMembershipID = mustUUID("00000000-0000-0000-0000-000000000003")
-	testScope        = tenancy.ActorScope{
-		OrganizationID:    testOrgID,
-		StoreID:           testStoreID,
-		ActorMembershipID: testMembershipID,
+	testUserID       = mustUUID("00000000-0000-0000-0000-000000000004")
+	testSessionID    = mustUUID("00000000-0000-0000-0000-000000000005")
+	testScope        = authn.StoreActor{
+		UserID:         testUserID,
+		SessionID:      testSessionID,
+		OrganizationID: testOrgID,
+		MembershipID:   testMembershipID,
+		StoreID:        testStoreID,
+		ClientID:       "test-client",
 	}
 	testStoreScope = tenancy.StoreScope{
 		OrganizationID: testOrgID,
