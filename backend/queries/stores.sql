@@ -101,6 +101,46 @@ WHERE m.organization_id = sqlc.arg(organization_id)
   )
 ORDER BY s.name ASC, s.id ASC;
 
+-- name: ListStoresForOrganization :many
+SELECT id, organization_id, code, name, status, timezone, created_by_user_id,
+       archived_at, created_at, updated_at
+FROM stores
+WHERE organization_id = sqlc.arg(organization_id)
+  AND (CAST(sqlc.narg(status) AS store_status) IS NULL OR status = CAST(sqlc.narg(status) AS store_status))
+  AND (CAST(sqlc.narg(search) AS TEXT) IS NULL
+       OR name ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
+       OR code ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%')
+ORDER BY name ASC, id ASC
+LIMIT sqlc.arg(page_size) OFFSET sqlc.arg(page_offset);
+
+-- name: CountStoresForOrganization :one
+SELECT COUNT(*)
+FROM stores
+WHERE organization_id = sqlc.arg(organization_id)
+  AND (CAST(sqlc.narg(status) AS store_status) IS NULL OR status = CAST(sqlc.narg(status) AS store_status))
+  AND (CAST(sqlc.narg(search) AS TEXT) IS NULL
+       OR name ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%'
+       OR code ILIKE '%' || CAST(sqlc.narg(search) AS TEXT) || '%');
+
+-- name: LockStoreForStatusChange :one
+SELECT id, organization_id, code, name, status, timezone, created_by_user_id,
+       archived_at, created_at, updated_at
+FROM stores
+WHERE organization_id = sqlc.arg(organization_id) AND id = sqlc.arg(store_id)
+FOR UPDATE;
+
+-- name: CountActiveStores :one
+SELECT COUNT(*) FROM stores
+WHERE organization_id = sqlc.arg(organization_id) AND status = 'ACTIVE';
+
+-- name: HasOpenSalesForStore :one
+SELECT EXISTS (
+  SELECT 1 FROM sales
+  WHERE organization_id = sqlc.arg(organization_id)
+    AND store_id = sqlc.arg(store_id)
+    AND status = 'OPEN'
+);
+
 -- name: UpdateStore :one
 UPDATE stores
 SET

@@ -398,6 +398,29 @@ FROM auth_sessions
 WHERE user_id = sqlc.arg(user_id)
 ORDER BY id;
 
+-- name: ListSessionIDsForMembership :many
+SELECT id FROM auth_sessions
+WHERE current_organization_id=sqlc.arg(organization_id)
+  AND current_membership_id=sqlc.arg(membership_id)
+ORDER BY id;
+
+-- name: ListSessionIDsForOrganization :many
+SELECT id FROM auth_sessions
+WHERE current_organization_id=sqlc.arg(organization_id)
+ORDER BY id;
+
+-- name: ListSessionIDsForStore :many
+SELECT id FROM auth_sessions
+WHERE current_organization_id=sqlc.arg(organization_id)
+  AND current_store_id=sqlc.arg(store_id)
+ORDER BY id;
+
+-- name: RevokeOrganizationSessions :many
+UPDATE auth_sessions
+SET status='REVOKED', revoked_at=NOW(), revoke_reason=sqlc.arg(revoke_reason)
+WHERE current_organization_id=sqlc.arg(organization_id) AND status='ACTIVE'
+RETURNING id;
+
 -- name: ListUserSessions :many
 SELECT
     id,

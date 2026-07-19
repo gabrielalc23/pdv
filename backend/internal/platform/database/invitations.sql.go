@@ -59,6 +59,37 @@ func (q *Queries) AcceptInvitation(ctx context.Context, arg AcceptInvitationPara
 	return i, err
 }
 
+const countInvitations = `-- name: CountInvitations :one
+SELECT COUNT(*) FROM organization_invitations
+WHERE organization_id=$1
+  AND (CAST($2 AS invitation_status) IS NULL
+       OR (CASE WHEN status='PENDING' AND expires_at <= NOW() THEN 'EXPIRED'::invitation_status ELSE status END)=CAST($2 AS invitation_status))
+  AND (CAST($3 AS TEXT) IS NULL OR email_normalized ILIKE '%'||CAST($3 AS TEXT)||'%')
+  AND (CAST($4 AS TIMESTAMPTZ) IS NULL OR created_at >= CAST($4 AS TIMESTAMPTZ))
+  AND (CAST($5 AS TIMESTAMPTZ) IS NULL OR created_at < CAST($5 AS TIMESTAMPTZ))
+`
+
+type CountInvitationsParams struct {
+	OrganizationID pgtype.UUID
+	Status         NullInvitationStatus
+	Email          pgtype.Text
+	CreatedFrom    pgtype.Timestamptz
+	CreatedTo      pgtype.Timestamptz
+}
+
+func (q *Queries) CountInvitations(ctx context.Context, arg CountInvitationsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countInvitations,
+		arg.OrganizationID,
+		arg.Status,
+		arg.Email,
+		arg.CreatedFrom,
+		arg.CreatedTo,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createInvitation = `-- name: CreateInvitation :one
 INSERT INTO organization_invitations (
     organization_id,
@@ -186,6 +217,135 @@ func (q *Queries) CreateInvitationRoleBindings(ctx context.Context, arg CreateIn
 	return items, nil
 }
 
+const createMembershipBindingsFromInvitation = `-- name: CreateMembershipBindingsFromInvitation :many
+INSERT INTO membership_role_bindings
+  (organization_id, membership_id, role_id, store_id, created_by_membership_id)
+SELECT b.organization_id, $1, b.role_id, b.store_id,
+       i.invited_by_membership_id
+FROM invitation_role_bindings b
+JOIN organization_invitations i ON i.organization_id=b.organization_id AND i.id=b.invitation_id
+WHERE b.organization_id=$2 AND b.invitation_id=$3
+ON CONFLICT DO NOTHING
+RETURNING id, organization_id, membership_id, role_id, store_id,
+          created_by_membership_id, expires_at, created_at
+`
+
+type CreateMembershipBindingsFromInvitationParams struct {
+	MembershipID   pgtype.UUID
+	OrganizationID pgtype.UUID
+	InvitationID   pgtype.UUID
+}
+
+func (q *Queries) CreateMembershipBindingsFromInvitation(ctx context.Context, arg CreateMembershipBindingsFromInvitationParams) ([]MembershipRoleBinding, error) {
+	rows, err := q.db.Query(ctx, createMembershipBindingsFromInvitation, arg.MembershipID, arg.OrganizationID, arg.InvitationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MembershipRoleBinding{}
+	for rows.Next() {
+		var i MembershipRoleBinding
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.MembershipID,
+			&i.RoleID,
+			&i.StoreID,
+			&i.CreatedByMembershipID,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const expireInvitation = `-- name: ExpireInvitation :one
+UPDATE organization_invitations SET status='EXPIRED'
+WHERE id=$1 AND status='PENDING' AND expires_at <= NOW()
+RETURNING id
+`
+
+func (q *Queries) ExpireInvitation(ctx context.Context, invitationID pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, expireInvitation, invitationID)
+	var id pgtype.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const expirePendingInvitationsForEmail = `-- name: ExpirePendingInvitationsForEmail :many
+UPDATE organization_invitations
+SET status='EXPIRED'
+WHERE organization_id=$1
+  AND email_normalized=$2
+  AND status='PENDING' AND expires_at <= NOW()
+RETURNING id
+`
+
+type ExpirePendingInvitationsForEmailParams struct {
+	OrganizationID  pgtype.UUID
+	EmailNormalized string
+}
+
+func (q *Queries) ExpirePendingInvitationsForEmail(ctx context.Context, arg ExpirePendingInvitationsForEmailParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, expirePendingInvitationsForEmail, arg.OrganizationID, arg.EmailNormalized)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getInvitationForOrganization = `-- name: GetInvitationForOrganization :one
+SELECT id, organization_id, email, email_normalized, status, secret_hash, expires_at,
+       accepted_at, revoked_at, invited_by_membership_id, accepted_by_membership_id,
+       created_at, updated_at
+FROM organization_invitations
+WHERE organization_id=$1 AND id=$2
+`
+
+type GetInvitationForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	InvitationID   pgtype.UUID
+}
+
+func (q *Queries) GetInvitationForOrganization(ctx context.Context, arg GetInvitationForOrganizationParams) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, getInvitationForOrganization, arg.OrganizationID, arg.InvitationID)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.EmailNormalized,
+		&i.Status,
+		&i.SecretHash,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.InvitedByMembershipID,
+		&i.AcceptedByMembershipID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getInvitationForUpdate = `-- name: GetInvitationForUpdate :one
 SELECT
     id,
@@ -300,6 +460,90 @@ func (q *Queries) ListInvitationRoleBindings(ctx context.Context, arg ListInvita
 	return items, nil
 }
 
+const listInvitations = `-- name: ListInvitations :many
+SELECT id, organization_id, email, email_normalized,
+       CASE WHEN status='PENDING' AND expires_at <= NOW() THEN 'EXPIRED'::invitation_status ELSE status END AS status,
+       secret_hash, expires_at, accepted_at, revoked_at, invited_by_membership_id,
+       accepted_by_membership_id, created_at, updated_at
+FROM organization_invitations
+WHERE organization_id=$1
+  AND (CAST($2 AS invitation_status) IS NULL
+       OR (CASE WHEN status='PENDING' AND expires_at <= NOW() THEN 'EXPIRED'::invitation_status ELSE status END)=CAST($2 AS invitation_status))
+  AND (CAST($3 AS TEXT) IS NULL OR email_normalized ILIKE '%'||CAST($3 AS TEXT)||'%')
+  AND (CAST($4 AS TIMESTAMPTZ) IS NULL OR created_at >= CAST($4 AS TIMESTAMPTZ))
+  AND (CAST($5 AS TIMESTAMPTZ) IS NULL OR created_at < CAST($5 AS TIMESTAMPTZ))
+ORDER BY created_at DESC, id DESC
+LIMIT $7 OFFSET $6
+`
+
+type ListInvitationsParams struct {
+	OrganizationID pgtype.UUID
+	Status         NullInvitationStatus
+	Email          pgtype.Text
+	CreatedFrom    pgtype.Timestamptz
+	CreatedTo      pgtype.Timestamptz
+	PageOffset     int32
+	PageSize       int32
+}
+
+type ListInvitationsRow struct {
+	ID                     pgtype.UUID
+	OrganizationID         pgtype.UUID
+	Email                  string
+	EmailNormalized        string
+	Status                 interface{}
+	SecretHash             []byte
+	ExpiresAt              pgtype.Timestamptz
+	AcceptedAt             pgtype.Timestamptz
+	RevokedAt              pgtype.Timestamptz
+	InvitedByMembershipID  pgtype.UUID
+	AcceptedByMembershipID pgtype.UUID
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
+func (q *Queries) ListInvitations(ctx context.Context, arg ListInvitationsParams) ([]ListInvitationsRow, error) {
+	rows, err := q.db.Query(ctx, listInvitations,
+		arg.OrganizationID,
+		arg.Status,
+		arg.Email,
+		arg.CreatedFrom,
+		arg.CreatedTo,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListInvitationsRow{}
+	for rows.Next() {
+		var i ListInvitationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Email,
+			&i.EmailNormalized,
+			&i.Status,
+			&i.SecretHash,
+			&i.ExpiresAt,
+			&i.AcceptedAt,
+			&i.RevokedAt,
+			&i.InvitedByMembershipID,
+			&i.AcceptedByMembershipID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokeInvitation = `-- name: RevokeInvitation :one
 UPDATE organization_invitations
 SET
@@ -337,6 +581,50 @@ func (q *Queries) RevokeInvitation(ctx context.Context, arg RevokeInvitationPara
 		&i.OrganizationID,
 		&i.Status,
 		&i.RevokedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const rotateInvitationSecret = `-- name: RotateInvitationSecret :one
+UPDATE organization_invitations
+SET secret_hash=$1, expires_at=$2, status='PENDING',
+    accepted_at=NULL, revoked_at=NULL
+WHERE organization_id=$3 AND id=$4
+  AND (status='PENDING' OR status='EXPIRED')
+RETURNING id, organization_id, email, email_normalized, status, secret_hash, expires_at,
+          accepted_at, revoked_at, invited_by_membership_id, accepted_by_membership_id,
+          created_at, updated_at
+`
+
+type RotateInvitationSecretParams struct {
+	SecretHash     []byte
+	ExpiresAt      pgtype.Timestamptz
+	OrganizationID pgtype.UUID
+	InvitationID   pgtype.UUID
+}
+
+func (q *Queries) RotateInvitationSecret(ctx context.Context, arg RotateInvitationSecretParams) (OrganizationInvitation, error) {
+	row := q.db.QueryRow(ctx, rotateInvitationSecret,
+		arg.SecretHash,
+		arg.ExpiresAt,
+		arg.OrganizationID,
+		arg.InvitationID,
+	)
+	var i OrganizationInvitation
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Email,
+		&i.EmailNormalized,
+		&i.Status,
+		&i.SecretHash,
+		&i.ExpiresAt,
+		&i.AcceptedAt,
+		&i.RevokedAt,
+		&i.InvitedByMembershipID,
+		&i.AcceptedByMembershipID,
+		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err

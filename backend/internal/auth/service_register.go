@@ -51,28 +51,15 @@ func (s *Service) Register(ctx context.Context, input RegisterRequest, meta requ
 				return fmt.Errorf("verify registration email: %w", err)
 			}
 		}
-		organization, err := q.CreateOrganization(ctx, database.CreateOrganizationParams{Name: input.Organization.Name, Slug: input.Organization.Slug, Timezone: input.Organization.Timezone, Locale: input.Organization.Locale, Currency: input.Organization.Currency, CreatedByUserID: user.ID})
-		if err != nil {
-			return mapPersistenceError(err)
-		}
-		store, err := q.CreateStore(ctx, database.CreateStoreParams{OrganizationID: organization.ID, Code: input.Store.Code, Name: input.Store.Name, Timezone: input.Store.Timezone, CreatedByUserID: user.ID})
-		if err != nil {
-			return mapPersistenceError(err)
-		}
-		membership, err := q.CreateMembership(ctx, database.CreateMembershipParams{OrganizationID: organization.ID, UserID: user.ID, DefaultStoreID: store.ID, CreatedByUserID: user.ID})
-		if err != nil {
-			return fmt.Errorf("create owner membership: %w", err)
-		}
-		ownerRole, err := bootstrapRoles(ctx, q, organization.ID, membership.ID)
+		bootstrap, err := BootstrapOrganization(ctx, q, OrganizationBootstrapInput{
+			UserID:       user.ID,
+			Organization: input.Organization,
+			Store:        input.Store,
+		})
 		if err != nil {
 			return err
 		}
-		if _, err := q.CreateRoleBinding(ctx, database.CreateRoleBindingParams{OrganizationID: organization.ID, MembershipID: membership.ID, RoleID: ownerRole.ID, CreatedByMembershipID: membership.ID}); err != nil {
-			return fmt.Errorf("create owner binding: %w", err)
-		}
-		if err := bootstrapPaymentMethods(ctx, q, organization.ID, store.ID); err != nil {
-			return err
-		}
+		organization, store, membership := bootstrap.Organization, bootstrap.Store, bootstrap.Membership
 		if s.cfg.RequireVerifiedEmail {
 			selector, err := randomUUID()
 			if err != nil {

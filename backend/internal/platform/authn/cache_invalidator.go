@@ -25,3 +25,15 @@ func (i *CacheInvalidator) InvalidateUserPasswordVersion(ctx context.Context, us
 		i.cache.invalidateUserPasswordVersion(ctx, userID)
 	}
 }
+
+func (i *CacheInvalidator) InvalidateOrganizationAuthorizationVersion(ctx context.Context, organizationID pgtype.UUID) {
+	if i != nil && i.cache != nil {
+		i.cache.invalidateOrgVersion(ctx, organizationID)
+	}
+}
+
+func (i *CacheInvalidator) InvalidateMembershipAuthorizationVersion(ctx context.Context, membershipID pgtype.UUID) {
+	if i != nil && i.cache != nil {
+		i.cache.invalidateMembershipVersion(ctx, membershipID)
+	}
+}

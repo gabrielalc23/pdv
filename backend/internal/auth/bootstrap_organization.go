@@ -24,6 +24,79 @@ var defaultRoleTemplates = []roleTemplate{
 	{key: "inventory_operator", name: "Operador de estoque", scope: database.RoleAssignmentScopeSTORE, scopes: []string{"catalog.read", "inventory.read", "inventory.entries.create", "inventory.adjustments.create", "inventory.movements.read"}},
 }
 
+// OrganizationBootstrapInput contains the already-validated values needed to
+// create an organization and its initial owner setup.
+type OrganizationBootstrapInput struct {
+	UserID       pgtype.UUID
+	Organization OrganizationRequest
+	Store        StoreRequest
+}
+
+type OrganizationBootstrapResult struct {
+	Organization database.Organization
+	Store        database.Store
+	Membership   database.OrganizationMembership
+}
+
+// BootstrapOrganization creates the complete initial tenant setup. The caller
+// must provide a transaction-bound query set.
+func BootstrapOrganization(ctx context.Context, q *database.Queries, input OrganizationBootstrapInput) (OrganizationBootstrapResult, error) {
+	organization, err := q.CreateOrganization(ctx, database.CreateOrganizationParams{
+		Name:            input.Organization.Name,
+		Slug:            input.Organization.Slug,
+		Timezone:        input.Organization.Timezone,
+		Locale:          input.Organization.Locale,
+		Currency:        input.Organization.Currency,
+		CreatedByUserID: input.UserID,
+	})
+	if err != nil {
+		return OrganizationBootstrapResult{}, mapPersistenceError(err)
+	}
+
+	store, err := q.CreateStore(ctx, database.CreateStoreParams{
+		OrganizationID:  organization.ID,
+		Code:            input.Store.Code,
+		Name:            input.Store.Name,
+		Timezone:        input.Store.Timezone,
+		CreatedByUserID: input.UserID,
+	})
+	if err != nil {
+		return OrganizationBootstrapResult{}, mapPersistenceError(err)
+	}
+
+	membership, err := q.CreateMembership(ctx, database.CreateMembershipParams{
+		OrganizationID:  organization.ID,
+		UserID:          input.UserID,
+		DefaultStoreID:  store.ID,
+		CreatedByUserID: input.UserID,
+	})
+	if err != nil {
+		return OrganizationBootstrapResult{}, fmt.Errorf("create owner membership: %w", err)
+	}
+
+	ownerRole, err := bootstrapRoles(ctx, q, organization.ID, membership.ID)
+	if err != nil {
+		return OrganizationBootstrapResult{}, err
+	}
+	if _, err := q.CreateRoleBinding(ctx, database.CreateRoleBindingParams{
+		OrganizationID:        organization.ID,
+		MembershipID:          membership.ID,
+		RoleID:                ownerRole.ID,
+		CreatedByMembershipID: membership.ID,
+	}); err != nil {
+		return OrganizationBootstrapResult{}, fmt.Errorf("create owner binding: %w", err)
+	}
+	if err := bootstrapPaymentMethods(ctx, q, organization.ID, store.ID); err != nil {
+		return OrganizationBootstrapResult{}, err
+	}
+
+	return OrganizationBootstrapResult{
+		Organization: organization,
+		Store:        store,
+		Membership:   membership,
+	}, nil
+}
+
 func bootstrapRoles(ctx context.Context, q *database.Queries, organizationID, membershipID pgtype.UUID) (database.Role, error) {
 	catalog, err := q.ListPermissionScopes(ctx)
 	if err != nil {

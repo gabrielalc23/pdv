@@ -94,6 +94,25 @@ WHERE organization_id = sqlc.arg(organization_id)
   AND id = sqlc.arg(membership_id)
 FOR UPDATE;
 
+-- name: GetMembershipForOrganization :one
+SELECT m.id, m.organization_id, m.user_id, m.status, m.default_store_id,
+       m.authorization_version, m.joined_at, m.suspended_at, m.removed_at,
+       m.created_by_user_id, m.created_at, m.updated_at,
+       u.email, u.display_name, u.status AS user_status, u.email_verified_at,
+       s.code AS default_store_code, s.name AS default_store_name, s.status AS default_store_status
+FROM organization_memberships AS m
+JOIN users AS u ON u.id = m.user_id
+LEFT JOIN stores AS s ON s.organization_id = m.organization_id AND s.id = m.default_store_id
+WHERE m.organization_id = sqlc.arg(organization_id) AND m.id = sqlc.arg(membership_id);
+
+-- name: GetLatestMembershipForUserInOrganization :one
+SELECT id, organization_id, user_id, status, default_store_id, authorization_version,
+       joined_at, suspended_at, removed_at, created_by_user_id, created_at, updated_at
+FROM organization_memberships
+WHERE organization_id = sqlc.arg(organization_id) AND user_id = sqlc.arg(user_id)
+ORDER BY created_at DESC, id DESC
+LIMIT 1;
+
 -- name: IncrementMembershipAuthorizationVersion :one
 UPDATE organization_memberships
 SET authorization_version = authorization_version + 1

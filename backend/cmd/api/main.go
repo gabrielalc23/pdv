@@ -153,6 +153,7 @@ func main() {
 		AuthTokenHashKey:         cfg.AuthTokenHashKey,
 		RateLimitKeySecret:       cfg.RateLimitKeySecret,
 		RegistrationEnabled:      cfg.AuthRegistrationEnabled,
+		TenantCreationEnabled:    cfg.AuthTenantCreationEnabled,
 		RequireVerifiedEmail:     cfg.AuthRequireVerifiedEmail,
 		AppPublicURL:             cfg.AppPublicURL,
 		AuthSessionCacheTTL:      cfg.AuthSessionCacheTTL,

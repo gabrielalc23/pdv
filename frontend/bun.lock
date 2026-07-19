@@ -191,10 +191,14 @@
         "tw-animate-css": "^1.4.0",
       },
       "devDependencies": {
+        "@pdv/eslint": "workspace:*",
+        "@pdv/prettier": "workspace:*",
         "@types/bun": "latest",
         "@types/react": "^19.2.17",
         "@types/react-dom": "^19.2.3",
         "@vitejs/plugin-react": "^6.0.3",
+        "eslint": "^10.6.0",
+        "prettier": "^3.8.2",
         "tailwindcss": "^4.3.2",
       },
       "peerDependencies": {

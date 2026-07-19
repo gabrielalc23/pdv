@@ -295,6 +295,7 @@ type captureMailer struct {
 	committed          bool
 	verificationLinks  []string
 	passwordResetLinks []string
+	invitationLinks    []string
 }
 
 func (m *captureMailer) SendEmailVerification(ctx context.Context, to, _ string, link string) error {
@@ -321,7 +322,10 @@ func (m *captureMailer) SendPasswordReset(ctx context.Context, to, _ string, lin
 	return nil
 }
 
-func (m *captureMailer) SendInvitation(context.Context, string, string, string, string) error {
+func (m *captureMailer) SendInvitation(_ context.Context, _, _, _, link string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.invitationLinks = append(m.invitationLinks, link)
 	return nil
 }
 

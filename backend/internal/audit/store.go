@@ -13,6 +13,11 @@ type Writer interface {
 	Write(ctx context.Context, q database.Querier, event Event) error
 }
 
+type ReadStore interface {
+	ListAuditEvents(ctx context.Context, params database.ListAuditEventsParams) ([]database.SecurityAuditEvent, error)
+	CountAuditEvents(ctx context.Context, params database.CountAuditEventsParams) (int64, error)
+}
+
 type Event struct {
 	OrganizationID    pgtype.UUID
 	StoreID           pgtype.UUID
@@ -27,4 +32,20 @@ type Event struct {
 	UserAgent         pgtype.Text
 	Outcome           database.AuditOutcome
 	Metadata          []byte
+}
+
+type readStore struct {
+	q database.Querier
+}
+
+func NewReadStore(q database.Querier) ReadStore {
+	return &readStore{q: q}
+}
+
+func (s *readStore) ListAuditEvents(ctx context.Context, params database.ListAuditEventsParams) ([]database.SecurityAuditEvent, error) {
+	return s.q.ListAuditEvents(ctx, params)
+}
+
+func (s *readStore) CountAuditEvents(ctx context.Context, params database.CountAuditEventsParams) (int64, error) {
+	return s.q.CountAuditEvents(ctx, params)
 }

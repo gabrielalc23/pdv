@@ -232,6 +232,31 @@ func (q *Queries) GetUserForActionByNormalizedEmail(ctx context.Context, emailNo
 	return i, err
 }
 
+const getUserIdentityByNormalizedEmail = `-- name: GetUserIdentityByNormalizedEmail :one
+SELECT id, email, email_normalized, display_name, status, email_verified_at,
+       password_version, last_login_at, created_at, updated_at
+FROM users
+WHERE email_normalized = $1
+`
+
+func (q *Queries) GetUserIdentityByNormalizedEmail(ctx context.Context, emailNormalized string) (User, error) {
+	row := q.db.QueryRow(ctx, getUserIdentityByNormalizedEmail, emailNormalized)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.Email,
+		&i.EmailNormalized,
+		&i.DisplayName,
+		&i.Status,
+		&i.EmailVerifiedAt,
+		&i.PasswordVersion,
+		&i.LastLoginAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getUserWithPasswordForUpdate = `-- name: GetUserWithPasswordForUpdate :one
 SELECT
     u.id,
@@ -305,11 +330,13 @@ const listUserActiveMemberships = `-- name: ListUserActiveMemberships :many
 SELECT
     m.id AS membership_id,
     m.organization_id,
+    m.status AS membership_status,
     m.authorization_version AS membership_authorization_version,
     m.default_store_id,
     m.joined_at,
     o.name AS organization_name,
     o.slug AS organization_slug,
+    o.status AS organization_status,
     o.timezone AS organization_timezone,
     o.locale AS organization_locale,
     o.currency AS organization_currency,
@@ -331,11 +358,13 @@ ORDER BY m.joined_at ASC, m.id ASC
 type ListUserActiveMembershipsRow struct {
 	MembershipID                     pgtype.UUID
 	OrganizationID                   pgtype.UUID
+	MembershipStatus                 MembershipStatus
 	MembershipAuthorizationVersion   int64
 	DefaultStoreID                   pgtype.UUID
 	JoinedAt                         pgtype.Timestamptz
 	OrganizationName                 string
 	OrganizationSlug                 string
+	OrganizationStatus               OrganizationStatus
 	OrganizationTimezone             string
 	OrganizationLocale               string
 	OrganizationCurrency             string
@@ -357,11 +386,13 @@ func (q *Queries) ListUserActiveMemberships(ctx context.Context, userID pgtype.U
 		if err := rows.Scan(
 			&i.MembershipID,
 			&i.OrganizationID,
+			&i.MembershipStatus,
 			&i.MembershipAuthorizationVersion,
 			&i.DefaultStoreID,
 			&i.JoinedAt,
 			&i.OrganizationName,
 			&i.OrganizationSlug,
+			&i.OrganizationStatus,
 			&i.OrganizationTimezone,
 			&i.OrganizationLocale,
 			&i.OrganizationCurrency,

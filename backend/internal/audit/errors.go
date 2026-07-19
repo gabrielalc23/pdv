@@ -1,11 +1,17 @@
 package audit
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 var (
-	ErrInvalidMetadata  = fmt.Errorf("audit: invalid metadata")
-	ErrInvalidEventType = fmt.Errorf("audit: invalid event type")
-	ErrWriteFailed      = fmt.Errorf("audit: write failed")
+	ErrInvalidMetadata     = fmt.Errorf("audit: invalid metadata")
+	ErrInvalidEventType    = fmt.Errorf("audit: invalid event type")
+	ErrWriteFailed         = fmt.Errorf("audit: write failed")
+	ErrReadFailed          = errors.New("audit: read failed")
+	ErrOrganizationContext = errors.New("audit: organization context is required")
+	ErrInsufficientScope   = errors.New("audit: insufficient scope")
 )
 
 type ValidationError struct {

@@ -235,11 +235,43 @@ func (q *Queries) CreateRoleBinding(ctx context.Context, arg CreateRoleBindingPa
 	return i, err
 }
 
+const deleteMembershipRoleBindings = `-- name: DeleteMembershipRoleBindings :many
+DELETE FROM membership_role_bindings
+WHERE organization_id=$1 AND membership_id=$2
+RETURNING id
+`
+
+type DeleteMembershipRoleBindingsParams struct {
+	OrganizationID pgtype.UUID
+	MembershipID   pgtype.UUID
+}
+
+func (q *Queries) DeleteMembershipRoleBindings(ctx context.Context, arg DeleteMembershipRoleBindingsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteMembershipRoleBindings, arg.OrganizationID, arg.MembershipID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deleteRoleBinding = `-- name: DeleteRoleBinding :one
 DELETE FROM membership_role_bindings
 WHERE
     organization_id = $1
-    AND id = $2 RETURNING id,
+    AND membership_id = $2
+    AND id = $3 RETURNING id,
     organization_id,
     membership_id,
     role_id,
@@ -251,11 +283,12 @@ WHERE
 
 type DeleteRoleBindingParams struct {
 	OrganizationID pgtype.UUID
+	MembershipID   pgtype.UUID
 	BindingID      pgtype.UUID
 }
 
 func (q *Queries) DeleteRoleBinding(ctx context.Context, arg DeleteRoleBindingParams) (MembershipRoleBinding, error) {
-	row := q.db.QueryRow(ctx, deleteRoleBinding, arg.OrganizationID, arg.BindingID)
+	row := q.db.QueryRow(ctx, deleteRoleBinding, arg.OrganizationID, arg.MembershipID, arg.BindingID)
 	var i MembershipRoleBinding
 	err := row.Scan(
 		&i.ID,
@@ -266,6 +299,94 @@ func (q *Queries) DeleteRoleBinding(ctx context.Context, arg DeleteRoleBindingPa
 		&i.CreatedByMembershipID,
 		&i.ExpiresAt,
 		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const getPermissionScopesByCodes = `-- name: GetPermissionScopesByCodes :many
+SELECT code, resource, action, scope_level, description, is_assignable, created_at
+FROM permission_scopes
+WHERE code = ANY(CAST($1 AS TEXT[]))
+ORDER BY code
+`
+
+func (q *Queries) GetPermissionScopesByCodes(ctx context.Context, scopeCodes []string) ([]PermissionScope, error) {
+	rows, err := q.db.Query(ctx, getPermissionScopesByCodes, scopeCodes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PermissionScope{}
+	for rows.Next() {
+		var i PermissionScope
+		if err := rows.Scan(
+			&i.Code,
+			&i.Resource,
+			&i.Action,
+			&i.ScopeLevel,
+			&i.Description,
+			&i.IsAssignable,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getRoleBindingForOrganization = `-- name: GetRoleBindingForOrganization :one
+SELECT b.id, b.organization_id, b.membership_id, b.role_id, b.store_id,
+       b.created_by_membership_id, b.expires_at, b.created_at,
+       r.key AS role_key, r.assignment_scope, r.is_system, r.is_active
+FROM membership_role_bindings b
+JOIN roles r ON r.organization_id=b.organization_id AND r.id=b.role_id
+WHERE b.organization_id=$1
+  AND b.membership_id=$2
+  AND b.id=$3
+FOR UPDATE OF b
+`
+
+type GetRoleBindingForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	MembershipID   pgtype.UUID
+	BindingID      pgtype.UUID
+}
+
+type GetRoleBindingForOrganizationRow struct {
+	ID                    pgtype.UUID
+	OrganizationID        pgtype.UUID
+	MembershipID          pgtype.UUID
+	RoleID                pgtype.UUID
+	StoreID               pgtype.UUID
+	CreatedByMembershipID pgtype.UUID
+	ExpiresAt             pgtype.Timestamptz
+	CreatedAt             pgtype.Timestamptz
+	RoleKey               string
+	AssignmentScope       RoleAssignmentScope
+	IsSystem              bool
+	IsActive              bool
+}
+
+func (q *Queries) GetRoleBindingForOrganization(ctx context.Context, arg GetRoleBindingForOrganizationParams) (GetRoleBindingForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getRoleBindingForOrganization, arg.OrganizationID, arg.MembershipID, arg.BindingID)
+	var i GetRoleBindingForOrganizationRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.MembershipID,
+		&i.RoleID,
+		&i.StoreID,
+		&i.CreatedByMembershipID,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.RoleKey,
+		&i.AssignmentScope,
+		&i.IsSystem,
+		&i.IsActive,
 	)
 	return i, err
 }
@@ -311,6 +432,58 @@ func (q *Queries) GetRoleForOrganization(ctx context.Context, arg GetRoleForOrga
 		&i.CreatedByMembershipID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getRoleWithScopesForOrganization = `-- name: GetRoleWithScopesForOrganization :one
+SELECT r.id, r.organization_id, r.key, r.name, r.description, r.assignment_scope,
+       r.is_system, r.is_mutable, r.is_active, r.created_by_membership_id,
+       r.created_at, r.updated_at,
+       ARRAY(SELECT rs.scope_code::TEXT FROM role_scopes rs
+             WHERE rs.organization_id=r.organization_id AND rs.role_id=r.id ORDER BY rs.scope_code)::TEXT[] AS scope_codes
+FROM roles r
+WHERE r.organization_id=$1 AND r.id=$2
+`
+
+type GetRoleWithScopesForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	RoleID         pgtype.UUID
+}
+
+type GetRoleWithScopesForOrganizationRow struct {
+	ID                    pgtype.UUID
+	OrganizationID        pgtype.UUID
+	Key                   string
+	Name                  string
+	Description           pgtype.Text
+	AssignmentScope       RoleAssignmentScope
+	IsSystem              bool
+	IsMutable             bool
+	IsActive              bool
+	CreatedByMembershipID pgtype.UUID
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+	ScopeCodes            []string
+}
+
+func (q *Queries) GetRoleWithScopesForOrganization(ctx context.Context, arg GetRoleWithScopesForOrganizationParams) (GetRoleWithScopesForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getRoleWithScopesForOrganization, arg.OrganizationID, arg.RoleID)
+	var i GetRoleWithScopesForOrganizationRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Key,
+		&i.Name,
+		&i.Description,
+		&i.AssignmentScope,
+		&i.IsSystem,
+		&i.IsMutable,
+		&i.IsActive,
+		&i.CreatedByMembershipID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ScopeCodes,
 	)
 	return i, err
 }
@@ -520,6 +693,38 @@ func (q *Queries) ListRolesWithScopes(ctx context.Context, organizationID pgtype
 	return items, nil
 }
 
+const listScopeCodesForRole = `-- name: ListScopeCodesForRole :many
+SELECT scope_code::TEXT
+FROM role_scopes
+WHERE organization_id=$1 AND role_id=$2
+ORDER BY scope_code
+`
+
+type ListScopeCodesForRoleParams struct {
+	OrganizationID pgtype.UUID
+	RoleID         pgtype.UUID
+}
+
+func (q *Queries) ListScopeCodesForRole(ctx context.Context, arg ListScopeCodesForRoleParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listScopeCodesForRole, arg.OrganizationID, arg.RoleID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var scope_code string
+		if err := rows.Scan(&scope_code); err != nil {
+			return nil, err
+		}
+		items = append(items, scope_code)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const lockRoleForScopeChange = `-- name: LockRoleForScopeChange :one
 SELECT
     id,
@@ -602,6 +807,46 @@ func (q *Queries) ReplaceRoleScopes(ctx context.Context, arg ReplaceRoleScopesPa
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resolveActorGrantScopes = `-- name: ResolveActorGrantScopes :many
+SELECT DISTINCT ps.code
+FROM membership_role_bindings b
+JOIN roles r ON r.organization_id=b.organization_id AND r.id=b.role_id
+JOIN role_scopes rs ON rs.organization_id=r.organization_id AND rs.role_id=r.id
+JOIN permission_scopes ps ON ps.code=rs.scope_code
+JOIN organization_memberships m ON m.organization_id=b.organization_id AND m.id=b.membership_id
+WHERE b.organization_id=$1
+  AND b.membership_id=$2
+  AND m.status='ACTIVE' AND r.is_active
+  AND b.store_id IS NULL
+  AND (b.expires_at IS NULL OR b.expires_at > NOW())
+ORDER BY ps.code
+`
+
+type ResolveActorGrantScopesParams struct {
+	OrganizationID pgtype.UUID
+	MembershipID   pgtype.UUID
+}
+
+func (q *Queries) ResolveActorGrantScopes(ctx context.Context, arg ResolveActorGrantScopesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, resolveActorGrantScopes, arg.OrganizationID, arg.MembershipID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var code string
+		if err := rows.Scan(&code); err != nil {
+			return nil, err
+		}
+		items = append(items, code)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -717,5 +962,79 @@ func (q *Queries) ResolveEffectiveScopes(ctx context.Context, arg ResolveEffecti
 	)
 	var i ResolveEffectiveScopesRow
 	err := row.Scan(&i.RoleKeys, &i.ScopeCodes)
+	return i, err
+}
+
+const updateRole = `-- name: UpdateRole :one
+UPDATE roles
+SET name = $1, description = $2
+WHERE organization_id = $3 AND id = $4 AND is_mutable
+RETURNING id, organization_id, key, name, description, assignment_scope, is_system,
+          is_mutable, is_active, created_by_membership_id, created_at, updated_at
+`
+
+type UpdateRoleParams struct {
+	Name           string
+	Description    pgtype.Text
+	OrganizationID pgtype.UUID
+	RoleID         pgtype.UUID
+}
+
+func (q *Queries) UpdateRole(ctx context.Context, arg UpdateRoleParams) (Role, error) {
+	row := q.db.QueryRow(ctx, updateRole,
+		arg.Name,
+		arg.Description,
+		arg.OrganizationID,
+		arg.RoleID,
+	)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Key,
+		&i.Name,
+		&i.Description,
+		&i.AssignmentScope,
+		&i.IsSystem,
+		&i.IsMutable,
+		&i.IsActive,
+		&i.CreatedByMembershipID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const updateRoleStatus = `-- name: UpdateRoleStatus :one
+UPDATE roles
+SET is_active = $1
+WHERE organization_id = $2 AND id = $3 AND is_mutable
+RETURNING id, organization_id, key, name, description, assignment_scope, is_system,
+          is_mutable, is_active, created_by_membership_id, created_at, updated_at
+`
+
+type UpdateRoleStatusParams struct {
+	IsActive       bool
+	OrganizationID pgtype.UUID
+	RoleID         pgtype.UUID
+}
+
+func (q *Queries) UpdateRoleStatus(ctx context.Context, arg UpdateRoleStatusParams) (Role, error) {
+	row := q.db.QueryRow(ctx, updateRoleStatus, arg.IsActive, arg.OrganizationID, arg.RoleID)
+	var i Role
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Key,
+		&i.Name,
+		&i.Description,
+		&i.AssignmentScope,
+		&i.IsSystem,
+		&i.IsMutable,
+		&i.IsActive,
+		&i.CreatedByMembershipID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }

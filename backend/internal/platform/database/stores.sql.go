@@ -11,6 +11,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countActiveStores = `-- name: CountActiveStores :one
+SELECT COUNT(*) FROM stores
+WHERE organization_id = $1 AND status = 'ACTIVE'
+`
+
+func (q *Queries) CountActiveStores(ctx context.Context, organizationID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveStores, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countStoresForOrganization = `-- name: CountStoresForOrganization :one
+SELECT COUNT(*)
+FROM stores
+WHERE organization_id = $1
+  AND (CAST($2 AS store_status) IS NULL OR status = CAST($2 AS store_status))
+  AND (CAST($3 AS TEXT) IS NULL
+       OR name ILIKE '%' || CAST($3 AS TEXT) || '%'
+       OR code ILIKE '%' || CAST($3 AS TEXT) || '%')
+`
+
+type CountStoresForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Status         NullStoreStatus
+	Search         pgtype.Text
+}
+
+func (q *Queries) CountStoresForOrganization(ctx context.Context, arg CountStoresForOrganizationParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countStoresForOrganization, arg.OrganizationID, arg.Status, arg.Search)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createStore = `-- name: CreateStore :one
 INSERT INTO stores (
     organization_id,
@@ -111,6 +146,27 @@ func (q *Queries) GetStoreForOrganization(ctx context.Context, arg GetStoreForOr
 	return i, err
 }
 
+const hasOpenSalesForStore = `-- name: HasOpenSalesForStore :one
+SELECT EXISTS (
+  SELECT 1 FROM sales
+  WHERE organization_id = $1
+    AND store_id = $2
+    AND status = 'OPEN'
+)
+`
+
+type HasOpenSalesForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+}
+
+func (q *Queries) HasOpenSalesForStore(ctx context.Context, arg HasOpenSalesForStoreParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasOpenSalesForStore, arg.OrganizationID, arg.StoreID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const listStoresForMembership = `-- name: ListStoresForMembership :many
 SELECT
     s.id,
@@ -206,6 +262,95 @@ func (q *Queries) ListStoresForMembership(ctx context.Context, arg ListStoresFor
 		return nil, err
 	}
 	return items, nil
+}
+
+const listStoresForOrganization = `-- name: ListStoresForOrganization :many
+SELECT id, organization_id, code, name, status, timezone, created_by_user_id,
+       archived_at, created_at, updated_at
+FROM stores
+WHERE organization_id = $1
+  AND (CAST($2 AS store_status) IS NULL OR status = CAST($2 AS store_status))
+  AND (CAST($3 AS TEXT) IS NULL
+       OR name ILIKE '%' || CAST($3 AS TEXT) || '%'
+       OR code ILIKE '%' || CAST($3 AS TEXT) || '%')
+ORDER BY name ASC, id ASC
+LIMIT $5 OFFSET $4
+`
+
+type ListStoresForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Status         NullStoreStatus
+	Search         pgtype.Text
+	PageOffset     int32
+	PageSize       int32
+}
+
+func (q *Queries) ListStoresForOrganization(ctx context.Context, arg ListStoresForOrganizationParams) ([]Store, error) {
+	rows, err := q.db.Query(ctx, listStoresForOrganization,
+		arg.OrganizationID,
+		arg.Status,
+		arg.Search,
+		arg.PageOffset,
+		arg.PageSize,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Store{}
+	for rows.Next() {
+		var i Store
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Code,
+			&i.Name,
+			&i.Status,
+			&i.Timezone,
+			&i.CreatedByUserID,
+			&i.ArchivedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockStoreForStatusChange = `-- name: LockStoreForStatusChange :one
+SELECT id, organization_id, code, name, status, timezone, created_by_user_id,
+       archived_at, created_at, updated_at
+FROM stores
+WHERE organization_id = $1 AND id = $2
+FOR UPDATE
+`
+
+type LockStoreForStatusChangeParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+}
+
+func (q *Queries) LockStoreForStatusChange(ctx context.Context, arg LockStoreForStatusChangeParams) (Store, error) {
+	row := q.db.QueryRow(ctx, lockStoreForStatusChange, arg.OrganizationID, arg.StoreID)
+	var i Store
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Code,
+		&i.Name,
+		&i.Status,
+		&i.Timezone,
+		&i.CreatedByUserID,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const updateStore = `-- name: UpdateStore :one

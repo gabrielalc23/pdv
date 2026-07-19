@@ -44,6 +44,18 @@ SELECT
 FROM permission_scopes
 ORDER BY code ASC;
 
+-- name: GetPermissionScopesByCodes :many
+SELECT code, resource, action, scope_level, description, is_assignable, created_at
+FROM permission_scopes
+WHERE code = ANY(CAST(sqlc.arg(scope_codes) AS TEXT[]))
+ORDER BY code;
+
+-- name: ListScopeCodesForRole :many
+SELECT scope_code::TEXT
+FROM role_scopes
+WHERE organization_id=sqlc.arg(organization_id) AND role_id=sqlc.arg(role_id)
+ORDER BY scope_code;
+
 -- name: ReplaceRoleScopes :many
 WITH deleted_scopes AS (
     DELETE FROM role_scopes
@@ -100,6 +112,29 @@ FROM roles
 WHERE
     organization_id = sqlc.arg (organization_id)
     AND id = sqlc.arg (role_id);
+
+-- name: GetRoleWithScopesForOrganization :one
+SELECT r.id, r.organization_id, r.key, r.name, r.description, r.assignment_scope,
+       r.is_system, r.is_mutable, r.is_active, r.created_by_membership_id,
+       r.created_at, r.updated_at,
+       ARRAY(SELECT rs.scope_code::TEXT FROM role_scopes rs
+             WHERE rs.organization_id=r.organization_id AND rs.role_id=r.id ORDER BY rs.scope_code)::TEXT[] AS scope_codes
+FROM roles r
+WHERE r.organization_id=sqlc.arg(organization_id) AND r.id=sqlc.arg(role_id);
+
+-- name: UpdateRole :one
+UPDATE roles
+SET name = sqlc.arg(name), description = sqlc.narg(description)
+WHERE organization_id = sqlc.arg(organization_id) AND id = sqlc.arg(role_id) AND is_mutable
+RETURNING id, organization_id, key, name, description, assignment_scope, is_system,
+          is_mutable, is_active, created_by_membership_id, created_at, updated_at;
+
+-- name: UpdateRoleStatus :one
+UPDATE roles
+SET is_active = sqlc.arg(is_active)
+WHERE organization_id = sqlc.arg(organization_id) AND id = sqlc.arg(role_id) AND is_mutable
+RETURNING id, organization_id, key, name, description, assignment_scope, is_system,
+          is_mutable, is_active, created_by_membership_id, created_at, updated_at;
 
 -- name: ListRolesWithScopes :many
 SELECT
@@ -289,6 +324,7 @@ FROM store_binding;
 DELETE FROM membership_role_bindings
 WHERE
     organization_id = sqlc.arg (organization_id)
+    AND membership_id = sqlc.arg (membership_id)
     AND id = sqlc.arg (binding_id) RETURNING id,
     organization_id,
     membership_id,
@@ -297,6 +333,11 @@ WHERE
     created_by_membership_id,
     expires_at,
     created_at;
+
+-- name: DeleteMembershipRoleBindings :many
+DELETE FROM membership_role_bindings
+WHERE organization_id=sqlc.arg(organization_id) AND membership_id=sqlc.arg(membership_id)
+RETURNING id;
 
 -- name: ListMemberRoleBindings :many
 SELECT
@@ -347,3 +388,28 @@ WITH locked_owners AS (
 )
 SELECT COUNT(DISTINCT id)::BIGINT AS owner_count
 FROM locked_owners;
+
+-- name: GetRoleBindingForOrganization :one
+SELECT b.id, b.organization_id, b.membership_id, b.role_id, b.store_id,
+       b.created_by_membership_id, b.expires_at, b.created_at,
+       r.key AS role_key, r.assignment_scope, r.is_system, r.is_active
+FROM membership_role_bindings b
+JOIN roles r ON r.organization_id=b.organization_id AND r.id=b.role_id
+WHERE b.organization_id=sqlc.arg(organization_id)
+  AND b.membership_id=sqlc.arg(membership_id)
+  AND b.id=sqlc.arg(binding_id)
+FOR UPDATE OF b;
+
+-- name: ResolveActorGrantScopes :many
+SELECT DISTINCT ps.code
+FROM membership_role_bindings b
+JOIN roles r ON r.organization_id=b.organization_id AND r.id=b.role_id
+JOIN role_scopes rs ON rs.organization_id=r.organization_id AND rs.role_id=r.id
+JOIN permission_scopes ps ON ps.code=rs.scope_code
+JOIN organization_memberships m ON m.organization_id=b.organization_id AND m.id=b.membership_id
+WHERE b.organization_id=sqlc.arg(organization_id)
+  AND b.membership_id=sqlc.arg(membership_id)
+  AND m.status='ACTIVE' AND r.is_active
+  AND b.store_id IS NULL
+  AND (b.expires_at IS NULL OR b.expires_at > NOW())
+ORDER BY ps.code;

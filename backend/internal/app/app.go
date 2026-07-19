@@ -17,6 +17,9 @@ import (
 	"github.com/gabrielalc23/pdv/internal/checkout"
 	"github.com/gabrielalc23/pdv/internal/fiscal"
 	"github.com/gabrielalc23/pdv/internal/inventory"
+	"github.com/gabrielalc23/pdv/internal/invitations"
+	"github.com/gabrielalc23/pdv/internal/memberships"
+	"github.com/gabrielalc23/pdv/internal/organizations"
 	"github.com/gabrielalc23/pdv/internal/payments"
 	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/authz"
@@ -33,8 +36,10 @@ import (
 	"github.com/gabrielalc23/pdv/internal/platform/valkey"
 	"github.com/gabrielalc23/pdv/internal/products"
 	"github.com/gabrielalc23/pdv/internal/receipt"
+	"github.com/gabrielalc23/pdv/internal/roles"
 	"github.com/gabrielalc23/pdv/internal/sales"
 	"github.com/gabrielalc23/pdv/internal/sessions"
+	"github.com/gabrielalc23/pdv/internal/stores"
 )
 
 type Dependencies struct {
@@ -57,6 +62,7 @@ type Dependencies struct {
 	AuthTokenHashKey         []byte
 	RateLimitKeySecret       []byte
 	RegistrationEnabled      bool
+	TenantCreationEnabled    bool
 	RequireVerifiedEmail     bool
 	AppPublicURL             string
 	AuthSessionCacheTTL      time.Duration
@@ -71,6 +77,8 @@ type AuthComponents struct {
 	Sessions     *sessions.Service
 	RefreshCodec sessions.RefreshTokenCodec
 	Handler      *authmodule.Handler
+	Invitations  *invitations.Handler
+	Invalidator  *authn.CacheInvalidator
 }
 
 func buildAuthComponents(deps Dependencies) *AuthComponents {
@@ -122,12 +130,38 @@ func buildAuthComponents(deps Dependencies) *AuthComponents {
 	}
 	authHandler := authmodule.NewHandler(authService, deps.CookieManager, deps.CSRFManager, deps.RateLimiter, deps.RateLimitKeySecret, deps.RequestMeta, validator)
 
+	invitationService, err := invitations.NewService(
+		invitations.NewStore(deps.Store.Queries),
+		invitations.NewTxProvider(deps.Store, audit.NewWriter(), sessionSvc),
+		deps.PasswordHasher,
+		deps.PasswordPolicy,
+		deps.PasswordBlocklist,
+		signer,
+		clk,
+		deps.Mailer,
+		invalidator,
+		invitations.Config{
+			TokenHashKey:       deps.AuthTokenHashKey,
+			PublicURL:          deps.AppPublicURL,
+			InvitationTTL:      7 * 24 * time.Hour,
+			OwnerInvitationTTL: 7 * 24 * time.Hour,
+			AccessTokenTTL:     deps.AccessTokenTTL,
+		},
+	)
+	if err != nil {
+		slog.Error("failed to build invitation service", "error", err)
+		return nil
+	}
+	invitationHandler := invitations.NewHandler(invitationService, deps.CookieManager, deps.CSRFManager, deps.RateLimiter, deps.RateLimitKeySecret, deps.RequestMeta)
+
 	return &AuthComponents{
 		AuthN:        authnMiddleware,
 		AuthZ:        guard,
 		Sessions:     sessionSvc,
 		RefreshCodec: refreshCodec,
 		Handler:      authHandler,
+		Invitations:  invitationHandler,
+		Invalidator:  invalidator,
 	}
 }
 
@@ -180,6 +214,8 @@ func New(deps Dependencies) http.Handler {
 	authComponents := buildAuthComponents(deps)
 	if authComponents != nil {
 		authmodule.RegisterRoutes(router, authComponents.Handler, authComponents.AuthN)
+		invitations.RegisterPublicRoutes(router, authComponents.Invitations, authComponents.AuthN)
+		registerAdministrationRoutes(router, deps, authComponents)
 	}
 
 	router.Group(func(r chi.Router) {
@@ -235,6 +271,58 @@ func New(deps Dependencies) http.Handler {
 	})
 
 	return router
+}
+
+func registerAdministrationRoutes(router chi.Router, deps Dependencies, components *AuthComponents) {
+	writer := audit.NewWriter()
+
+	organizationService, err := organizations.NewService(deps.Store, writer, deps.TenantCreationEnabled, components.Invalidator)
+	if err != nil {
+		slog.Error("failed to build organizations service", "error", err)
+		return
+	}
+	storeService, err := stores.NewService(deps.Store, writer, components.Invalidator)
+	if err != nil {
+		slog.Error("failed to build stores service", "error", err)
+		return
+	}
+	roleService, err := roles.NewService(
+		roles.NewStore(deps.Store.Queries),
+		roles.NewTxProvider(deps.Store, writer),
+		components.Invalidator,
+		deps.Clock,
+	)
+	if err != nil {
+		slog.Error("failed to build roles service", "error", err)
+		return
+	}
+
+	membershipService := memberships.NewService(
+		memberships.NewStore(deps.Store.Queries),
+		memberships.NewTxManager(deps.Store, writer),
+		memberships.NewSessionRevoker(),
+		components.Invalidator,
+	)
+	auditService := audit.NewService(audit.NewReadStore(deps.Store.Queries))
+	organizationHandler := organizations.NewHandler(organizationService)
+	organizations.RegisterSelfServiceRoutes(router, organizationHandler, components.AuthN)
+
+	router.Route("/v1", func(versioned chi.Router) {
+		organizations.RegisterRoutes(versioned, organizationHandler, components.AuthN, components.AuthZ)
+		memberships.RegisterRoutes(versioned, memberships.NewHandler(membershipService), components.AuthN, components.AuthZ)
+		invitations.RegisterAdminRoutes(versioned, components.Invitations, components.AuthN, components.AuthZ)
+		versioned.Group(func(protected chi.Router) {
+			protected.Use(components.AuthN.RequireAccessToken)
+			stores.RegisterRoutes(protected, stores.NewHandler(storeService), components.AuthZ)
+		})
+	})
+
+	// These packages register their own /v1 prefix and share one authentication boundary.
+	router.Group(func(protected chi.Router) {
+		protected.Use(components.AuthN.RequireAccessToken)
+		roles.RegisterRoutes(protected, roles.NewHandler(roleService), components.AuthZ)
+		audit.RegisterRoutes(protected, audit.NewHandler(auditService), components.AuthZ)
+	})
 }
 
 func requestLogger(next http.Handler) http.Handler {

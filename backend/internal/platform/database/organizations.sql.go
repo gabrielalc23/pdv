@@ -11,6 +11,36 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const archiveOrganization = `-- name: ArchiveOrganization :one
+UPDATE organizations
+SET status = 'ARCHIVED',
+    archived_at = COALESCE(archived_at, NOW()),
+    authorization_version = CASE WHEN status = 'ARCHIVED' THEN authorization_version ELSE authorization_version + 1 END
+WHERE id = $1
+RETURNING id, name, slug, status, timezone, locale, currency,
+          authorization_version, created_by_user_id, archived_at, created_at, updated_at
+`
+
+func (q *Queries) ArchiveOrganization(ctx context.Context, organizationID pgtype.UUID) (Organization, error) {
+	row := q.db.QueryRow(ctx, archiveOrganization, organizationID)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Status,
+		&i.Timezone,
+		&i.Locale,
+		&i.Currency,
+		&i.AuthorizationVersion,
+		&i.CreatedByUserID,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createOrganization = `-- name: CreateOrganization :one
 INSERT INTO
     organizations (
@@ -101,6 +131,33 @@ func (q *Queries) GetOrganizationAuthorizationVersion(ctx context.Context, organ
 	return i, err
 }
 
+const getOrganizationForActor = `-- name: GetOrganizationForActor :one
+SELECT id, name, slug, status, timezone, locale, currency,
+       authorization_version, created_by_user_id, archived_at, created_at, updated_at
+FROM organizations
+WHERE id = $1
+`
+
+func (q *Queries) GetOrganizationForActor(ctx context.Context, organizationID pgtype.UUID) (Organization, error) {
+	row := q.db.QueryRow(ctx, getOrganizationForActor, organizationID)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Status,
+		&i.Timezone,
+		&i.Locale,
+		&i.Currency,
+		&i.AuthorizationVersion,
+		&i.CreatedByUserID,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const incrementOrganizationAuthorizationVersion = `-- name: IncrementOrganizationAuthorizationVersion :one
 UPDATE organizations
 SET
@@ -145,5 +202,53 @@ func (q *Queries) LockOrganizationForOwnerChange(ctx context.Context, organizati
 	row := q.db.QueryRow(ctx, lockOrganizationForOwnerChange, organizationID)
 	var i LockOrganizationForOwnerChangeRow
 	err := row.Scan(&i.OrganizationID, &i.Status, &i.AuthorizationVersion)
+	return i, err
+}
+
+const updateOrganization = `-- name: UpdateOrganization :one
+UPDATE organizations
+SET name = $1,
+    slug = $2,
+    timezone = $3,
+    locale = $4,
+    currency = $5
+WHERE id = $6
+RETURNING id, name, slug, status, timezone, locale, currency,
+          authorization_version, created_by_user_id, archived_at, created_at, updated_at
+`
+
+type UpdateOrganizationParams struct {
+	Name           string
+	Slug           string
+	Timezone       string
+	Locale         string
+	Currency       string
+	OrganizationID pgtype.UUID
+}
+
+func (q *Queries) UpdateOrganization(ctx context.Context, arg UpdateOrganizationParams) (Organization, error) {
+	row := q.db.QueryRow(ctx, updateOrganization,
+		arg.Name,
+		arg.Slug,
+		arg.Timezone,
+		arg.Locale,
+		arg.Currency,
+		arg.OrganizationID,
+	)
+	var i Organization
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Status,
+		&i.Timezone,
+		&i.Locale,
+		&i.Currency,
+		&i.AuthorizationVersion,
+		&i.CreatedByUserID,
+		&i.ArchivedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
 	return i, err
 }

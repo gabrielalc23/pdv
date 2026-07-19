@@ -728,6 +728,96 @@ func (q *Queries) ListAllUserSessionIDs(ctx context.Context, userID pgtype.UUID)
 	return items, nil
 }
 
+const listSessionIDsForMembership = `-- name: ListSessionIDsForMembership :many
+SELECT id FROM auth_sessions
+WHERE current_organization_id=$1
+  AND current_membership_id=$2
+ORDER BY id
+`
+
+type ListSessionIDsForMembershipParams struct {
+	OrganizationID pgtype.UUID
+	MembershipID   pgtype.UUID
+}
+
+func (q *Queries) ListSessionIDsForMembership(ctx context.Context, arg ListSessionIDsForMembershipParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listSessionIDsForMembership, arg.OrganizationID, arg.MembershipID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionIDsForOrganization = `-- name: ListSessionIDsForOrganization :many
+SELECT id FROM auth_sessions
+WHERE current_organization_id=$1
+ORDER BY id
+`
+
+func (q *Queries) ListSessionIDsForOrganization(ctx context.Context, organizationID pgtype.UUID) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listSessionIDsForOrganization, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionIDsForStore = `-- name: ListSessionIDsForStore :many
+SELECT id FROM auth_sessions
+WHERE current_organization_id=$1
+  AND current_store_id=$2
+ORDER BY id
+`
+
+type ListSessionIDsForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+}
+
+func (q *Queries) ListSessionIDsForStore(ctx context.Context, arg ListSessionIDsForStoreParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, listSessionIDsForStore, arg.OrganizationID, arg.StoreID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUserSessions = `-- name: ListUserSessions :many
 SELECT
     id,
@@ -959,6 +1049,38 @@ func (q *Queries) RevokeAllUserSessions(ctx context.Context, arg RevokeAllUserSe
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const revokeOrganizationSessions = `-- name: RevokeOrganizationSessions :many
+UPDATE auth_sessions
+SET status='REVOKED', revoked_at=NOW(), revoke_reason=$1
+WHERE current_organization_id=$2 AND status='ACTIVE'
+RETURNING id
+`
+
+type RevokeOrganizationSessionsParams struct {
+	RevokeReason   pgtype.Text
+	OrganizationID pgtype.UUID
+}
+
+func (q *Queries) RevokeOrganizationSessions(ctx context.Context, arg RevokeOrganizationSessionsParams) ([]pgtype.UUID, error) {
+	rows, err := q.db.Query(ctx, revokeOrganizationSessions, arg.RevokeReason, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []pgtype.UUID{}
+	for rows.Next() {
+		var id pgtype.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

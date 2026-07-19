@@ -75,6 +75,30 @@ RETURNING
     created_at,
     updated_at;
 
+-- name: CopyActivePaymentMethodsToStore :many
+INSERT INTO store_payment_methods (organization_id, store_id, payment_method_id, is_active, sort_order)
+SELECT pm.organization_id, sqlc.arg(store_id), pm.id, TRUE, pm.sort_order
+FROM payment_methods AS pm
+WHERE pm.organization_id=sqlc.arg(organization_id) AND pm.is_active
+ON CONFLICT (organization_id, store_id, payment_method_id) DO UPDATE
+SET is_active=EXCLUDED.is_active, sort_order=EXCLUDED.sort_order
+RETURNING organization_id, store_id, payment_method_id, is_active, sort_order, created_at, updated_at;
+
+-- name: GetStorePaymentMethodForOrganization :one
+SELECT organization_id, store_id, payment_method_id, is_active, sort_order, created_at, updated_at
+FROM store_payment_methods
+WHERE organization_id=sqlc.arg(organization_id)
+  AND store_id=sqlc.arg(store_id) AND payment_method_id=sqlc.arg(payment_method_id);
+
+-- name: ListStorePaymentMethods :many
+SELECT spm.organization_id, spm.store_id, spm.payment_method_id, spm.is_active,
+       spm.sort_order, spm.created_at, spm.updated_at,
+       pm.code, pm.name, pm.kind, pm.is_active AS organization_active
+FROM store_payment_methods spm
+JOIN payment_methods pm ON pm.organization_id=spm.organization_id AND pm.id=spm.payment_method_id
+WHERE spm.organization_id=sqlc.arg(organization_id) AND spm.store_id=sqlc.arg(store_id)
+ORDER BY spm.sort_order, pm.name, pm.id;
+
 -- name: GetPaymentMethodByIDForOrganization :one
 SELECT
     method.id,
@@ -260,7 +284,6 @@ SET
     max_installments = sqlc.arg(max_installments),
     fee_percentage = sqlc.arg(fee_percentage),
     settlement_days = sqlc.arg(settlement_days),
-    is_active = sqlc.arg(is_active),
     sort_order = sqlc.arg(sort_order)
 WHERE method.organization_id = sqlc.arg(organization_id)
   AND method.id = sqlc.arg(id)

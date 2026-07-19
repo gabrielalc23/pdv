@@ -150,6 +150,40 @@ func (q *Queries) GetActiveMembership(ctx context.Context, arg GetActiveMembersh
 	return i, err
 }
 
+const getLatestMembershipForUserInOrganization = `-- name: GetLatestMembershipForUserInOrganization :one
+SELECT id, organization_id, user_id, status, default_store_id, authorization_version,
+       joined_at, suspended_at, removed_at, created_by_user_id, created_at, updated_at
+FROM organization_memberships
+WHERE organization_id = $1 AND user_id = $2
+ORDER BY created_at DESC, id DESC
+LIMIT 1
+`
+
+type GetLatestMembershipForUserInOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	UserID         pgtype.UUID
+}
+
+func (q *Queries) GetLatestMembershipForUserInOrganization(ctx context.Context, arg GetLatestMembershipForUserInOrganizationParams) (OrganizationMembership, error) {
+	row := q.db.QueryRow(ctx, getLatestMembershipForUserInOrganization, arg.OrganizationID, arg.UserID)
+	var i OrganizationMembership
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.Status,
+		&i.DefaultStoreID,
+		&i.AuthorizationVersion,
+		&i.JoinedAt,
+		&i.SuspendedAt,
+		&i.RemovedAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getMembershipContextForUser = `-- name: GetMembershipContextForUser :one
 SELECT
     m.id,
@@ -221,6 +255,72 @@ func (q *Queries) GetMembershipContextForUser(ctx context.Context, arg GetMember
 		&i.OrganizationSlug,
 		&i.OrganizationStatus,
 		&i.OrganizationAuthorizationVersion,
+	)
+	return i, err
+}
+
+const getMembershipForOrganization = `-- name: GetMembershipForOrganization :one
+SELECT m.id, m.organization_id, m.user_id, m.status, m.default_store_id,
+       m.authorization_version, m.joined_at, m.suspended_at, m.removed_at,
+       m.created_by_user_id, m.created_at, m.updated_at,
+       u.email, u.display_name, u.status AS user_status, u.email_verified_at,
+       s.code AS default_store_code, s.name AS default_store_name, s.status AS default_store_status
+FROM organization_memberships AS m
+JOIN users AS u ON u.id = m.user_id
+LEFT JOIN stores AS s ON s.organization_id = m.organization_id AND s.id = m.default_store_id
+WHERE m.organization_id = $1 AND m.id = $2
+`
+
+type GetMembershipForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	MembershipID   pgtype.UUID
+}
+
+type GetMembershipForOrganizationRow struct {
+	ID                   pgtype.UUID
+	OrganizationID       pgtype.UUID
+	UserID               pgtype.UUID
+	Status               MembershipStatus
+	DefaultStoreID       pgtype.UUID
+	AuthorizationVersion int64
+	JoinedAt             pgtype.Timestamptz
+	SuspendedAt          pgtype.Timestamptz
+	RemovedAt            pgtype.Timestamptz
+	CreatedByUserID      pgtype.UUID
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	Email                string
+	DisplayName          string
+	UserStatus           UserStatus
+	EmailVerifiedAt      pgtype.Timestamptz
+	DefaultStoreCode     pgtype.Text
+	DefaultStoreName     pgtype.Text
+	DefaultStoreStatus   NullStoreStatus
+}
+
+func (q *Queries) GetMembershipForOrganization(ctx context.Context, arg GetMembershipForOrganizationParams) (GetMembershipForOrganizationRow, error) {
+	row := q.db.QueryRow(ctx, getMembershipForOrganization, arg.OrganizationID, arg.MembershipID)
+	var i GetMembershipForOrganizationRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.UserID,
+		&i.Status,
+		&i.DefaultStoreID,
+		&i.AuthorizationVersion,
+		&i.JoinedAt,
+		&i.SuspendedAt,
+		&i.RemovedAt,
+		&i.CreatedByUserID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Email,
+		&i.DisplayName,
+		&i.UserStatus,
+		&i.EmailVerifiedAt,
+		&i.DefaultStoreCode,
+		&i.DefaultStoreName,
+		&i.DefaultStoreStatus,
 	)
 	return i, err
 }
