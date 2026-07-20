@@ -7,11 +7,221 @@ package database
 import (
 	"database/sql/driver"
 	"fmt"
+	"net/netip"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// Lifecycle status of a fiscal document emission.
+type AuditOutcome string
+
+const (
+	AuditOutcomeSUCCESS AuditOutcome = "SUCCESS"
+	AuditOutcomeFAILURE AuditOutcome = "FAILURE"
+)
+
+func (e *AuditOutcome) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AuditOutcome(s)
+	case string:
+		*e = AuditOutcome(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AuditOutcome: %T", src)
+	}
+	return nil
+}
+
+type NullAuditOutcome struct {
+	AuditOutcome AuditOutcome
+	Valid        bool // Valid is true if AuditOutcome is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAuditOutcome) Scan(value any) error {
+	if value == nil {
+		ns.AuditOutcome, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AuditOutcome.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAuditOutcome) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AuditOutcome), nil
+}
+
+func (e AuditOutcome) Valid() bool {
+	switch e {
+	case AuditOutcomeSUCCESS,
+		AuditOutcomeFAILURE:
+		return true
+	}
+	return false
+}
+
+type AuthActionTokenPurpose string
+
+const (
+	AuthActionTokenPurposeEMAILVERIFICATION AuthActionTokenPurpose = "EMAIL_VERIFICATION"
+	AuthActionTokenPurposePASSWORDRESET     AuthActionTokenPurpose = "PASSWORD_RESET"
+)
+
+func (e *AuthActionTokenPurpose) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AuthActionTokenPurpose(s)
+	case string:
+		*e = AuthActionTokenPurpose(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AuthActionTokenPurpose: %T", src)
+	}
+	return nil
+}
+
+type NullAuthActionTokenPurpose struct {
+	AuthActionTokenPurpose AuthActionTokenPurpose
+	Valid                  bool // Valid is true if AuthActionTokenPurpose is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAuthActionTokenPurpose) Scan(value any) error {
+	if value == nil {
+		ns.AuthActionTokenPurpose, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AuthActionTokenPurpose.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAuthActionTokenPurpose) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AuthActionTokenPurpose), nil
+}
+
+func (e AuthActionTokenPurpose) Valid() bool {
+	switch e {
+	case AuthActionTokenPurposeEMAILVERIFICATION,
+		AuthActionTokenPurposePASSWORDRESET:
+		return true
+	}
+	return false
+}
+
+type AuthContextKind string
+
+const (
+	AuthContextKindIDENTITY     AuthContextKind = "IDENTITY"
+	AuthContextKindORGANIZATION AuthContextKind = "ORGANIZATION"
+	AuthContextKindSTORE        AuthContextKind = "STORE"
+)
+
+func (e *AuthContextKind) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AuthContextKind(s)
+	case string:
+		*e = AuthContextKind(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AuthContextKind: %T", src)
+	}
+	return nil
+}
+
+type NullAuthContextKind struct {
+	AuthContextKind AuthContextKind
+	Valid           bool // Valid is true if AuthContextKind is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAuthContextKind) Scan(value any) error {
+	if value == nil {
+		ns.AuthContextKind, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AuthContextKind.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAuthContextKind) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AuthContextKind), nil
+}
+
+func (e AuthContextKind) Valid() bool {
+	switch e {
+	case AuthContextKindIDENTITY,
+		AuthContextKindORGANIZATION,
+		AuthContextKindSTORE:
+		return true
+	}
+	return false
+}
+
+type AuthSessionStatus string
+
+const (
+	AuthSessionStatusACTIVE      AuthSessionStatus = "ACTIVE"
+	AuthSessionStatusREVOKED     AuthSessionStatus = "REVOKED"
+	AuthSessionStatusCOMPROMISED AuthSessionStatus = "COMPROMISED"
+	AuthSessionStatusEXPIRED     AuthSessionStatus = "EXPIRED"
+)
+
+func (e *AuthSessionStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = AuthSessionStatus(s)
+	case string:
+		*e = AuthSessionStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for AuthSessionStatus: %T", src)
+	}
+	return nil
+}
+
+type NullAuthSessionStatus struct {
+	AuthSessionStatus AuthSessionStatus
+	Valid             bool // Valid is true if AuthSessionStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullAuthSessionStatus) Scan(value any) error {
+	if value == nil {
+		ns.AuthSessionStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.AuthSessionStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullAuthSessionStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.AuthSessionStatus), nil
+}
+
+func (e AuthSessionStatus) Valid() bool {
+	switch e {
+	case AuthSessionStatusACTIVE,
+		AuthSessionStatusREVOKED,
+		AuthSessionStatusCOMPROMISED,
+		AuthSessionStatusEXPIRED:
+		return true
+	}
+	return false
+}
+
 type FiscalDocumentStatus string
 
 const (
@@ -41,7 +251,7 @@ type NullFiscalDocumentStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullFiscalDocumentStatus) Scan(value interface{}) error {
+func (ns *NullFiscalDocumentStatus) Scan(value any) error {
 	if value == nil {
 		ns.FiscalDocumentStatus, ns.Valid = "", false
 		return nil
@@ -71,7 +281,6 @@ func (e FiscalDocumentStatus) Valid() bool {
 	return false
 }
 
-// Fiscal authority environment used for document emission.
 type FiscalEnvironment string
 
 const (
@@ -97,7 +306,7 @@ type NullFiscalEnvironment struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullFiscalEnvironment) Scan(value interface{}) error {
+func (ns *NullFiscalEnvironment) Scan(value any) error {
 	if value == nil {
 		ns.FiscalEnvironment, ns.Valid = "", false
 		return nil
@@ -151,7 +360,7 @@ type NullInventoryMovementType struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullInventoryMovementType) Scan(value interface{}) error {
+func (ns *NullInventoryMovementType) Scan(value any) error {
 	if value == nil {
 		ns.InventoryMovementType, ns.Valid = "", false
 		return nil
@@ -175,6 +384,167 @@ func (e InventoryMovementType) Valid() bool {
 		InventoryMovementTypeSALECANCELLATION,
 		InventoryMovementTypeADJUSTMENTIN,
 		InventoryMovementTypeADJUSTMENTOUT:
+		return true
+	}
+	return false
+}
+
+type InvitationStatus string
+
+const (
+	InvitationStatusPENDING  InvitationStatus = "PENDING"
+	InvitationStatusACCEPTED InvitationStatus = "ACCEPTED"
+	InvitationStatusREVOKED  InvitationStatus = "REVOKED"
+	InvitationStatusEXPIRED  InvitationStatus = "EXPIRED"
+)
+
+func (e *InvitationStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = InvitationStatus(s)
+	case string:
+		*e = InvitationStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for InvitationStatus: %T", src)
+	}
+	return nil
+}
+
+type NullInvitationStatus struct {
+	InvitationStatus InvitationStatus
+	Valid            bool // Valid is true if InvitationStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullInvitationStatus) Scan(value any) error {
+	if value == nil {
+		ns.InvitationStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.InvitationStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullInvitationStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.InvitationStatus), nil
+}
+
+func (e InvitationStatus) Valid() bool {
+	switch e {
+	case InvitationStatusPENDING,
+		InvitationStatusACCEPTED,
+		InvitationStatusREVOKED,
+		InvitationStatusEXPIRED:
+		return true
+	}
+	return false
+}
+
+type MembershipStatus string
+
+const (
+	MembershipStatusACTIVE    MembershipStatus = "ACTIVE"
+	MembershipStatusSUSPENDED MembershipStatus = "SUSPENDED"
+	MembershipStatusREMOVED   MembershipStatus = "REMOVED"
+)
+
+func (e *MembershipStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = MembershipStatus(s)
+	case string:
+		*e = MembershipStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for MembershipStatus: %T", src)
+	}
+	return nil
+}
+
+type NullMembershipStatus struct {
+	MembershipStatus MembershipStatus
+	Valid            bool // Valid is true if MembershipStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullMembershipStatus) Scan(value any) error {
+	if value == nil {
+		ns.MembershipStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.MembershipStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullMembershipStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.MembershipStatus), nil
+}
+
+func (e MembershipStatus) Valid() bool {
+	switch e {
+	case MembershipStatusACTIVE,
+		MembershipStatusSUSPENDED,
+		MembershipStatusREMOVED:
+		return true
+	}
+	return false
+}
+
+type OrganizationStatus string
+
+const (
+	OrganizationStatusACTIVE    OrganizationStatus = "ACTIVE"
+	OrganizationStatusSUSPENDED OrganizationStatus = "SUSPENDED"
+	OrganizationStatusARCHIVED  OrganizationStatus = "ARCHIVED"
+)
+
+func (e *OrganizationStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = OrganizationStatus(s)
+	case string:
+		*e = OrganizationStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for OrganizationStatus: %T", src)
+	}
+	return nil
+}
+
+type NullOrganizationStatus struct {
+	OrganizationStatus OrganizationStatus
+	Valid              bool // Valid is true if OrganizationStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullOrganizationStatus) Scan(value any) error {
+	if value == nil {
+		ns.OrganizationStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.OrganizationStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullOrganizationStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.OrganizationStatus), nil
+}
+
+func (e OrganizationStatus) Valid() bool {
+	switch e {
+	case OrganizationStatusACTIVE,
+		OrganizationStatusSUSPENDED,
+		OrganizationStatusARCHIVED:
 		return true
 	}
 	return false
@@ -210,7 +580,7 @@ type NullPaymentMethodKind struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullPaymentMethodKind) Scan(value interface{}) error {
+func (ns *NullPaymentMethodKind) Scan(value any) error {
 	if value == nil {
 		ns.PaymentMethodKind, ns.Valid = "", false
 		return nil
@@ -241,7 +611,6 @@ func (e PaymentMethodKind) Valid() bool {
 	return false
 }
 
-// Lifecycle status of a payment transaction.
 type PaymentStatus string
 
 const (
@@ -269,7 +638,7 @@ type NullPaymentStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullPaymentStatus) Scan(value interface{}) error {
+func (ns *NullPaymentStatus) Scan(value any) error {
 	if value == nil {
 		ns.PaymentStatus, ns.Valid = "", false
 		return nil
@@ -297,7 +666,108 @@ func (e PaymentStatus) Valid() bool {
 	return false
 }
 
-// Lifecycle status of a POS sale.
+type PermissionScopeLevel string
+
+const (
+	PermissionScopeLevelORGANIZATION PermissionScopeLevel = "ORGANIZATION"
+	PermissionScopeLevelSTORE        PermissionScopeLevel = "STORE"
+)
+
+func (e *PermissionScopeLevel) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = PermissionScopeLevel(s)
+	case string:
+		*e = PermissionScopeLevel(s)
+	default:
+		return fmt.Errorf("unsupported scan type for PermissionScopeLevel: %T", src)
+	}
+	return nil
+}
+
+type NullPermissionScopeLevel struct {
+	PermissionScopeLevel PermissionScopeLevel
+	Valid                bool // Valid is true if PermissionScopeLevel is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullPermissionScopeLevel) Scan(value any) error {
+	if value == nil {
+		ns.PermissionScopeLevel, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.PermissionScopeLevel.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullPermissionScopeLevel) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.PermissionScopeLevel), nil
+}
+
+func (e PermissionScopeLevel) Valid() bool {
+	switch e {
+	case PermissionScopeLevelORGANIZATION,
+		PermissionScopeLevelSTORE:
+		return true
+	}
+	return false
+}
+
+type RoleAssignmentScope string
+
+const (
+	RoleAssignmentScopeORGANIZATION RoleAssignmentScope = "ORGANIZATION"
+	RoleAssignmentScopeSTORE        RoleAssignmentScope = "STORE"
+)
+
+func (e *RoleAssignmentScope) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = RoleAssignmentScope(s)
+	case string:
+		*e = RoleAssignmentScope(s)
+	default:
+		return fmt.Errorf("unsupported scan type for RoleAssignmentScope: %T", src)
+	}
+	return nil
+}
+
+type NullRoleAssignmentScope struct {
+	RoleAssignmentScope RoleAssignmentScope
+	Valid               bool // Valid is true if RoleAssignmentScope is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullRoleAssignmentScope) Scan(value any) error {
+	if value == nil {
+		ns.RoleAssignmentScope, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.RoleAssignmentScope.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullRoleAssignmentScope) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.RoleAssignmentScope), nil
+}
+
+func (e RoleAssignmentScope) Valid() bool {
+	switch e {
+	case RoleAssignmentScopeORGANIZATION,
+		RoleAssignmentScopeSTORE:
+		return true
+	}
+	return false
+}
+
 type SaleStatus string
 
 const (
@@ -324,7 +794,7 @@ type NullSaleStatus struct {
 }
 
 // Scan implements the Scanner interface.
-func (ns *NullSaleStatus) Scan(value interface{}) error {
+func (ns *NullSaleStatus) Scan(value any) error {
 	if value == nil {
 		ns.SaleStatus, ns.Valid = "", false
 		return nil
@@ -351,46 +821,210 @@ func (e SaleStatus) Valid() bool {
 	return false
 }
 
-// Product categories used to organize the catalog.
-type Category struct {
-	ID        pgtype.UUID
-	Name      string
-	Slug      string
-	IsActive  bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+type StoreStatus string
+
+const (
+	StoreStatusACTIVE   StoreStatus = "ACTIVE"
+	StoreStatusINACTIVE StoreStatus = "INACTIVE"
+	StoreStatusARCHIVED StoreStatus = "ARCHIVED"
+)
+
+func (e *StoreStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = StoreStatus(s)
+	case string:
+		*e = StoreStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for StoreStatus: %T", src)
+	}
+	return nil
 }
 
-// Stores fiscal documents issued for completed POS sales.
-type FiscalDocument struct {
+type NullStoreStatus struct {
+	StoreStatus StoreStatus
+	Valid       bool // Valid is true if StoreStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullStoreStatus) Scan(value any) error {
+	if value == nil {
+		ns.StoreStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.StoreStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullStoreStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.StoreStatus), nil
+}
+
+func (e StoreStatus) Valid() bool {
+	switch e {
+	case StoreStatusACTIVE,
+		StoreStatusINACTIVE,
+		StoreStatusARCHIVED:
+		return true
+	}
+	return false
+}
+
+type UserStatus string
+
+const (
+	UserStatusACTIVE    UserStatus = "ACTIVE"
+	UserStatusSUSPENDED UserStatus = "SUSPENDED"
+	UserStatusDISABLED  UserStatus = "DISABLED"
+)
+
+func (e *UserStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = UserStatus(s)
+	case string:
+		*e = UserStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for UserStatus: %T", src)
+	}
+	return nil
+}
+
+type NullUserStatus struct {
+	UserStatus UserStatus
+	Valid      bool // Valid is true if UserStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullUserStatus) Scan(value any) error {
+	if value == nil {
+		ns.UserStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.UserStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullUserStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.UserStatus), nil
+}
+
+func (e UserStatus) Valid() bool {
+	switch e {
+	case UserStatusACTIVE,
+		UserStatusSUSPENDED,
+		UserStatusDISABLED:
+		return true
+	}
+	return false
+}
+
+// Stores one-time email verification and password reset token selectors and hashes.
+type AuthActionToken struct {
+	// UUIDv7 selector included in the external token representation.
 	ID pgtype.UUID
-	// Sale associated with the fiscal document.
-	SaleID      pgtype.UUID
-	Status      FiscalDocumentStatus
-	Environment FiscalEnvironment
-	// Fiscal document model. Model 65 represents NFC-e.
-	DocumentModel int16
-	Series        pgtype.Int4
-	Number        pgtype.Int8
-	// Fiscal document access key returned after authorization.
-	AccessKey pgtype.Text
-	// Authorization protocol returned by the fiscal authority or provider.
-	Protocol pgtype.Text
-	Provider pgtype.Text
-	// Transaction identifier assigned by the fiscal integration provider.
-	ExternalReference pgtype.Text
-	// Fiscal document XML generated or returned during emission.
-	XML          pgtype.Text
-	ErrorCode    pgtype.Text
-	ErrorMessage pgtype.Text
-	IssuedAt     pgtype.Timestamptz
-	CancelledAt  pgtype.Timestamptz
+	// User for whom the action token was issued.
+	UserID pgtype.UUID
+	// Security action authorized by the token.
+	Purpose AuthActionTokenPurpose
+	// Thirty-two-byte hash of the opaque secret; the raw token is never stored.
+	SecretHash []byte
+	// Timestamp after which the token cannot be consumed.
+	ExpiresAt pgtype.Timestamptz
+	// Timestamp of the successful one-time consumption.
+	ConsumedAt pgtype.Timestamptz
+	// Client IP recorded when the token was requested.
+	RequestedIp *netip.Addr
+	CreatedAt   pgtype.Timestamptz
+}
+
+// Stores selectors and HMAC-SHA-256 hashes for opaque rotating refresh tokens.
+type AuthRefreshToken struct {
+	// UUIDv7 selector included in the external refresh token.
+	ID        pgtype.UUID
+	SessionID pgtype.UUID
+	// Token from which this token was rotated.
+	ParentTokenID pgtype.UUID
+	// Child token that replaced this token after consumption.
+	ReplacedByTokenID pgtype.UUID
+	// Thirty-two-byte HMAC of the secret; raw refresh tokens are never stored.
+	SecretHash []byte
+	ExpiresAt  pgtype.Timestamptz
+	// Timestamp of the one permitted rotation.
+	ConsumedAt pgtype.Timestamptz
+	// Timestamp at which the token was explicitly revoked.
+	RevokedAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+// Stores server-authoritative user sessions and their active authorization context.
+type AuthSession struct {
+	ID         pgtype.UUID
+	UserID     pgtype.UUID
+	Status     AuthSessionStatus
+	ClientID   string
+	DeviceName pgtype.Text
+	UserAgent  pgtype.Text
+	IpAddress  *netip.Addr
+	// Active identity, organization, or store context represented by access tokens.
+	ContextKind AuthContextKind
+	// Organization selected for tenant contexts.
+	CurrentOrganizationID pgtype.UUID
+	// Membership selected for tenant contexts.
+	CurrentMembershipID pgtype.UUID
+	// Store selected only for store context.
+	CurrentStoreID pgtype.UUID
+	// Sliding inactivity deadline capped by absolute_expires_at.
+	IdleExpiresAt pgtype.Timestamptz
+	// Maximum lifetime of the session.
+	AbsoluteExpiresAt pgtype.Timestamptz
+	LastSeenAt        pgtype.Timestamptz
+	// Terminal-state timestamp for revoked, compromised, or expired sessions.
+	RevokedAt    pgtype.Timestamptz
+	RevokeReason pgtype.Text
 	CreatedAt    pgtype.Timestamptz
 	UpdatedAt    pgtype.Timestamptz
 }
 
+// Store-scoped fiscal documents associated with POS sales.
+type FiscalDocument struct {
+	ID             pgtype.UUID
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+	Status         FiscalDocumentStatus
+	Environment    FiscalEnvironment
+	DocumentModel  int16
+	Series         pgtype.Int4
+	Number         pgtype.Int8
+	// Globally unique fiscal access key when authorized.
+	AccessKey pgtype.Text
+	Protocol  pgtype.Text
+	Provider  pgtype.Text
+	// Provider transaction identifier.
+	ExternalReference pgtype.Text
+	XML               pgtype.Text
+	ErrorCode         pgtype.Text
+	ErrorMessage      pgtype.Text
+	IssuedAt          pgtype.Timestamptz
+	CancelledAt       pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+// Provider callbacks deduplicated globally by provider and callback key.
 type FiscalDocumentCallback struct {
 	ID               pgtype.UUID
+	OrganizationID   pgtype.UUID
+	StoreID          pgtype.UUID
 	FiscalDocumentID pgtype.UUID
 	Provider         string
 	CallbackKey      string
@@ -401,44 +1035,152 @@ type FiscalDocumentCallback struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
+// Current product quantity for one organization store.
 type Inventory struct {
+	// Organization tenant shared by the store and product.
+	OrganizationID pgtype.UUID
+	// Store whose stock is represented.
+	StoreID pgtype.UUID
+	// Organization product held by the store.
 	ProductID pgtype.UUID
 	Quantity  pgtype.Numeric
 	CreatedAt pgtype.Timestamptz
 	UpdatedAt pgtype.Timestamptz
 }
 
-type InventoryMovement struct {
-	ID               pgtype.UUID
-	ProductID        pgtype.UUID
-	MovementType     InventoryMovementType
-	Quantity         pgtype.Numeric
-	PreviousQuantity pgtype.Numeric
-	CurrentQuantity  pgtype.Numeric
-	Reason           pgtype.Text
-	ReferenceType    string
-	ReferenceID      pgtype.UUID
-	CreatedAt        pgtype.Timestamptz
+// Stores the organization or store roles granted when an invitation is accepted.
+type InvitationRoleBinding struct {
+	ID pgtype.UUID
+	// Tenant key repeated across every invitation binding relationship.
+	OrganizationID pgtype.UUID
+	// Invitation that will produce the role binding.
+	InvitationID pgtype.UUID
+	// Role granted when the invitation is accepted.
+	RoleID pgtype.UUID
+	// Required for store roles and forbidden for organization roles.
+	StoreID   pgtype.UUID
+	CreatedAt pgtype.Timestamptz
 }
 
-type MvReceiptPayment struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	PaymentMethodName string
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
+// Grants organization or store roles to memberships within one tenant.
+type MembershipRoleBinding struct {
+	ID pgtype.UUID
+	// Tenant key repeated across every binding relationship.
+	OrganizationID pgtype.UUID
+	// Membership receiving the role.
+	MembershipID pgtype.UUID
+	// Role granted by this binding.
+	RoleID pgtype.UUID
+	// Required for store roles and forbidden for organization roles.
+	StoreID pgtype.UUID
+	// Membership that created the binding.
+	CreatedByMembershipID pgtype.UUID
+	// Optional instant after which the binding grants no authorization.
+	ExpiresAt pgtype.Timestamptz
+	CreatedAt pgtype.Timestamptz
+}
+
+// Stores organizations that form the application tenant boundary.
+type Organization struct {
+	// Internal UUIDv7 tenant identifier.
+	ID pgtype.UUID
+	// Organization name displayed in administrative interfaces.
+	Name string
+	// Globally unique lowercase URL-safe organization slug.
+	Slug string
+	// Lifecycle status of the organization.
+	Status OrganizationStatus
+	// Default IANA timezone for the organization.
+	Timezone string
+	// Default locale used for organization-level presentation.
+	Locale string
+	// ISO-style uppercase three-letter operating currency.
+	Currency string
+	// Monotonic version used to invalidate organization authorization.
+	AuthorizationVersion int64
+	// Global user that initiated organization creation.
+	CreatedByUserID pgtype.UUID
+	// Timestamp required when the organization is archived.
+	ArchivedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+// Stores opaque one-time invitations to join an organization.
+type OrganizationInvitation struct {
+	// UUIDv7 selector included in the external invitation token.
+	ID pgtype.UUID
+	// Organization tenant issuing the invitation.
+	OrganizationID pgtype.UUID
+	// Trimmed invitee email preserving display casing.
+	Email string
+	// Trimmed lowercase email used for pending-invitation uniqueness.
+	EmailNormalized string
+	Status          InvitationStatus
+	// Thirty-two-byte hash of the opaque invitation secret.
+	SecretHash []byte
+	ExpiresAt  pgtype.Timestamptz
+	AcceptedAt pgtype.Timestamptz
+	RevokedAt  pgtype.Timestamptz
+	// Membership that issued the invitation.
+	InvitedByMembershipID pgtype.UUID
+	// Membership created or selected when the invitation was accepted.
+	AcceptedByMembershipID pgtype.UUID
+	CreatedAt              pgtype.Timestamptz
+	UpdatedAt              pgtype.Timestamptz
+}
+
+// Associates a global user with an organization while preserving membership history.
+type OrganizationMembership struct {
+	// Internal UUIDv7 membership identifier.
+	ID pgtype.UUID
+	// Organization tenant to which the user belongs.
+	OrganizationID pgtype.UUID
+	// Global user represented by this membership.
+	UserID pgtype.UUID
+	// Lifecycle status within the organization; removed memberships are terminal.
+	Status MembershipStatus
+	// Optional default store within the same organization.
+	DefaultStoreID pgtype.UUID
+	// Monotonic version used to invalidate membership authorization.
+	AuthorizationVersion int64
+	JoinedAt             pgtype.Timestamptz
+	SuspendedAt          pgtype.Timestamptz
+	RemovedAt            pgtype.Timestamptz
+	// Global user that initiated creation of the membership.
+	CreatedByUserID pgtype.UUID
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// Store-scoped payment transactions associated with POS sales.
+type Payment struct {
+	ID              pgtype.UUID
+	OrganizationID  pgtype.UUID
+	StoreID         pgtype.UUID
+	SaleID          pgtype.UUID
+	PaymentMethodID pgtype.UUID
+	// Request idempotency key unique within one store.
+	IdempotencyKey string
+	Status         PaymentStatus
+	Amount         pgtype.Numeric
+	ReceivedAmount pgtype.Numeric
+	ChangeAmount   pgtype.Numeric
+	Installments   int16
+	// Provider reference unique within the organization payment method.
 	ExternalReference pgtype.Text
 	PaidAt            pgtype.Timestamptz
+	CancelledAt       pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
 }
 
+// Organization-owned payment method configuration.
 type PaymentMethod struct {
-	ID                        pgtype.UUID
+	ID pgtype.UUID
+	// Organization tenant that configures the method.
+	OrganizationID pgtype.UUID
+	// Payment method code unique within the organization.
 	Code                      string
 	Name                      string
 	Kind                      PaymentMethodKind
@@ -455,43 +1197,192 @@ type PaymentMethod struct {
 	UpdatedAt                 pgtype.Timestamptz
 }
 
-// Stores products available for inventory control and POS sales.
-type Product struct {
-	// Internal UUIDv7 identifier.
-	ID pgtype.UUID
-	// Unique internal stock keeping unit.
-	SKU string
-	// Optional unique barcode used by barcode scanners.
-	Barcode pgtype.Text
-	// Product name displayed in administrative and POS interfaces.
-	Name string
-	// Optional category used to organize the product catalog.
-	CategoryID pgtype.UUID
-	// Current product sale price. Historical prices are preserved in sale_items.
-	Price pgtype.Numeric
-	// Optional product acquisition cost used for margin calculations.
-	Cost pgtype.Numeric
-	// Controls whether the product can be used in new sales.
-	IsActive  bool
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+// Platform-managed catalog of explicit authorization scopes.
+type PermissionScope struct {
+	// Lowercase scope code composed from resource and action.
+	Code     string
+	Resource string
+	Action   string
+	// Context level at which the scope can become effective.
+	ScopeLevel  PermissionScopeLevel
+	Description string
+	// Whether the scope may be granted to custom roles.
+	IsAssignable bool
+	CreatedAt    pgtype.Timestamptz
 }
 
-// Stores product snapshots and monetary totals for each sale item.
-type SaleItem struct {
-	ID        pgtype.UUID
-	SaleID    pgtype.UUID
-	ProductID pgtype.UUID
-	// Product name snapshot preserved at the moment of sale.
-	ProductName string
-	// Product SKU snapshot preserved at the moment of sale.
-	ProductSKU string
-	// Unit price snapshot used at the moment of sale.
-	UnitPrice pgtype.Numeric
-	// Quantity sold with support for up to three decimal places.
-	Quantity pgtype.Numeric
-	Discount pgtype.Numeric
-	// Final item total rounded to two decimal places after discount.
-	Total     pgtype.Numeric
+// Approved receipt payments with explicit organization and store context; no refresh is required.
+type ReceiptPayment struct {
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
+	ID                pgtype.UUID
+	SaleID            pgtype.UUID
+	PaymentMethodID   pgtype.UUID
+	PaymentMethodName string
+	Status            PaymentStatus
+	Amount            pgtype.Numeric
+	ReceivedAmount    pgtype.Numeric
+	ChangeAmount      pgtype.Numeric
+	Installments      int16
+	ExternalReference pgtype.Text
+	PaidAt            pgtype.Timestamptz
+	CreatedAt         pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+}
+
+// Organization-owned RBAC roles composed from platform permission scopes.
+type Role struct {
+	ID pgtype.UUID
+	// Organization tenant that owns the role.
+	OrganizationID pgtype.UUID
+	// Stable lowercase snake_case role key unique within the organization.
+	Key         string
+	Name        string
+	Description pgtype.Text
+	// Determines whether bindings apply organization-wide or to one store.
+	AssignmentScope RoleAssignmentScope
+	// Identifies a role created and managed by the platform bootstrap.
+	IsSystem bool
+	// Controls whether administrative flows may modify the role.
+	IsMutable bool
+	// Controls whether bindings for the role grant authorization.
+	IsActive bool
+	// Optional creator membership from the same organization.
+	CreatedByMembershipID pgtype.UUID
+	CreatedAt             pgtype.Timestamptz
+	UpdatedAt             pgtype.Timestamptz
+}
+
+// Associates organization roles with platform permission scopes.
+type RoleScope struct {
+	// Tenant key repeated to enforce same-organization relationships.
+	OrganizationID pgtype.UUID
+	RoleID         pgtype.UUID
+	// Platform scope granted through the role.
+	ScopeCode string
 	CreatedAt pgtype.Timestamptz
+}
+
+// Store-scoped POS sale headers and lifecycle actors.
+type Sale struct {
+	ID             pgtype.UUID
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	// Human-readable sequential number allocated independently per store.
+	Number int64
+	// Request idempotency key unique within one store.
+	IdempotencyKey string
+	Status         SaleStatus
+	Subtotal       pgtype.Numeric
+	Discount       pgtype.Numeric
+	Addition       pgtype.Numeric
+	Total          pgtype.Numeric
+	// Organization membership that opened the sale.
+	OpenedByMembershipID    pgtype.UUID
+	CompletedByMembershipID pgtype.UUID
+	CancelledByMembershipID pgtype.UUID
+	OpenedAt                pgtype.Timestamptz
+	CompletedAt             pgtype.Timestamptz
+	CancelledAt             pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+// Tenant- and store-scoped product snapshots for sale items.
+type SaleItem struct {
+	ID             pgtype.UUID
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+	ProductID      pgtype.UUID
+	// Product name snapshot at the moment of sale.
+	ProductName string
+	// Product SKU snapshot at the moment of sale.
+	ProductSKU string
+	UnitPrice  pgtype.Numeric
+	Quantity   pgtype.Numeric
+	Discount   pgtype.Numeric
+	Total      pgtype.Numeric
+	CreatedAt  pgtype.Timestamptz
+}
+
+// Append-only security and authorization event history.
+type SecurityAuditEvent struct {
+	ID pgtype.UUID
+	// Optional tenant context; null for identity and pre-authentication events.
+	OrganizationID pgtype.UUID
+	// Optional store context within the organization.
+	StoreID pgtype.UUID
+	// Global user that initiated the event when known.
+	ActorUserID pgtype.UUID
+	// Tenant membership that initiated the event when known.
+	ActorMembershipID pgtype.UUID
+	// Historical session identifier retained without a foreign key so audit survives session cleanup.
+	SessionID pgtype.UUID
+	// Stable application-defined event code.
+	EventType  string
+	EntityType pgtype.Text
+	EntityID   pgtype.UUID
+	RequestID  pgtype.Text
+	IpAddress  *netip.Addr
+	UserAgent  pgtype.Text
+	Outcome    AuditOutcome
+	// Non-sensitive structured metadata; tokens, credentials, cookies, and secrets are forbidden.
+	Metadata   []byte
+	OccurredAt pgtype.Timestamptz
+}
+
+// Stores points of sale owned by an organization tenant.
+type Store struct {
+	// Internal UUIDv7 store identifier.
+	ID pgtype.UUID
+	// Organization tenant that owns the store.
+	OrganizationID pgtype.UUID
+	// Application-normalized uppercase code unique within the organization.
+	Code string
+	// Store name displayed in administrative and POS interfaces.
+	Name string
+	// Lifecycle status of the store.
+	Status StoreStatus
+	// IANA timezone used by the store.
+	Timezone string
+	// Global user that initiated store creation.
+	CreatedByUserID pgtype.UUID
+	// Timestamp required when the store is archived.
+	ArchivedAt pgtype.Timestamptz
+	CreatedAt  pgtype.Timestamptz
+	UpdatedAt  pgtype.Timestamptz
+}
+
+// Enables and orders organization payment methods for one store.
+type StorePaymentMethod struct {
+	OrganizationID  pgtype.UUID
+	StoreID         pgtype.UUID
+	PaymentMethodID pgtype.UUID
+	IsActive        bool
+	SortOrder       int32
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+}
+
+// Stores global user identities shared across organizations.
+type User struct {
+	// Internal UUIDv7 identifier.
+	ID pgtype.UUID
+	// User email preserving the trimmed display casing supplied by the application.
+	Email string
+	// Trimmed lowercase email used for identity lookup and uniqueness.
+	EmailNormalized string
+	// Name displayed in user-facing interfaces.
+	DisplayName string
+	// Lifecycle status of the global identity.
+	Status UserStatus
+	// Timestamp at which ownership of the email was verified.
+	EmailVerifiedAt pgtype.Timestamptz
+	// Monotonic version used to invalidate access after credential changes.
+	PasswordVersion int64
+	// Timestamp of the latest successful password login.
+	LastLoginAt pgtype.Timestamptz
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
 }

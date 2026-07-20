@@ -3,18 +3,17 @@ package categories
 import (
 	"time"
 
-	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func toCategoryResponse(category database.Category) CategoryResponse {
+func toCategoryResponse(id pgtype.UUID, name, slug string, isActive bool, createdAt, updatedAt pgtype.Timestamptz) CategoryResponse {
 	return CategoryResponse{
-		ID:        category.ID.String(),
-		Name:      category.Name,
-		Slug:      category.Slug,
-		IsActive:  category.IsActive,
-		CreatedAt: timestampOrZero(category.CreatedAt),
-		UpdatedAt: timestampOrZero(category.UpdatedAt),
+		ID:        id.String(),
+		Name:      name,
+		Slug:      slug,
+		IsActive:  isActive,
+		CreatedAt: timestampOrZero(createdAt),
+		UpdatedAt: timestampOrZero(updatedAt),
 	}
 }
 

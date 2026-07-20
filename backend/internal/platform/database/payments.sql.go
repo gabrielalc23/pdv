@@ -11,62 +11,60 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const approvePayment = `-- name: ApprovePayment :one
-UPDATE payments
+const approvePaymentForStore = `-- name: ApprovePaymentForStore :one
+UPDATE payments AS payment
 SET
     status = 'APPROVED',
     paid_at = NOW(),
-    received_amount = COALESCE($1, received_amount),
-    change_amount = COALESCE($2, change_amount)
-WHERE id = $3
-  AND status = 'PENDING'
+    received_amount = COALESCE($1, payment.received_amount),
+    change_amount = COALESCE($2, payment.change_amount)
+WHERE payment.organization_id = $3
+  AND payment.store_id = $4
+  AND payment.id = $5
+  AND payment.status = 'PENDING'
 RETURNING
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
 `
 
-type ApprovePaymentParams struct {
+type ApprovePaymentForStoreParams struct {
 	ReceivedAmount pgtype.Numeric
 	ChangeAmount   pgtype.Numeric
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
 	ID             pgtype.UUID
 }
 
-type ApprovePaymentRow struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
-	ExternalReference pgtype.Text
-	PaidAt            pgtype.Timestamptz
-	CancelledAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
-}
-
-func (q *Queries) ApprovePayment(ctx context.Context, arg ApprovePaymentParams) (ApprovePaymentRow, error) {
-	row := q.db.QueryRow(ctx, approvePayment, arg.ReceivedAmount, arg.ChangeAmount, arg.ID)
-	var i ApprovePaymentRow
+func (q *Queries) ApprovePaymentForStore(ctx context.Context, arg ApprovePaymentForStoreParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, approvePaymentForStore,
+		arg.ReceivedAmount,
+		arg.ChangeAmount,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ID,
+	)
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.PaymentMethodID,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Amount,
 		&i.ReceivedAmount,
@@ -77,59 +75,54 @@ func (q *Queries) ApprovePayment(ctx context.Context, arg ApprovePaymentParams) 
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const cancelPayment = `-- name: CancelPayment :one
-UPDATE payments
+const cancelPaymentForStore = `-- name: CancelPaymentForStore :one
+UPDATE payments AS payment
 SET
     status = 'CANCELLED',
     cancelled_at = NOW()
-WHERE id = $1
-  AND status IN ('PENDING', 'APPROVED', 'DECLINED')
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.id = $3
+  AND payment.status IN ('PENDING', 'APPROVED')
 RETURNING
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
 `
 
-type CancelPaymentRow struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
-	ExternalReference pgtype.Text
-	PaidAt            pgtype.Timestamptz
-	CancelledAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
+type CancelPaymentForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) CancelPayment(ctx context.Context, id pgtype.UUID) (CancelPaymentRow, error) {
-	row := q.db.QueryRow(ctx, cancelPayment, id)
-	var i CancelPaymentRow
+func (q *Queries) CancelPaymentForStore(ctx context.Context, arg CancelPaymentForStoreParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, cancelPaymentForStore, arg.OrganizationID, arg.StoreID, arg.ID)
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.PaymentMethodID,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Amount,
 		&i.ReceivedAmount,
@@ -140,38 +133,97 @@ func (q *Queries) CancelPayment(ctx context.Context, id pgtype.UUID) (CancelPaym
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const createPayment = `-- name: CreatePayment :one
-WITH inserted AS (
+const countPaymentsBySaleIDForStore = `-- name: CountPaymentsBySaleIDForStore :one
+SELECT COUNT(*)
+FROM payments AS payment
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.sale_id = $3
+`
+
+type CountPaymentsBySaleIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+}
+
+func (q *Queries) CountPaymentsBySaleIDForStore(ctx context.Context, arg CountPaymentsBySaleIDForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countPaymentsBySaleIDForStore, arg.OrganizationID, arg.StoreID, arg.SaleID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createPaymentForStore = `-- name: CreatePaymentForStore :one
+WITH existing AS MATERIALIZED (
+    SELECT
+        payment.id,
+        payment.organization_id,
+        payment.store_id,
+        payment.sale_id,
+        payment.payment_method_id,
+        payment.idempotency_key,
+        payment.status,
+        payment.amount,
+        payment.received_amount,
+        payment.change_amount,
+        payment.installments,
+        payment.external_reference,
+        payment.paid_at,
+        payment.cancelled_at,
+        payment.created_at,
+        payment.updated_at
+    FROM payments AS payment
+    WHERE payment.organization_id = $1
+      AND payment.store_id = $2
+      AND payment.idempotency_key = $3
+), inserted AS (
     INSERT INTO payments (
+        organization_id,
+        store_id,
         sale_id,
         payment_method_id,
+        idempotency_key,
         amount,
         received_amount,
         change_amount,
         installments,
-        external_reference,
-        idempotency_key
+        external_reference
     )
-    VALUES (
+    SELECT
         $1,
         $2,
-        $3,
         $4,
         $5,
+        $3,
         $6,
         $7,
-        $8
-    )
-    ON CONFLICT (idempotency_key) DO NOTHING
+        $8,
+        $9,
+        $10
+    FROM store_payment_methods AS binding
+    INNER JOIN payment_methods AS method
+        ON method.organization_id = binding.organization_id
+       AND method.id = binding.payment_method_id
+    WHERE binding.organization_id = $1
+      AND binding.store_id = $2
+      AND binding.payment_method_id = $5
+      AND binding.is_active = TRUE
+      AND method.is_active = TRUE
+      AND NOT EXISTS (SELECT 1 FROM existing)
+    ON CONFLICT (organization_id, store_id, idempotency_key) DO UPDATE
+    SET idempotency_key = EXCLUDED.idempotency_key
     RETURNING
         id,
+        organization_id,
+        store_id,
         sale_id,
         payment_method_id,
+        idempotency_key,
         status,
         amount,
         received_amount,
@@ -181,47 +233,42 @@ WITH inserted AS (
         paid_at,
         cancelled_at,
         created_at,
-        updated_at,
-        idempotency_key
+        updated_at
 )
-SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM inserted
+SELECT id, organization_id, store_id, sale_id, payment_method_id, idempotency_key, status, amount, received_amount, change_amount, installments, external_reference, paid_at, cancelled_at, created_at, updated_at FROM inserted
+UNION ALL
+SELECT id, organization_id, store_id, sale_id, payment_method_id, idempotency_key, status, amount, received_amount, change_amount, installments, external_reference, paid_at, cancelled_at, created_at, updated_at FROM existing
 UNION ALL
 SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM payments
-WHERE idempotency_key = $8
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
+FROM payments AS payment
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.idempotency_key = $3
+  AND NOT EXISTS (SELECT 1 FROM inserted)
+  AND NOT EXISTS (SELECT 1 FROM existing)
 LIMIT 1
 `
 
-type CreatePaymentParams struct {
+type CreatePaymentForStoreParams struct {
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
+	IdempotencyKey    string
 	SaleID            pgtype.UUID
 	PaymentMethodID   pgtype.UUID
 	Amount            pgtype.Numeric
@@ -229,13 +276,15 @@ type CreatePaymentParams struct {
 	ChangeAmount      pgtype.Numeric
 	Installments      int16
 	ExternalReference pgtype.Text
-	IdempotencyKey    string
 }
 
-type CreatePaymentRow struct {
+type CreatePaymentForStoreRow struct {
 	ID                pgtype.UUID
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
 	SaleID            pgtype.UUID
 	PaymentMethodID   pgtype.UUID
+	IdempotencyKey    string
 	Status            PaymentStatus
 	Amount            pgtype.Numeric
 	ReceivedAmount    pgtype.Numeric
@@ -246,11 +295,13 @@ type CreatePaymentRow struct {
 	CancelledAt       pgtype.Timestamptz
 	CreatedAt         pgtype.Timestamptz
 	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
 }
 
-func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (CreatePaymentRow, error) {
-	row := q.db.QueryRow(ctx, createPayment,
+func (q *Queries) CreatePaymentForStore(ctx context.Context, arg CreatePaymentForStoreParams) (CreatePaymentForStoreRow, error) {
+	row := q.db.QueryRow(ctx, createPaymentForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.IdempotencyKey,
 		arg.SaleID,
 		arg.PaymentMethodID,
 		arg.Amount,
@@ -258,13 +309,15 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (C
 		arg.ChangeAmount,
 		arg.Installments,
 		arg.ExternalReference,
-		arg.IdempotencyKey,
 	)
-	var i CreatePaymentRow
+	var i CreatePaymentForStoreRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.PaymentMethodID,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Amount,
 		&i.ReceivedAmount,
@@ -275,58 +328,52 @@ func (q *Queries) CreatePayment(ctx context.Context, arg CreatePaymentParams) (C
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const declinePayment = `-- name: DeclinePayment :one
-UPDATE payments
-SET
-    status = 'DECLINED'
-WHERE id = $1
-  AND status = 'PENDING'
+const declinePaymentForStore = `-- name: DeclinePaymentForStore :one
+UPDATE payments AS payment
+SET status = 'DECLINED'
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.id = $3
+  AND payment.status = 'PENDING'
 RETURNING
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
 `
 
-type DeclinePaymentRow struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
-	ExternalReference pgtype.Text
-	PaidAt            pgtype.Timestamptz
-	CancelledAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
+type DeclinePaymentForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) DeclinePayment(ctx context.Context, id pgtype.UUID) (DeclinePaymentRow, error) {
-	row := q.db.QueryRow(ctx, declinePayment, id)
-	var i DeclinePaymentRow
+func (q *Queries) DeclinePaymentForStore(ctx context.Context, arg DeclinePaymentForStoreParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, declinePaymentForStore, arg.OrganizationID, arg.StoreID, arg.ID)
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.PaymentMethodID,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Amount,
 		&i.ReceivedAmount,
@@ -337,62 +384,58 @@ func (q *Queries) DeclinePayment(ctx context.Context, id pgtype.UUID) (DeclinePa
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const getPaymentByExternalReference = `-- name: GetPaymentByExternalReference :one
+const getPaymentByExternalReferenceForStore = `-- name: GetPaymentByExternalReferenceForStore :one
 SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM payments
-WHERE payment_method_id = $1
-  AND external_reference = $2
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
+FROM payments AS payment
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.payment_method_id = $3
+  AND payment.external_reference = $4
 LIMIT 1
 `
 
-type GetPaymentByExternalReferenceParams struct {
+type GetPaymentByExternalReferenceForStoreParams struct {
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
 	PaymentMethodID   pgtype.UUID
 	ExternalReference pgtype.Text
 }
 
-type GetPaymentByExternalReferenceRow struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
-	ExternalReference pgtype.Text
-	PaidAt            pgtype.Timestamptz
-	CancelledAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
-}
-
-func (q *Queries) GetPaymentByExternalReference(ctx context.Context, arg GetPaymentByExternalReferenceParams) (GetPaymentByExternalReferenceRow, error) {
-	row := q.db.QueryRow(ctx, getPaymentByExternalReference, arg.PaymentMethodID, arg.ExternalReference)
-	var i GetPaymentByExternalReferenceRow
+func (q *Queries) GetPaymentByExternalReferenceForStore(ctx context.Context, arg GetPaymentByExternalReferenceForStoreParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, getPaymentByExternalReferenceForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.PaymentMethodID,
+		arg.ExternalReference,
+	)
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.PaymentMethodID,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Amount,
 		&i.ReceivedAmount,
@@ -403,56 +446,51 @@ func (q *Queries) GetPaymentByExternalReference(ctx context.Context, arg GetPaym
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const getPaymentByID = `-- name: GetPaymentByID :one
+const getPaymentByIDForStore = `-- name: GetPaymentByIDForStore :one
 SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM payments
-WHERE id = $1
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
+FROM payments AS payment
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.id = $3
 LIMIT 1
 `
 
-type GetPaymentByIDRow struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
-	ExternalReference pgtype.Text
-	PaidAt            pgtype.Timestamptz
-	CancelledAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
+type GetPaymentByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) GetPaymentByID(ctx context.Context, id pgtype.UUID) (GetPaymentByIDRow, error) {
-	row := q.db.QueryRow(ctx, getPaymentByID, id)
-	var i GetPaymentByIDRow
+func (q *Queries) GetPaymentByIDForStore(ctx context.Context, arg GetPaymentByIDForStoreParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, getPaymentByIDForStore, arg.OrganizationID, arg.StoreID, arg.ID)
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.PaymentMethodID,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Amount,
 		&i.ReceivedAmount,
@@ -463,56 +501,51 @@ func (q *Queries) GetPaymentByID(ctx context.Context, id pgtype.UUID) (GetPaymen
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const getPaymentByIdempotencyKey = `-- name: GetPaymentByIdempotencyKey :one
+const getPaymentByIdempotencyKeyForStore = `-- name: GetPaymentByIdempotencyKeyForStore :one
 SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM payments
-WHERE idempotency_key = $1
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
+FROM payments AS payment
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.idempotency_key = $3
 LIMIT 1
 `
 
-type GetPaymentByIdempotencyKeyRow struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
-	ExternalReference pgtype.Text
-	PaidAt            pgtype.Timestamptz
-	CancelledAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
+type GetPaymentByIdempotencyKeyForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	IdempotencyKey string
 }
 
-func (q *Queries) GetPaymentByIdempotencyKey(ctx context.Context, idempotencyKey string) (GetPaymentByIdempotencyKeyRow, error) {
-	row := q.db.QueryRow(ctx, getPaymentByIdempotencyKey, idempotencyKey)
-	var i GetPaymentByIdempotencyKeyRow
+func (q *Queries) GetPaymentByIdempotencyKeyForStore(ctx context.Context, arg GetPaymentByIdempotencyKeyForStoreParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, getPaymentByIdempotencyKeyForStore, arg.OrganizationID, arg.StoreID, arg.IdempotencyKey)
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.PaymentMethodID,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Amount,
 		&i.ReceivedAmount,
@@ -523,62 +556,57 @@ func (q *Queries) GetPaymentByIdempotencyKey(ctx context.Context, idempotencyKey
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const listPaymentsBySaleID = `-- name: ListPaymentsBySaleID :many
+const listPaymentsBySaleIDForStore = `-- name: ListPaymentsBySaleIDForStore :many
 SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM payments
-WHERE sale_id = $1
-ORDER BY created_at, id
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
+FROM payments AS payment
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.sale_id = $3
+ORDER BY payment.created_at, payment.id
 `
 
-type ListPaymentsBySaleIDRow struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
-	ExternalReference pgtype.Text
-	PaidAt            pgtype.Timestamptz
-	CancelledAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
+type ListPaymentsBySaleIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
 }
 
-func (q *Queries) ListPaymentsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]ListPaymentsBySaleIDRow, error) {
-	rows, err := q.db.Query(ctx, listPaymentsBySaleID, saleID)
+func (q *Queries) ListPaymentsBySaleIDForStore(ctx context.Context, arg ListPaymentsBySaleIDForStoreParams) ([]Payment, error) {
+	rows, err := q.db.Query(ctx, listPaymentsBySaleIDForStore, arg.OrganizationID, arg.StoreID, arg.SaleID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListPaymentsBySaleIDRow{}
+	items := []Payment{}
 	for rows.Next() {
-		var i ListPaymentsBySaleIDRow
+		var i Payment
 		if err := rows.Scan(
 			&i.ID,
+			&i.OrganizationID,
+			&i.StoreID,
 			&i.SaleID,
 			&i.PaymentMethodID,
+			&i.IdempotencyKey,
 			&i.Status,
 			&i.Amount,
 			&i.ReceivedAmount,
@@ -589,7 +617,6 @@ func (q *Queries) ListPaymentsBySaleID(ctx context.Context, saleID pgtype.UUID) 
 			&i.CancelledAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.IdempotencyKey,
 		); err != nil {
 			return nil, err
 		}
@@ -601,51 +628,47 @@ func (q *Queries) ListPaymentsBySaleID(ctx context.Context, saleID pgtype.UUID) 
 	return items, nil
 }
 
-const lockPaymentByID = `-- name: LockPaymentByID :one
+const lockPaymentByIDForStore = `-- name: LockPaymentByIDForStore :one
 SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM payments
-WHERE id = $1
+    payment.id,
+    payment.organization_id,
+    payment.store_id,
+    payment.sale_id,
+    payment.payment_method_id,
+    payment.idempotency_key,
+    payment.status,
+    payment.amount,
+    payment.received_amount,
+    payment.change_amount,
+    payment.installments,
+    payment.external_reference,
+    payment.paid_at,
+    payment.cancelled_at,
+    payment.created_at,
+    payment.updated_at
+FROM payments AS payment
+WHERE payment.organization_id = $1
+  AND payment.store_id = $2
+  AND payment.id = $3
 FOR UPDATE
 `
 
-type LockPaymentByIDRow struct {
-	ID                pgtype.UUID
-	SaleID            pgtype.UUID
-	PaymentMethodID   pgtype.UUID
-	Status            PaymentStatus
-	Amount            pgtype.Numeric
-	ReceivedAmount    pgtype.Numeric
-	ChangeAmount      pgtype.Numeric
-	Installments      int16
-	ExternalReference pgtype.Text
-	PaidAt            pgtype.Timestamptz
-	CancelledAt       pgtype.Timestamptz
-	CreatedAt         pgtype.Timestamptz
-	UpdatedAt         pgtype.Timestamptz
-	IdempotencyKey    string
+type LockPaymentByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) LockPaymentByID(ctx context.Context, id pgtype.UUID) (LockPaymentByIDRow, error) {
-	row := q.db.QueryRow(ctx, lockPaymentByID, id)
-	var i LockPaymentByIDRow
+func (q *Queries) LockPaymentByIDForStore(ctx context.Context, arg LockPaymentByIDForStoreParams) (Payment, error) {
+	row := q.db.QueryRow(ctx, lockPaymentByIDForStore, arg.OrganizationID, arg.StoreID, arg.ID)
+	var i Payment
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.PaymentMethodID,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Amount,
 		&i.ReceivedAmount,
@@ -656,7 +679,6 @@ func (q *Queries) LockPaymentByID(ctx context.Context, id pgtype.UUID) (LockPaym
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }

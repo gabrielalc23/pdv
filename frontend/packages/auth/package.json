@@ -1,0 +1,43 @@
+{
+  "name": "@pdv/auth",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "format": "prettier --ignore-path ../../.prettierignore --write .",
+    "format:check": "prettier --ignore-path ../../.prettierignore --check .",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "@pdv/http": "workspace:*",
+    "@pdv/errors": "workspace:*",
+    "axios": "^1.13.6",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@pdv/eslint": "workspace:*",
+    "@pdv/http": "workspace:*",
+    "@pdv/errors": "workspace:*",
+    "@pdv/prettier": "workspace:*",
+    "@pdv/typescript": "workspace:*",
+    "@types/bun": "latest",
+    "axios": "^1.13.6",
+    "axios-mock-adapter": "^2.1.0",
+    "eslint": "^10.6.0",
+    "prettier": "^3.8.2",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.10",
+    "zod": "^4.4.3"
+  }
+}

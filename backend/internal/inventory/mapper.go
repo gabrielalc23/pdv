@@ -9,7 +9,40 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func toInventoryResponse(row database.ListInventoryRow) (InventoryResponse, error) {
+type movementProjection struct {
+	ID               pgtype.UUID
+	ProductID        pgtype.UUID
+	MovementType     database.InventoryMovementType
+	Quantity         pgtype.Numeric
+	PreviousQuantity pgtype.Numeric
+	CurrentQuantity  pgtype.Numeric
+	Reason           pgtype.Text
+	ReferenceType    string
+	ReferenceID      pgtype.UUID
+	CreatedAt        pgtype.Timestamptz
+}
+
+func movementFromCreateRow(row database.CreateInventoryMovementForStoreRow) movementProjection {
+	return movementProjection{
+		ID: row.ID, ProductID: row.ProductID, MovementType: row.MovementType,
+		Quantity: row.Quantity, PreviousQuantity: row.PreviousQuantity,
+		CurrentQuantity: row.CurrentQuantity, Reason: row.Reason,
+		ReferenceType: row.ReferenceType, ReferenceID: row.ReferenceID,
+		CreatedAt: row.CreatedAt,
+	}
+}
+
+func movementFromListRow(row database.ListInventoryMovementsByProductIDForStoreRow) movementProjection {
+	return movementProjection{
+		ID: row.ID, ProductID: row.ProductID, MovementType: row.MovementType,
+		Quantity: row.Quantity, PreviousQuantity: row.PreviousQuantity,
+		CurrentQuantity: row.CurrentQuantity, Reason: row.Reason,
+		ReferenceType: row.ReferenceType, ReferenceID: row.ReferenceID,
+		CreatedAt: row.CreatedAt,
+	}
+}
+
+func toInventoryResponse(row database.ListInventoryForStoreRow) (InventoryResponse, error) {
 	quantity, err := numericToQuantityString(row.Quantity)
 	if err != nil {
 		return InventoryResponse{}, fmt.Errorf("format quantity: %w", err)
@@ -67,7 +100,7 @@ func toInventoryChangeSummary(productID pgtype.UUID, previous, current pgtype.Nu
 	}
 }
 
-func toInventoryMovementResponse(movement database.InventoryMovement) (InventoryMovementResponse, error) {
+func toInventoryMovementResponse(movement movementProjection) (InventoryMovementResponse, error) {
 	quantity := ""
 	if value, err := numericToQuantityString(movement.Quantity); err == nil {
 		quantity = value
@@ -108,7 +141,7 @@ func toInventoryMovementResponse(movement database.InventoryMovement) (Inventory
 	}, nil
 }
 
-func toInventoryDetailsResponse(product database.Product, inventory database.Inventory) (InventoryResponse, error) {
+func toInventoryDetailsResponse(product database.GetProductByIDForStoreRow, inventory database.Inventory) (InventoryResponse, error) {
 	quantity, err := numericToQuantityString(inventory.Quantity)
 	if err != nil {
 		return InventoryResponse{}, fmt.Errorf("format quantity: %w", err)

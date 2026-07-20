@@ -11,57 +11,79 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const countInventory = `-- name: CountInventory :one
+const countInventoryForStore = `-- name: CountInventoryForStore :one
 SELECT COUNT(*)
 FROM inventory i
-INNER JOIN products p ON p.id = i.product_id
-WHERE
-    (
-        CAST($1 AS TEXT) IS NULL
-        OR p.name ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR p.sku ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR p.barcode ILIKE '%' || CAST($1 AS TEXT) || '%'
-    )
-    AND (NOT $2 OR p.is_active = TRUE)
+INNER JOIN products p
+        ON p.organization_id = i.organization_id
+       AND p.id = i.product_id
+WHERE i.organization_id = $1
+  AND i.store_id = $2
+  AND (
+      CAST($3 AS TEXT) IS NULL
+      OR p.name ILIKE '%' || CAST($3 AS TEXT) || '%'
+      OR p.sku ILIKE '%' || CAST($3 AS TEXT) || '%'
+      OR p.barcode ILIKE '%' || CAST($3 AS TEXT) || '%'
+  )
+  AND (NOT CAST($4 AS BOOLEAN) OR p.is_active = TRUE)
 `
 
-type CountInventoryParams struct {
-	Search     pgtype.Text
-	ActiveOnly interface{}
+type CountInventoryForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	Search         pgtype.Text
+	ActiveOnly     bool
 }
 
-func (q *Queries) CountInventory(ctx context.Context, arg CountInventoryParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countInventory, arg.Search, arg.ActiveOnly)
+func (q *Queries) CountInventoryForStore(ctx context.Context, arg CountInventoryForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countInventoryForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.Search,
+		arg.ActiveOnly,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
-const countInventoryMovementsByProductID = `-- name: CountInventoryMovementsByProductID :one
+const countInventoryMovementsByProductIDForStore = `-- name: CountInventoryMovementsByProductIDForStore :one
 SELECT COUNT(*)
 FROM inventory_movements
-WHERE product_id = $1
+WHERE organization_id = $1
+  AND store_id = $2
+  AND product_id = $3
   AND (
-      CAST($2 AS inventory_movement_type) IS NULL
-      OR movement_type = CAST($2 AS inventory_movement_type)
+      CAST($4 AS inventory_movement_type) IS NULL
+      OR movement_type = CAST($4 AS inventory_movement_type)
   )
 `
 
-type CountInventoryMovementsByProductIDParams struct {
+type CountInventoryMovementsByProductIDForStoreParams struct {
+	OrganizationID     pgtype.UUID
+	StoreID            pgtype.UUID
 	ProductID          pgtype.UUID
 	MovementTypeFilter NullInventoryMovementType
 }
 
-func (q *Queries) CountInventoryMovementsByProductID(ctx context.Context, arg CountInventoryMovementsByProductIDParams) (int64, error) {
-	row := q.db.QueryRow(ctx, countInventoryMovementsByProductID, arg.ProductID, arg.MovementTypeFilter)
+func (q *Queries) CountInventoryMovementsByProductIDForStore(ctx context.Context, arg CountInventoryMovementsByProductIDForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countInventoryMovementsByProductIDForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ProductID,
+		arg.MovementTypeFilter,
+	)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
-const createInventoryMovement = `-- name: CreateInventoryMovement :one
+const createInventoryMovementForStore = `-- name: CreateInventoryMovementForStore :one
 INSERT INTO inventory_movements (
+    organization_id,
+    store_id,
     product_id,
+    actor_membership_id,
     movement_type,
     quantity,
     previous_quantity,
@@ -78,11 +100,17 @@ VALUES (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10,
+    $11
 )
 RETURNING
+    organization_id,
+    store_id,
     id,
     product_id,
+    actor_membership_id,
     movement_type,
     quantity,
     previous_quantity,
@@ -93,20 +121,42 @@ RETURNING
     created_at
 `
 
-type CreateInventoryMovementParams struct {
-	ProductID        pgtype.UUID
-	MovementType     InventoryMovementType
-	Quantity         pgtype.Numeric
-	PreviousQuantity pgtype.Numeric
-	CurrentQuantity  pgtype.Numeric
-	Reason           pgtype.Text
-	ReferenceType    string
-	ReferenceID      pgtype.UUID
+type CreateInventoryMovementForStoreParams struct {
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
+	ProductID         pgtype.UUID
+	ActorMembershipID pgtype.UUID
+	MovementType      InventoryMovementType
+	Quantity          pgtype.Numeric
+	PreviousQuantity  pgtype.Numeric
+	CurrentQuantity   pgtype.Numeric
+	Reason            pgtype.Text
+	ReferenceType     string
+	ReferenceID       pgtype.UUID
 }
 
-func (q *Queries) CreateInventoryMovement(ctx context.Context, arg CreateInventoryMovementParams) (InventoryMovement, error) {
-	row := q.db.QueryRow(ctx, createInventoryMovement,
+type CreateInventoryMovementForStoreRow struct {
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
+	ID                pgtype.UUID
+	ProductID         pgtype.UUID
+	ActorMembershipID pgtype.UUID
+	MovementType      InventoryMovementType
+	Quantity          pgtype.Numeric
+	PreviousQuantity  pgtype.Numeric
+	CurrentQuantity   pgtype.Numeric
+	Reason            pgtype.Text
+	ReferenceType     string
+	ReferenceID       pgtype.UUID
+	CreatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) CreateInventoryMovementForStore(ctx context.Context, arg CreateInventoryMovementForStoreParams) (CreateInventoryMovementForStoreRow, error) {
+	row := q.db.QueryRow(ctx, createInventoryMovementForStore,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.ProductID,
+		arg.ActorMembershipID,
 		arg.MovementType,
 		arg.Quantity,
 		arg.PreviousQuantity,
@@ -115,10 +165,13 @@ func (q *Queries) CreateInventoryMovement(ctx context.Context, arg CreateInvento
 		arg.ReferenceType,
 		arg.ReferenceID,
 	)
-	var i InventoryMovement
+	var i CreateInventoryMovementForStoreRow
 	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.ID,
 		&i.ProductID,
+		&i.ActorMembershipID,
 		&i.MovementType,
 		&i.Quantity,
 		&i.PreviousQuantity,
@@ -131,14 +184,19 @@ func (q *Queries) CreateInventoryMovement(ctx context.Context, arg CreateInvento
 	return i, err
 }
 
-const decreaseInventory = `-- name: DecreaseInventory :one
+const decreaseInventoryForStore = `-- name: DecreaseInventoryForStore :one
 UPDATE inventory
 SET
     quantity = quantity - $1,
     updated_at = NOW()
-WHERE product_id = $2
+WHERE organization_id = $2
+  AND store_id = $3
+  AND product_id = $4
+  AND $1::NUMERIC > 0
   AND quantity >= $1
 RETURNING
+    organization_id,
+    store_id,
     product_id,
     CAST(quantity + $1 AS NUMERIC(15, 3)) AS previous_quantity,
     quantity AS current_quantity,
@@ -146,12 +204,16 @@ RETURNING
     updated_at
 `
 
-type DecreaseInventoryParams struct {
-	Quantity  pgtype.Numeric
-	ProductID pgtype.UUID
+type DecreaseInventoryForStoreParams struct {
+	Quantity       pgtype.Numeric
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ProductID      pgtype.UUID
 }
 
-type DecreaseInventoryRow struct {
+type DecreaseInventoryForStoreRow struct {
+	OrganizationID   pgtype.UUID
+	StoreID          pgtype.UUID
 	ProductID        pgtype.UUID
 	PreviousQuantity pgtype.Numeric
 	CurrentQuantity  pgtype.Numeric
@@ -159,10 +221,17 @@ type DecreaseInventoryRow struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
-func (q *Queries) DecreaseInventory(ctx context.Context, arg DecreaseInventoryParams) (DecreaseInventoryRow, error) {
-	row := q.db.QueryRow(ctx, decreaseInventory, arg.Quantity, arg.ProductID)
-	var i DecreaseInventoryRow
+func (q *Queries) DecreaseInventoryForStore(ctx context.Context, arg DecreaseInventoryForStoreParams) (DecreaseInventoryForStoreRow, error) {
+	row := q.db.QueryRow(ctx, decreaseInventoryForStore,
+		arg.Quantity,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ProductID,
+	)
+	var i DecreaseInventoryForStoreRow
 	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.ProductID,
 		&i.PreviousQuantity,
 		&i.CurrentQuantity,
@@ -172,21 +241,33 @@ func (q *Queries) DecreaseInventory(ctx context.Context, arg DecreaseInventoryPa
 	return i, err
 }
 
-const getInventoryByProductID = `-- name: GetInventoryByProductID :one
+const getInventoryByProductIDForStore = `-- name: GetInventoryByProductIDForStore :one
 SELECT
+    organization_id,
+    store_id,
     product_id,
     quantity,
     created_at,
     updated_at
 FROM inventory
-WHERE product_id = $1
+WHERE organization_id = $1
+  AND store_id = $2
+  AND product_id = $3
 LIMIT 1
 `
 
-func (q *Queries) GetInventoryByProductID(ctx context.Context, productID pgtype.UUID) (Inventory, error) {
-	row := q.db.QueryRow(ctx, getInventoryByProductID, productID)
+type GetInventoryByProductIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ProductID      pgtype.UUID
+}
+
+func (q *Queries) GetInventoryByProductIDForStore(ctx context.Context, arg GetInventoryByProductIDForStoreParams) (Inventory, error) {
+	row := q.db.QueryRow(ctx, getInventoryByProductIDForStore, arg.OrganizationID, arg.StoreID, arg.ProductID)
 	var i Inventory
 	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.ProductID,
 		&i.Quantity,
 		&i.CreatedAt,
@@ -195,10 +276,13 @@ func (q *Queries) GetInventoryByProductID(ctx context.Context, productID pgtype.
 	return i, err
 }
 
-const getInventoryMovementByReference = `-- name: GetInventoryMovementByReference :one
+const getInventoryMovementByReferenceForStore = `-- name: GetInventoryMovementByReferenceForStore :one
 SELECT
+    organization_id,
+    store_id,
     id,
     product_id,
+    actor_membership_id,
     movement_type,
     quantity,
     previous_quantity,
@@ -208,31 +292,56 @@ SELECT
     reference_id,
     created_at
 FROM inventory_movements
-WHERE product_id = $1
-  AND movement_type = $2
-  AND reference_type = $3
-  AND reference_id = $4
+WHERE organization_id = $1
+  AND store_id = $2
+  AND product_id = $3
+  AND movement_type = $4
+  AND reference_type = $5
+  AND reference_id = $6
 LIMIT 1
 `
 
-type GetInventoryMovementByReferenceParams struct {
-	ProductID     pgtype.UUID
-	MovementType  InventoryMovementType
-	ReferenceType string
-	ReferenceID   pgtype.UUID
+type GetInventoryMovementByReferenceForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ProductID      pgtype.UUID
+	MovementType   InventoryMovementType
+	ReferenceType  string
+	ReferenceID    pgtype.UUID
 }
 
-func (q *Queries) GetInventoryMovementByReference(ctx context.Context, arg GetInventoryMovementByReferenceParams) (InventoryMovement, error) {
-	row := q.db.QueryRow(ctx, getInventoryMovementByReference,
+type GetInventoryMovementByReferenceForStoreRow struct {
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
+	ID                pgtype.UUID
+	ProductID         pgtype.UUID
+	ActorMembershipID pgtype.UUID
+	MovementType      InventoryMovementType
+	Quantity          pgtype.Numeric
+	PreviousQuantity  pgtype.Numeric
+	CurrentQuantity   pgtype.Numeric
+	Reason            pgtype.Text
+	ReferenceType     string
+	ReferenceID       pgtype.UUID
+	CreatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) GetInventoryMovementByReferenceForStore(ctx context.Context, arg GetInventoryMovementByReferenceForStoreParams) (GetInventoryMovementByReferenceForStoreRow, error) {
+	row := q.db.QueryRow(ctx, getInventoryMovementByReferenceForStore,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.ProductID,
 		arg.MovementType,
 		arg.ReferenceType,
 		arg.ReferenceID,
 	)
-	var i InventoryMovement
+	var i GetInventoryMovementByReferenceForStoreRow
 	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.ID,
 		&i.ProductID,
+		&i.ActorMembershipID,
 		&i.MovementType,
 		&i.Quantity,
 		&i.PreviousQuantity,
@@ -245,33 +354,43 @@ func (q *Queries) GetInventoryMovementByReference(ctx context.Context, arg GetIn
 	return i, err
 }
 
-const increaseInventory = `-- name: IncreaseInventory :one
+const increaseInventoryForStore = `-- name: IncreaseInventoryForStore :one
 INSERT INTO inventory (
+    organization_id,
+    store_id,
     product_id,
     quantity
 )
-VALUES (
+SELECT
     $1,
-    $2
-)
-ON CONFLICT (product_id)
+    $2,
+    $3,
+    $4
+WHERE $4::NUMERIC > 0
+ON CONFLICT (organization_id, store_id, product_id)
 DO UPDATE SET
     quantity = inventory.quantity + EXCLUDED.quantity,
     updated_at = NOW()
 RETURNING
+    organization_id,
+    store_id,
     product_id,
-    CAST(quantity - $2 AS NUMERIC(15, 3)) AS previous_quantity,
+    CAST(quantity - $4 AS NUMERIC(15, 3)) AS previous_quantity,
     quantity AS current_quantity,
     created_at,
     updated_at
 `
 
-type IncreaseInventoryParams struct {
-	ProductID pgtype.UUID
-	Quantity  pgtype.Numeric
+type IncreaseInventoryForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ProductID      pgtype.UUID
+	Quantity       pgtype.Numeric
 }
 
-type IncreaseInventoryRow struct {
+type IncreaseInventoryForStoreRow struct {
+	OrganizationID   pgtype.UUID
+	StoreID          pgtype.UUID
 	ProductID        pgtype.UUID
 	PreviousQuantity pgtype.Numeric
 	CurrentQuantity  pgtype.Numeric
@@ -279,10 +398,17 @@ type IncreaseInventoryRow struct {
 	UpdatedAt        pgtype.Timestamptz
 }
 
-func (q *Queries) IncreaseInventory(ctx context.Context, arg IncreaseInventoryParams) (IncreaseInventoryRow, error) {
-	row := q.db.QueryRow(ctx, increaseInventory, arg.ProductID, arg.Quantity)
-	var i IncreaseInventoryRow
+func (q *Queries) IncreaseInventoryForStore(ctx context.Context, arg IncreaseInventoryForStoreParams) (IncreaseInventoryForStoreRow, error) {
+	row := q.db.QueryRow(ctx, increaseInventoryForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ProductID,
+		arg.Quantity,
+	)
+	var i IncreaseInventoryForStoreRow
 	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.ProductID,
 		&i.PreviousQuantity,
 		&i.CurrentQuantity,
@@ -292,8 +418,10 @@ func (q *Queries) IncreaseInventory(ctx context.Context, arg IncreaseInventoryPa
 	return i, err
 }
 
-const listInventory = `-- name: ListInventory :many
+const listInventoryForStore = `-- name: ListInventoryForStore :many
 SELECT
+    i.organization_id,
+    i.store_id,
     p.id AS product_id,
     p.sku,
     p.barcode,
@@ -303,40 +431,49 @@ SELECT
     i.created_at,
     i.updated_at
 FROM inventory i
-INNER JOIN products p ON p.id = i.product_id
-WHERE
-    (
-        CAST($1 AS TEXT) IS NULL
-        OR p.name ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR p.sku ILIKE '%' || CAST($1 AS TEXT) || '%'
-        OR p.barcode ILIKE '%' || CAST($1 AS TEXT) || '%'
-    )
-    AND (NOT $2 OR p.is_active = TRUE)
+INNER JOIN products p
+        ON p.organization_id = i.organization_id
+       AND p.id = i.product_id
+WHERE i.organization_id = $1
+  AND i.store_id = $2
+  AND (
+      CAST($3 AS TEXT) IS NULL
+      OR p.name ILIKE '%' || CAST($3 AS TEXT) || '%'
+      OR p.sku ILIKE '%' || CAST($3 AS TEXT) || '%'
+      OR p.barcode ILIKE '%' || CAST($3 AS TEXT) || '%'
+  )
+  AND (NOT CAST($4 AS BOOLEAN) OR p.is_active = TRUE)
 ORDER BY p.name ASC, p.id ASC
-LIMIT $4
-OFFSET $3
+LIMIT $6
+OFFSET $5
 `
 
-type ListInventoryParams struct {
-	Search     pgtype.Text
-	ActiveOnly interface{}
-	PageOffset int32
-	PageSize   int32
+type ListInventoryForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	Search         pgtype.Text
+	ActiveOnly     bool
+	PageOffset     int32
+	PageSize       int32
 }
 
-type ListInventoryRow struct {
-	ProductID pgtype.UUID
-	SKU       string
-	Barcode   pgtype.Text
-	Name      string
-	IsActive  bool
-	Quantity  pgtype.Numeric
-	CreatedAt pgtype.Timestamptz
-	UpdatedAt pgtype.Timestamptz
+type ListInventoryForStoreRow struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ProductID      pgtype.UUID
+	SKU            string
+	Barcode        pgtype.Text
+	Name           string
+	IsActive       bool
+	Quantity       pgtype.Numeric
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
 }
 
-func (q *Queries) ListInventory(ctx context.Context, arg ListInventoryParams) ([]ListInventoryRow, error) {
-	rows, err := q.db.Query(ctx, listInventory,
+func (q *Queries) ListInventoryForStore(ctx context.Context, arg ListInventoryForStoreParams) ([]ListInventoryForStoreRow, error) {
+	rows, err := q.db.Query(ctx, listInventoryForStore,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.Search,
 		arg.ActiveOnly,
 		arg.PageOffset,
@@ -346,10 +483,12 @@ func (q *Queries) ListInventory(ctx context.Context, arg ListInventoryParams) ([
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListInventoryRow{}
+	items := []ListInventoryForStoreRow{}
 	for rows.Next() {
-		var i ListInventoryRow
+		var i ListInventoryForStoreRow
 		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.StoreID,
 			&i.ProductID,
 			&i.SKU,
 			&i.Barcode,
@@ -369,10 +508,13 @@ func (q *Queries) ListInventory(ctx context.Context, arg ListInventoryParams) ([
 	return items, nil
 }
 
-const listInventoryMovementsByProductID = `-- name: ListInventoryMovementsByProductID :many
+const listInventoryMovementsByProductIDForStore = `-- name: ListInventoryMovementsByProductIDForStore :many
 SELECT
+    organization_id,
+    store_id,
     id,
     product_id,
+    actor_membership_id,
     movement_type,
     quantity,
     previous_quantity,
@@ -382,25 +524,47 @@ SELECT
     reference_id,
     created_at
 FROM inventory_movements
-WHERE product_id = $1
+WHERE organization_id = $1
+  AND store_id = $2
+  AND product_id = $3
   AND (
-      CAST($2 AS inventory_movement_type) IS NULL
-      OR movement_type = CAST($2 AS inventory_movement_type)
+      CAST($4 AS inventory_movement_type) IS NULL
+      OR movement_type = CAST($4 AS inventory_movement_type)
   )
 ORDER BY created_at DESC, id DESC
-LIMIT $4
-OFFSET $3
+LIMIT $6
+OFFSET $5
 `
 
-type ListInventoryMovementsByProductIDParams struct {
+type ListInventoryMovementsByProductIDForStoreParams struct {
+	OrganizationID     pgtype.UUID
+	StoreID            pgtype.UUID
 	ProductID          pgtype.UUID
 	MovementTypeFilter NullInventoryMovementType
 	PageOffset         int32
 	PageSize           int32
 }
 
-func (q *Queries) ListInventoryMovementsByProductID(ctx context.Context, arg ListInventoryMovementsByProductIDParams) ([]InventoryMovement, error) {
-	rows, err := q.db.Query(ctx, listInventoryMovementsByProductID,
+type ListInventoryMovementsByProductIDForStoreRow struct {
+	OrganizationID    pgtype.UUID
+	StoreID           pgtype.UUID
+	ID                pgtype.UUID
+	ProductID         pgtype.UUID
+	ActorMembershipID pgtype.UUID
+	MovementType      InventoryMovementType
+	Quantity          pgtype.Numeric
+	PreviousQuantity  pgtype.Numeric
+	CurrentQuantity   pgtype.Numeric
+	Reason            pgtype.Text
+	ReferenceType     string
+	ReferenceID       pgtype.UUID
+	CreatedAt         pgtype.Timestamptz
+}
+
+func (q *Queries) ListInventoryMovementsByProductIDForStore(ctx context.Context, arg ListInventoryMovementsByProductIDForStoreParams) ([]ListInventoryMovementsByProductIDForStoreRow, error) {
+	rows, err := q.db.Query(ctx, listInventoryMovementsByProductIDForStore,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.ProductID,
 		arg.MovementTypeFilter,
 		arg.PageOffset,
@@ -410,12 +574,15 @@ func (q *Queries) ListInventoryMovementsByProductID(ctx context.Context, arg Lis
 		return nil, err
 	}
 	defer rows.Close()
-	items := []InventoryMovement{}
+	items := []ListInventoryMovementsByProductIDForStoreRow{}
 	for rows.Next() {
-		var i InventoryMovement
+		var i ListInventoryMovementsByProductIDForStoreRow
 		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.StoreID,
 			&i.ID,
 			&i.ProductID,
+			&i.ActorMembershipID,
 			&i.MovementType,
 			&i.Quantity,
 			&i.PreviousQuantity,

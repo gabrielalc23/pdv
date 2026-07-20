@@ -20,9 +20,9 @@ func translatePersistenceError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		switch pgErr.ConstraintName {
-		case "products_sku_unique":
+		case "products_organization_id_sku_unique":
 			return ErrSKUAlreadyExists
-		case "products_barcode_unique":
+		case "idx_products_organization_barcode_unique":
 			return ErrBarcodeAlreadyExists
 		}
 	}

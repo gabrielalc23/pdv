@@ -11,250 +11,360 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const cancelSale = `-- name: CancelSale :one
-UPDATE sales
+const cancelSaleForStore = `-- name: CancelSaleForStore :one
+UPDATE sales AS sale
 SET
     status = 'CANCELLED',
+    cancelled_by_membership_id = $1,
     cancelled_at = NOW()
-WHERE id = $1
-  AND status = 'OPEN'
+WHERE sale.organization_id = $2
+  AND sale.store_id = $3
+  AND sale.id = $4
+  AND sale.status IN ('OPEN', 'COMPLETED')
 RETURNING
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
 `
 
-type CancelSaleRow struct {
-	ID             pgtype.UUID
-	Number         int64
-	Status         SaleStatus
-	Subtotal       pgtype.Numeric
-	Discount       pgtype.Numeric
-	Addition       pgtype.Numeric
-	Total          pgtype.Numeric
-	OpenedAt       pgtype.Timestamptz
-	CompletedAt    pgtype.Timestamptz
-	CancelledAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	IdempotencyKey string
+type CancelSaleForStoreParams struct {
+	CancelledByMembershipID pgtype.UUID
+	OrganizationID          pgtype.UUID
+	StoreID                 pgtype.UUID
+	ID                      pgtype.UUID
 }
 
-func (q *Queries) CancelSale(ctx context.Context, id pgtype.UUID) (CancelSaleRow, error) {
-	row := q.db.QueryRow(ctx, cancelSale, id)
-	var i CancelSaleRow
+func (q *Queries) CancelSaleForStore(ctx context.Context, arg CancelSaleForStoreParams) (Sale, error) {
+	row := q.db.QueryRow(ctx, cancelSaleForStore,
+		arg.CancelledByMembershipID,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ID,
+	)
+	var i Sale
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.Number,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Subtotal,
 		&i.Discount,
 		&i.Addition,
 		&i.Total,
+		&i.OpenedByMembershipID,
+		&i.CompletedByMembershipID,
+		&i.CancelledByMembershipID,
 		&i.OpenedAt,
 		&i.CompletedAt,
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const completeSale = `-- name: CompleteSale :one
-UPDATE sales
+const completeSaleForStore = `-- name: CompleteSaleForStore :one
+UPDATE sales AS sale
 SET
     status = 'COMPLETED',
+    completed_by_membership_id = $1,
     completed_at = NOW()
-WHERE id = $1
-  AND status = 'OPEN'
+WHERE sale.organization_id = $2
+  AND sale.store_id = $3
+  AND sale.id = $4
+  AND sale.status = 'OPEN'
 RETURNING
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
 `
 
-type CompleteSaleRow struct {
-	ID             pgtype.UUID
-	Number         int64
-	Status         SaleStatus
-	Subtotal       pgtype.Numeric
-	Discount       pgtype.Numeric
-	Addition       pgtype.Numeric
-	Total          pgtype.Numeric
-	OpenedAt       pgtype.Timestamptz
-	CompletedAt    pgtype.Timestamptz
-	CancelledAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	IdempotencyKey string
+type CompleteSaleForStoreParams struct {
+	CompletedByMembershipID pgtype.UUID
+	OrganizationID          pgtype.UUID
+	StoreID                 pgtype.UUID
+	ID                      pgtype.UUID
 }
 
-func (q *Queries) CompleteSale(ctx context.Context, id pgtype.UUID) (CompleteSaleRow, error) {
-	row := q.db.QueryRow(ctx, completeSale, id)
-	var i CompleteSaleRow
+func (q *Queries) CompleteSaleForStore(ctx context.Context, arg CompleteSaleForStoreParams) (Sale, error) {
+	row := q.db.QueryRow(ctx, completeSaleForStore,
+		arg.CompletedByMembershipID,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.ID,
+	)
+	var i Sale
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.Number,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Subtotal,
 		&i.Discount,
 		&i.Addition,
 		&i.Total,
+		&i.OpenedByMembershipID,
+		&i.CompletedByMembershipID,
+		&i.CancelledByMembershipID,
 		&i.OpenedAt,
 		&i.CompletedAt,
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const countSales = `-- name: CountSales :one
+const countSaleItemsBySaleIDForStore = `-- name: CountSaleItemsBySaleIDForStore :one
 SELECT COUNT(*)
-FROM sales
-WHERE (
-    CAST($1 AS sale_status) IS NULL
-    OR status = CAST($1 AS sale_status)
-)
+FROM sale_items AS item
+WHERE item.organization_id = $1
+  AND item.store_id = $2
+  AND item.sale_id = $3
 `
 
-func (q *Queries) CountSales(ctx context.Context, status NullSaleStatus) (int64, error) {
-	row := q.db.QueryRow(ctx, countSales, status)
+type CountSaleItemsBySaleIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+}
+
+func (q *Queries) CountSaleItemsBySaleIDForStore(ctx context.Context, arg CountSaleItemsBySaleIDForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSaleItemsBySaleIDForStore, arg.OrganizationID, arg.StoreID, arg.SaleID)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
 }
 
-const createSale = `-- name: CreateSale :one
-WITH inserted AS (
+const countSalesForStore = `-- name: CountSalesForStore :one
+SELECT COUNT(*)
+FROM sales AS sale
+WHERE sale.organization_id = $1
+  AND sale.store_id = $2
+  AND (
+      CAST($3 AS sale_status) IS NULL
+      OR sale.status = CAST($3 AS sale_status)
+  )
+`
+
+type CountSalesForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	Status         NullSaleStatus
+}
+
+func (q *Queries) CountSalesForStore(ctx context.Context, arg CountSalesForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSalesForStore, arg.OrganizationID, arg.StoreID, arg.Status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createSaleForStore = `-- name: CreateSaleForStore :one
+WITH existing AS MATERIALIZED (
+    SELECT
+        sale.id,
+        sale.organization_id,
+        sale.store_id,
+        sale.number,
+        sale.idempotency_key,
+        sale.status,
+        sale.subtotal,
+        sale.discount,
+        sale.addition,
+        sale.total,
+        sale.opened_by_membership_id,
+        sale.completed_by_membership_id,
+        sale.cancelled_by_membership_id,
+        sale.opened_at,
+        sale.completed_at,
+        sale.cancelled_at,
+        sale.created_at,
+        sale.updated_at
+    FROM sales AS sale
+    WHERE sale.organization_id = $1
+      AND sale.store_id = $2
+      AND sale.idempotency_key = $3
+), allocated_number AS (
+    INSERT INTO sale_number_counters (
+        organization_id,
+        store_id,
+        next_number
+    )
+    SELECT
+        $1,
+        $2,
+        2
+    WHERE NOT EXISTS (SELECT 1 FROM existing)
+    ON CONFLICT (organization_id, store_id) DO UPDATE
+    SET next_number = sale_number_counters.next_number + 1
+    RETURNING next_number - 1 AS number
+), inserted AS (
     INSERT INTO sales (
-        status,
-        subtotal,
-        discount,
-        addition,
-        total,
-        idempotency_key
+        organization_id,
+        store_id,
+        number,
+        idempotency_key,
+        opened_by_membership_id
     )
-    VALUES (
-        'OPEN',
-        0,
-        0,
-        0,
-        0,
-        $1
-    )
-    ON CONFLICT (idempotency_key) DO NOTHING
+    SELECT
+        $1,
+        $2,
+        allocated_number.number,
+        $3,
+        $4
+    FROM allocated_number
+    ON CONFLICT (organization_id, store_id, idempotency_key) DO UPDATE
+    SET idempotency_key = EXCLUDED.idempotency_key
     RETURNING
         id,
+        organization_id,
+        store_id,
         number,
+        idempotency_key,
         status,
         subtotal,
         discount,
         addition,
         total,
+        opened_by_membership_id,
+        completed_by_membership_id,
+        cancelled_by_membership_id,
         opened_at,
         completed_at,
         cancelled_at,
         created_at,
-        updated_at,
-        idempotency_key
+        updated_at
 )
-SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM inserted
+SELECT id, organization_id, store_id, number, idempotency_key, status, subtotal, discount, addition, total, opened_by_membership_id, completed_by_membership_id, cancelled_by_membership_id, opened_at, completed_at, cancelled_at, created_at, updated_at FROM inserted
+UNION ALL
+SELECT id, organization_id, store_id, number, idempotency_key, status, subtotal, discount, addition, total, opened_by_membership_id, completed_by_membership_id, cancelled_by_membership_id, opened_at, completed_at, cancelled_at, created_at, updated_at FROM existing
 UNION ALL
 SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM sales
-WHERE idempotency_key = $1
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = $1
+  AND sale.store_id = $2
+  AND sale.idempotency_key = $3
+  AND NOT EXISTS (SELECT 1 FROM inserted)
+  AND NOT EXISTS (SELECT 1 FROM existing)
 LIMIT 1
 `
 
-type CreateSaleRow struct {
-	ID             pgtype.UUID
-	Number         int64
-	Status         SaleStatus
-	Subtotal       pgtype.Numeric
-	Discount       pgtype.Numeric
-	Addition       pgtype.Numeric
-	Total          pgtype.Numeric
-	OpenedAt       pgtype.Timestamptz
-	CompletedAt    pgtype.Timestamptz
-	CancelledAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	IdempotencyKey string
+type CreateSaleForStoreParams struct {
+	OrganizationID       pgtype.UUID
+	StoreID              pgtype.UUID
+	IdempotencyKey       string
+	OpenedByMembershipID pgtype.UUID
 }
 
-func (q *Queries) CreateSale(ctx context.Context, idempotencyKey string) (CreateSaleRow, error) {
-	row := q.db.QueryRow(ctx, createSale, idempotencyKey)
-	var i CreateSaleRow
+type CreateSaleForStoreRow struct {
+	ID                      pgtype.UUID
+	OrganizationID          pgtype.UUID
+	StoreID                 pgtype.UUID
+	Number                  int64
+	IdempotencyKey          string
+	Status                  SaleStatus
+	Subtotal                pgtype.Numeric
+	Discount                pgtype.Numeric
+	Addition                pgtype.Numeric
+	Total                   pgtype.Numeric
+	OpenedByMembershipID    pgtype.UUID
+	CompletedByMembershipID pgtype.UUID
+	CancelledByMembershipID pgtype.UUID
+	OpenedAt                pgtype.Timestamptz
+	CompletedAt             pgtype.Timestamptz
+	CancelledAt             pgtype.Timestamptz
+	CreatedAt               pgtype.Timestamptz
+	UpdatedAt               pgtype.Timestamptz
+}
+
+func (q *Queries) CreateSaleForStore(ctx context.Context, arg CreateSaleForStoreParams) (CreateSaleForStoreRow, error) {
+	row := q.db.QueryRow(ctx, createSaleForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.IdempotencyKey,
+		arg.OpenedByMembershipID,
+	)
+	var i CreateSaleForStoreRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.Number,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Subtotal,
 		&i.Discount,
 		&i.Addition,
 		&i.Total,
+		&i.OpenedByMembershipID,
+		&i.CompletedByMembershipID,
+		&i.CancelledByMembershipID,
 		&i.OpenedAt,
 		&i.CompletedAt,
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const createSaleItem = `-- name: CreateSaleItem :one
+const createSaleItemForStore = `-- name: CreateSaleItemForStore :one
 INSERT INTO sale_items (
+    organization_id,
+    store_id,
     sale_id,
     product_id,
     product_name,
@@ -272,10 +382,14 @@ VALUES (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9,
+    $10
 )
 RETURNING
     id,
+    organization_id,
+    store_id,
     sale_id,
     product_id,
     product_name,
@@ -287,19 +401,23 @@ RETURNING
     created_at
 `
 
-type CreateSaleItemParams struct {
-	SaleID      pgtype.UUID
-	ProductID   pgtype.UUID
-	ProductName string
-	ProductSKU  string
-	UnitPrice   pgtype.Numeric
-	Quantity    pgtype.Numeric
-	Discount    pgtype.Numeric
-	Total       pgtype.Numeric
+type CreateSaleItemForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+	ProductID      pgtype.UUID
+	ProductName    string
+	ProductSKU     string
+	UnitPrice      pgtype.Numeric
+	Quantity       pgtype.Numeric
+	Discount       pgtype.Numeric
+	Total          pgtype.Numeric
 }
 
-func (q *Queries) CreateSaleItem(ctx context.Context, arg CreateSaleItemParams) (SaleItem, error) {
-	row := q.db.QueryRow(ctx, createSaleItem,
+func (q *Queries) CreateSaleItemForStore(ctx context.Context, arg CreateSaleItemForStoreParams) (SaleItem, error) {
+	row := q.db.QueryRow(ctx, createSaleItemForStore,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.SaleID,
 		arg.ProductID,
 		arg.ProductName,
@@ -312,6 +430,8 @@ func (q *Queries) CreateSaleItem(ctx context.Context, arg CreateSaleItemParams) 
 	var i SaleItem
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.ProductID,
 		&i.ProductName,
@@ -325,33 +445,46 @@ func (q *Queries) CreateSaleItem(ctx context.Context, arg CreateSaleItemParams) 
 	return i, err
 }
 
-const deleteSaleItem = `-- name: DeleteSaleItem :one
-DELETE FROM sale_items
-WHERE sale_id = $1
-  AND id = $2
+const deleteSaleItemForStore = `-- name: DeleteSaleItemForStore :one
+DELETE FROM sale_items AS item
+WHERE item.organization_id = $1
+  AND item.store_id = $2
+  AND item.sale_id = $3
+  AND item.id = $4
 RETURNING
-    id,
-    sale_id,
-    product_id,
-    product_name,
-    product_sku,
-    unit_price,
-    quantity,
-    discount,
-    total,
-    created_at
+    item.id,
+    item.organization_id,
+    item.store_id,
+    item.sale_id,
+    item.product_id,
+    item.product_name,
+    item.product_sku,
+    item.unit_price,
+    item.quantity,
+    item.discount,
+    item.total,
+    item.created_at
 `
 
-type DeleteSaleItemParams struct {
-	SaleID pgtype.UUID
-	ID     pgtype.UUID
+type DeleteSaleItemForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) DeleteSaleItem(ctx context.Context, arg DeleteSaleItemParams) (SaleItem, error) {
-	row := q.db.QueryRow(ctx, deleteSaleItem, arg.SaleID, arg.ID)
+func (q *Queries) DeleteSaleItemForStore(ctx context.Context, arg DeleteSaleItemForStoreParams) (SaleItem, error) {
+	row := q.db.QueryRow(ctx, deleteSaleItemForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.SaleID,
+		arg.ID,
+	)
 	var i SaleItem
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.ProductID,
 		&i.ProductName,
@@ -365,91 +498,165 @@ func (q *Queries) DeleteSaleItem(ctx context.Context, arg DeleteSaleItemParams) 
 	return i, err
 }
 
-const getSaleByID = `-- name: GetSaleByID :one
+const getSaleByIDForStore = `-- name: GetSaleByIDForStore :one
 SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM sales
-WHERE id = $1
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = $1
+  AND sale.store_id = $2
+  AND sale.id = $3
 LIMIT 1
 `
 
-type GetSaleByIDRow struct {
+type GetSaleByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
 	ID             pgtype.UUID
-	Number         int64
-	Status         SaleStatus
-	Subtotal       pgtype.Numeric
-	Discount       pgtype.Numeric
-	Addition       pgtype.Numeric
-	Total          pgtype.Numeric
-	OpenedAt       pgtype.Timestamptz
-	CompletedAt    pgtype.Timestamptz
-	CancelledAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	IdempotencyKey string
 }
 
-func (q *Queries) GetSaleByID(ctx context.Context, id pgtype.UUID) (GetSaleByIDRow, error) {
-	row := q.db.QueryRow(ctx, getSaleByID, id)
-	var i GetSaleByIDRow
+func (q *Queries) GetSaleByIDForStore(ctx context.Context, arg GetSaleByIDForStoreParams) (Sale, error) {
+	row := q.db.QueryRow(ctx, getSaleByIDForStore, arg.OrganizationID, arg.StoreID, arg.ID)
+	var i Sale
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.Number,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Subtotal,
 		&i.Discount,
 		&i.Addition,
 		&i.Total,
+		&i.OpenedByMembershipID,
+		&i.CompletedByMembershipID,
+		&i.CancelledByMembershipID,
 		&i.OpenedAt,
 		&i.CompletedAt,
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const getSaleItemByID = `-- name: GetSaleItemByID :one
+const getSaleByIdempotencyKeyForStore = `-- name: GetSaleByIdempotencyKeyForStore :one
 SELECT
-    id,
-    sale_id,
-    product_id,
-    product_name,
-    product_sku,
-    unit_price,
-    quantity,
-    discount,
-    total,
-    created_at
-FROM sale_items
-WHERE sale_id = $1
-  AND id = $2
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = $1
+  AND sale.store_id = $2
+  AND sale.idempotency_key = $3
 LIMIT 1
 `
 
-type GetSaleItemByIDParams struct {
-	SaleID pgtype.UUID
-	ID     pgtype.UUID
+type GetSaleByIdempotencyKeyForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	IdempotencyKey string
 }
 
-func (q *Queries) GetSaleItemByID(ctx context.Context, arg GetSaleItemByIDParams) (SaleItem, error) {
-	row := q.db.QueryRow(ctx, getSaleItemByID, arg.SaleID, arg.ID)
+func (q *Queries) GetSaleByIdempotencyKeyForStore(ctx context.Context, arg GetSaleByIdempotencyKeyForStoreParams) (Sale, error) {
+	row := q.db.QueryRow(ctx, getSaleByIdempotencyKeyForStore, arg.OrganizationID, arg.StoreID, arg.IdempotencyKey)
+	var i Sale
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
+		&i.Number,
+		&i.IdempotencyKey,
+		&i.Status,
+		&i.Subtotal,
+		&i.Discount,
+		&i.Addition,
+		&i.Total,
+		&i.OpenedByMembershipID,
+		&i.CompletedByMembershipID,
+		&i.CancelledByMembershipID,
+		&i.OpenedAt,
+		&i.CompletedAt,
+		&i.CancelledAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getSaleItemByIDForStore = `-- name: GetSaleItemByIDForStore :one
+SELECT
+    item.id,
+    item.organization_id,
+    item.store_id,
+    item.sale_id,
+    item.product_id,
+    item.product_name,
+    item.product_sku,
+    item.unit_price,
+    item.quantity,
+    item.discount,
+    item.total,
+    item.created_at
+FROM sale_items AS item
+WHERE item.organization_id = $1
+  AND item.store_id = $2
+  AND item.sale_id = $3
+  AND item.id = $4
+LIMIT 1
+`
+
+type GetSaleItemByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) GetSaleItemByIDForStore(ctx context.Context, arg GetSaleItemByIDForStoreParams) (SaleItem, error) {
+	row := q.db.QueryRow(ctx, getSaleItemByIDForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.SaleID,
+		arg.ID,
+	)
 	var i SaleItem
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.ProductID,
 		&i.ProductName,
@@ -463,25 +670,35 @@ func (q *Queries) GetSaleItemByID(ctx context.Context, arg GetSaleItemByIDParams
 	return i, err
 }
 
-const listSaleItemsBySaleID = `-- name: ListSaleItemsBySaleID :many
+const listSaleItemsBySaleIDForStore = `-- name: ListSaleItemsBySaleIDForStore :many
 SELECT
-    id,
-    sale_id,
-    product_id,
-    product_name,
-    product_sku,
-    unit_price,
-    quantity,
-    discount,
-    total,
-    created_at
-FROM sale_items
-WHERE sale_id = $1
-ORDER BY created_at ASC, id ASC
+    item.id,
+    item.organization_id,
+    item.store_id,
+    item.sale_id,
+    item.product_id,
+    item.product_name,
+    item.product_sku,
+    item.unit_price,
+    item.quantity,
+    item.discount,
+    item.total,
+    item.created_at
+FROM sale_items AS item
+WHERE item.organization_id = $1
+  AND item.store_id = $2
+  AND item.sale_id = $3
+ORDER BY item.created_at ASC, item.id ASC
 `
 
-func (q *Queries) ListSaleItemsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]SaleItem, error) {
-	rows, err := q.db.Query(ctx, listSaleItemsBySaleID, saleID)
+type ListSaleItemsBySaleIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+}
+
+func (q *Queries) ListSaleItemsBySaleIDForStore(ctx context.Context, arg ListSaleItemsBySaleIDForStoreParams) ([]SaleItem, error) {
+	rows, err := q.db.Query(ctx, listSaleItemsBySaleIDForStore, arg.OrganizationID, arg.StoreID, arg.SaleID)
 	if err != nil {
 		return nil, err
 	}
@@ -491,6 +708,8 @@ func (q *Queries) ListSaleItemsBySaleID(ctx context.Context, saleID pgtype.UUID)
 		var i SaleItem
 		if err := rows.Scan(
 			&i.ID,
+			&i.OrganizationID,
+			&i.StoreID,
 			&i.SaleID,
 			&i.ProductID,
 			&i.ProductName,
@@ -511,76 +730,80 @@ func (q *Queries) ListSaleItemsBySaleID(ctx context.Context, saleID pgtype.UUID)
 	return items, nil
 }
 
-const listSales = `-- name: ListSales :many
+const listSalesForStore = `-- name: ListSalesForStore :many
 SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM sales
-WHERE (
-    CAST($1 AS sale_status) IS NULL
-    OR status = CAST($1 AS sale_status)
-)
-ORDER BY created_at DESC, id DESC
-LIMIT $3
-OFFSET $2
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = $1
+  AND sale.store_id = $2
+  AND (
+      CAST($3 AS sale_status) IS NULL
+      OR sale.status = CAST($3 AS sale_status)
+  )
+ORDER BY sale.created_at DESC, sale.id DESC
+LIMIT $5
+OFFSET $4
 `
 
-type ListSalesParams struct {
-	Status     NullSaleStatus
-	PageOffset int32
-	PageSize   int32
+type ListSalesForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	Status         NullSaleStatus
+	PageOffset     int32
+	PageSize       int32
 }
 
-type ListSalesRow struct {
-	ID             pgtype.UUID
-	Number         int64
-	Status         SaleStatus
-	Subtotal       pgtype.Numeric
-	Discount       pgtype.Numeric
-	Addition       pgtype.Numeric
-	Total          pgtype.Numeric
-	OpenedAt       pgtype.Timestamptz
-	CompletedAt    pgtype.Timestamptz
-	CancelledAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	IdempotencyKey string
-}
-
-func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]ListSalesRow, error) {
-	rows, err := q.db.Query(ctx, listSales, arg.Status, arg.PageOffset, arg.PageSize)
+func (q *Queries) ListSalesForStore(ctx context.Context, arg ListSalesForStoreParams) ([]Sale, error) {
+	rows, err := q.db.Query(ctx, listSalesForStore,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.Status,
+		arg.PageOffset,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ListSalesRow{}
+	items := []Sale{}
 	for rows.Next() {
-		var i ListSalesRow
+		var i Sale
 		if err := rows.Scan(
 			&i.ID,
+			&i.OrganizationID,
+			&i.StoreID,
 			&i.Number,
+			&i.IdempotencyKey,
 			&i.Status,
 			&i.Subtotal,
 			&i.Discount,
 			&i.Addition,
 			&i.Total,
+			&i.OpenedByMembershipID,
+			&i.CompletedByMembershipID,
+			&i.CancelledByMembershipID,
 			&i.OpenedAt,
 			&i.CompletedAt,
 			&i.CancelledAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.IdempotencyKey,
 		); err != nil {
 			return nil, err
 		}
@@ -592,179 +815,191 @@ func (q *Queries) ListSales(ctx context.Context, arg ListSalesParams) ([]ListSal
 	return items, nil
 }
 
-const lockSaleByID = `-- name: LockSaleByID :one
+const lockSaleByIDForStore = `-- name: LockSaleByIDForStore :one
 SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM sales
-WHERE id = $1
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = $1
+  AND sale.store_id = $2
+  AND sale.id = $3
 FOR UPDATE
 `
 
-type LockSaleByIDRow struct {
+type LockSaleByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
 	ID             pgtype.UUID
-	Number         int64
-	Status         SaleStatus
-	Subtotal       pgtype.Numeric
-	Discount       pgtype.Numeric
-	Addition       pgtype.Numeric
-	Total          pgtype.Numeric
-	OpenedAt       pgtype.Timestamptz
-	CompletedAt    pgtype.Timestamptz
-	CancelledAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	IdempotencyKey string
 }
 
-func (q *Queries) LockSaleByID(ctx context.Context, id pgtype.UUID) (LockSaleByIDRow, error) {
-	row := q.db.QueryRow(ctx, lockSaleByID, id)
-	var i LockSaleByIDRow
+func (q *Queries) LockSaleByIDForStore(ctx context.Context, arg LockSaleByIDForStoreParams) (Sale, error) {
+	row := q.db.QueryRow(ctx, lockSaleByIDForStore, arg.OrganizationID, arg.StoreID, arg.ID)
+	var i Sale
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.Number,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Subtotal,
 		&i.Discount,
 		&i.Addition,
 		&i.Total,
+		&i.OpenedByMembershipID,
+		&i.CompletedByMembershipID,
+		&i.CancelledByMembershipID,
 		&i.OpenedAt,
 		&i.CompletedAt,
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const recalculateSaleTotals = `-- name: RecalculateSaleTotals :one
-UPDATE sales
+const recalculateSaleTotalsForStore = `-- name: RecalculateSaleTotalsForStore :one
+UPDATE sales AS sale
 SET
     subtotal = $1,
     discount = $2,
     addition = $3,
     total = $4
-WHERE id = $5
-  AND status = 'OPEN'
+WHERE sale.organization_id = $5
+  AND sale.store_id = $6
+  AND sale.id = $7
+  AND sale.status = 'OPEN'
 RETURNING
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
 `
 
-type RecalculateSaleTotalsParams struct {
-	Subtotal pgtype.Numeric
-	Discount pgtype.Numeric
-	Addition pgtype.Numeric
-	Total    pgtype.Numeric
-	ID       pgtype.UUID
-}
-
-type RecalculateSaleTotalsRow struct {
-	ID             pgtype.UUID
-	Number         int64
-	Status         SaleStatus
+type RecalculateSaleTotalsForStoreParams struct {
 	Subtotal       pgtype.Numeric
 	Discount       pgtype.Numeric
 	Addition       pgtype.Numeric
 	Total          pgtype.Numeric
-	OpenedAt       pgtype.Timestamptz
-	CompletedAt    pgtype.Timestamptz
-	CancelledAt    pgtype.Timestamptz
-	CreatedAt      pgtype.Timestamptz
-	UpdatedAt      pgtype.Timestamptz
-	IdempotencyKey string
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) RecalculateSaleTotals(ctx context.Context, arg RecalculateSaleTotalsParams) (RecalculateSaleTotalsRow, error) {
-	row := q.db.QueryRow(ctx, recalculateSaleTotals,
+func (q *Queries) RecalculateSaleTotalsForStore(ctx context.Context, arg RecalculateSaleTotalsForStoreParams) (Sale, error) {
+	row := q.db.QueryRow(ctx, recalculateSaleTotalsForStore,
 		arg.Subtotal,
 		arg.Discount,
 		arg.Addition,
 		arg.Total,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.ID,
 	)
-	var i RecalculateSaleTotalsRow
+	var i Sale
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.Number,
+		&i.IdempotencyKey,
 		&i.Status,
 		&i.Subtotal,
 		&i.Discount,
 		&i.Addition,
 		&i.Total,
+		&i.OpenedByMembershipID,
+		&i.CompletedByMembershipID,
+		&i.CancelledByMembershipID,
 		&i.OpenedAt,
 		&i.CompletedAt,
 		&i.CancelledAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.IdempotencyKey,
 	)
 	return i, err
 }
 
-const updateSaleItem = `-- name: UpdateSaleItem :one
-UPDATE sale_items
+const updateSaleItemForStore = `-- name: UpdateSaleItemForStore :one
+UPDATE sale_items AS item
 SET
     quantity = $1,
     discount = $2,
     total = $3
-WHERE sale_id = $4
-  AND id = $5
+WHERE item.organization_id = $4
+  AND item.store_id = $5
+  AND item.sale_id = $6
+  AND item.id = $7
 RETURNING
-    id,
-    sale_id,
-    product_id,
-    product_name,
-    product_sku,
-    unit_price,
-    quantity,
-    discount,
-    total,
-    created_at
+    item.id,
+    item.organization_id,
+    item.store_id,
+    item.sale_id,
+    item.product_id,
+    item.product_name,
+    item.product_sku,
+    item.unit_price,
+    item.quantity,
+    item.discount,
+    item.total,
+    item.created_at
 `
 
-type UpdateSaleItemParams struct {
-	Quantity pgtype.Numeric
-	Discount pgtype.Numeric
-	Total    pgtype.Numeric
-	SaleID   pgtype.UUID
-	ID       pgtype.UUID
+type UpdateSaleItemForStoreParams struct {
+	Quantity       pgtype.Numeric
+	Discount       pgtype.Numeric
+	Total          pgtype.Numeric
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+	ID             pgtype.UUID
 }
 
-func (q *Queries) UpdateSaleItem(ctx context.Context, arg UpdateSaleItemParams) (SaleItem, error) {
-	row := q.db.QueryRow(ctx, updateSaleItem,
+func (q *Queries) UpdateSaleItemForStore(ctx context.Context, arg UpdateSaleItemForStoreParams) (SaleItem, error) {
+	row := q.db.QueryRow(ctx, updateSaleItemForStore,
 		arg.Quantity,
 		arg.Discount,
 		arg.Total,
+		arg.OrganizationID,
+		arg.StoreID,
 		arg.SaleID,
 		arg.ID,
 	)
 	var i SaleItem
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.SaleID,
 		&i.ProductID,
 		&i.ProductName,

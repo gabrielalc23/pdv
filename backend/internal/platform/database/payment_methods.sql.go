@@ -11,33 +11,41 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const activatePaymentMethod = `-- name: ActivatePaymentMethod :one
-UPDATE payment_methods
+const activatePaymentMethodForOrganization = `-- name: ActivatePaymentMethodForOrganization :one
+UPDATE payment_methods AS method
 SET is_active = TRUE
-WHERE id = $1
+WHERE method.organization_id = $1
+  AND method.id = $2
 RETURNING
-    id,
-    code,
-    name,
-    kind,
-    provider,
-    allows_change,
-    requires_external_reference,
-    allows_installments,
-    max_installments,
-    fee_percentage,
-    settlement_days,
-    is_active,
-    sort_order,
-    created_at,
-    updated_at
+    method.id,
+    method.organization_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    method.sort_order,
+    method.created_at,
+    method.updated_at
 `
 
-func (q *Queries) ActivatePaymentMethod(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
-	row := q.db.QueryRow(ctx, activatePaymentMethod, id)
+type ActivatePaymentMethodForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) ActivatePaymentMethodForOrganization(ctx context.Context, arg ActivatePaymentMethodForOrganizationParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, activatePaymentMethodForOrganization, arg.OrganizationID, arg.ID)
 	var i PaymentMethod
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.Code,
 		&i.Name,
 		&i.Kind,
@@ -56,8 +64,103 @@ func (q *Queries) ActivatePaymentMethod(ctx context.Context, id pgtype.UUID) (Pa
 	return i, err
 }
 
-const createPaymentMethod = `-- name: CreatePaymentMethod :one
+const copyActivePaymentMethodsToStore = `-- name: CopyActivePaymentMethodsToStore :many
+INSERT INTO store_payment_methods (organization_id, store_id, payment_method_id, is_active, sort_order)
+SELECT pm.organization_id, $1, pm.id, TRUE, pm.sort_order
+FROM payment_methods AS pm
+WHERE pm.organization_id=$2 AND pm.is_active
+ON CONFLICT (organization_id, store_id, payment_method_id) DO UPDATE
+SET is_active=EXCLUDED.is_active, sort_order=EXCLUDED.sort_order
+RETURNING organization_id, store_id, payment_method_id, is_active, sort_order, created_at, updated_at
+`
+
+type CopyActivePaymentMethodsToStoreParams struct {
+	StoreID        pgtype.UUID
+	OrganizationID pgtype.UUID
+}
+
+func (q *Queries) CopyActivePaymentMethodsToStore(ctx context.Context, arg CopyActivePaymentMethodsToStoreParams) ([]StorePaymentMethod, error) {
+	rows, err := q.db.Query(ctx, copyActivePaymentMethodsToStore, arg.StoreID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []StorePaymentMethod{}
+	for rows.Next() {
+		var i StorePaymentMethod
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.StoreID,
+			&i.PaymentMethodID,
+			&i.IsActive,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const countActivePaymentMethodsForOrganization = `-- name: CountActivePaymentMethodsForOrganization :one
+SELECT COUNT(*)
+FROM payment_methods AS method
+WHERE method.organization_id = $1
+  AND method.is_active = TRUE
+`
+
+func (q *Queries) CountActivePaymentMethodsForOrganization(ctx context.Context, organizationID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countActivePaymentMethodsForOrganization, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countOperationalPaymentMethodsForStore = `-- name: CountOperationalPaymentMethodsForStore :one
+SELECT COUNT(*)
+FROM store_payment_methods AS binding
+INNER JOIN payment_methods AS method
+    ON method.organization_id = binding.organization_id
+   AND method.id = binding.payment_method_id
+WHERE binding.organization_id = $1
+  AND binding.store_id = $2
+  AND binding.is_active = TRUE
+  AND method.is_active = TRUE
+`
+
+type CountOperationalPaymentMethodsForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+}
+
+func (q *Queries) CountOperationalPaymentMethodsForStore(ctx context.Context, arg CountOperationalPaymentMethodsForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOperationalPaymentMethodsForStore, arg.OrganizationID, arg.StoreID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const countPaymentMethodsForOrganization = `-- name: CountPaymentMethodsForOrganization :one
+SELECT COUNT(*)
+FROM payment_methods AS method
+WHERE method.organization_id = $1
+`
+
+func (q *Queries) CountPaymentMethodsForOrganization(ctx context.Context, organizationID pgtype.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countPaymentMethodsForOrganization, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const createPaymentMethodForOrganization = `-- name: CreatePaymentMethodForOrganization :one
 INSERT INTO payment_methods (
+    organization_id,
     code,
     name,
     kind,
@@ -83,10 +186,12 @@ VALUES (
     $9,
     $10,
     $11,
-    $12
+    $12,
+    $13
 )
 RETURNING
     id,
+    organization_id,
     code,
     name,
     kind,
@@ -103,7 +208,8 @@ RETURNING
     updated_at
 `
 
-type CreatePaymentMethodParams struct {
+type CreatePaymentMethodForOrganizationParams struct {
+	OrganizationID            pgtype.UUID
 	Code                      string
 	Name                      string
 	Kind                      PaymentMethodKind
@@ -118,8 +224,9 @@ type CreatePaymentMethodParams struct {
 	SortOrder                 int32
 }
 
-func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMethodParams) (PaymentMethod, error) {
-	row := q.db.QueryRow(ctx, createPaymentMethod,
+func (q *Queries) CreatePaymentMethodForOrganization(ctx context.Context, arg CreatePaymentMethodForOrganizationParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, createPaymentMethodForOrganization,
+		arg.OrganizationID,
 		arg.Code,
 		arg.Name,
 		arg.Kind,
@@ -136,6 +243,7 @@ func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMeth
 	var i PaymentMethod
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.Code,
 		&i.Name,
 		&i.Kind,
@@ -154,33 +262,41 @@ func (q *Queries) CreatePaymentMethod(ctx context.Context, arg CreatePaymentMeth
 	return i, err
 }
 
-const deactivatePaymentMethod = `-- name: DeactivatePaymentMethod :one
-UPDATE payment_methods
+const deactivatePaymentMethodForOrganization = `-- name: DeactivatePaymentMethodForOrganization :one
+UPDATE payment_methods AS method
 SET is_active = FALSE
-WHERE id = $1
+WHERE method.organization_id = $1
+  AND method.id = $2
 RETURNING
-    id,
-    code,
-    name,
-    kind,
-    provider,
-    allows_change,
-    requires_external_reference,
-    allows_installments,
-    max_installments,
-    fee_percentage,
-    settlement_days,
-    is_active,
-    sort_order,
-    created_at,
-    updated_at
+    method.id,
+    method.organization_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    method.sort_order,
+    method.created_at,
+    method.updated_at
 `
 
-func (q *Queries) DeactivatePaymentMethod(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
-	row := q.db.QueryRow(ctx, deactivatePaymentMethod, id)
+type DeactivatePaymentMethodForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) DeactivatePaymentMethodForOrganization(ctx context.Context, arg DeactivatePaymentMethodForOrganizationParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, deactivatePaymentMethodForOrganization, arg.OrganizationID, arg.ID)
 	var i PaymentMethod
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.Code,
 		&i.Name,
 		&i.Kind,
@@ -199,33 +315,70 @@ func (q *Queries) DeactivatePaymentMethod(ctx context.Context, id pgtype.UUID) (
 	return i, err
 }
 
-const getPaymentMethodByCode = `-- name: GetPaymentMethodByCode :one
+const getOperationalPaymentMethodByIDForStore = `-- name: GetOperationalPaymentMethodByIDForStore :one
 SELECT
-    id,
-    code,
-    name,
-    kind,
-    provider,
-    allows_change,
-    requires_external_reference,
-    allows_installments,
-    max_installments,
-    fee_percentage,
-    settlement_days,
-    is_active,
-    sort_order,
-    created_at,
-    updated_at
-FROM payment_methods
-WHERE code = $1
+    method.id,
+    method.organization_id,
+    binding.store_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    binding.sort_order AS store_sort_order,
+    method.created_at,
+    method.updated_at
+FROM store_payment_methods AS binding
+INNER JOIN payment_methods AS method
+    ON method.organization_id = binding.organization_id
+   AND method.id = binding.payment_method_id
+WHERE binding.organization_id = $1
+  AND binding.store_id = $2
+  AND binding.payment_method_id = $3
+  AND binding.is_active = TRUE
+  AND method.is_active = TRUE
 LIMIT 1
 `
 
-func (q *Queries) GetPaymentMethodByCode(ctx context.Context, code string) (PaymentMethod, error) {
-	row := q.db.QueryRow(ctx, getPaymentMethodByCode, code)
-	var i PaymentMethod
+type GetOperationalPaymentMethodByIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	ID             pgtype.UUID
+}
+
+type GetOperationalPaymentMethodByIDForStoreRow struct {
+	ID                        pgtype.UUID
+	OrganizationID            pgtype.UUID
+	StoreID                   pgtype.UUID
+	Code                      string
+	Name                      string
+	Kind                      PaymentMethodKind
+	Provider                  pgtype.Text
+	AllowsChange              bool
+	RequiresExternalReference bool
+	AllowsInstallments        bool
+	MaxInstallments           int16
+	FeePercentage             pgtype.Numeric
+	SettlementDays            int32
+	IsActive                  bool
+	StoreSortOrder            int32
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+func (q *Queries) GetOperationalPaymentMethodByIDForStore(ctx context.Context, arg GetOperationalPaymentMethodByIDForStoreParams) (GetOperationalPaymentMethodByIDForStoreRow, error) {
+	row := q.db.QueryRow(ctx, getOperationalPaymentMethodByIDForStore, arg.OrganizationID, arg.StoreID, arg.ID)
+	var i GetOperationalPaymentMethodByIDForStoreRow
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
+		&i.StoreID,
 		&i.Code,
 		&i.Name,
 		&i.Kind,
@@ -237,40 +390,48 @@ func (q *Queries) GetPaymentMethodByCode(ctx context.Context, code string) (Paym
 		&i.FeePercentage,
 		&i.SettlementDays,
 		&i.IsActive,
-		&i.SortOrder,
+		&i.StoreSortOrder,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const getPaymentMethodByID = `-- name: GetPaymentMethodByID :one
+const getPaymentMethodByCodeForOrganization = `-- name: GetPaymentMethodByCodeForOrganization :one
 SELECT
-    id,
-    code,
-    name,
-    kind,
-    provider,
-    allows_change,
-    requires_external_reference,
-    allows_installments,
-    max_installments,
-    fee_percentage,
-    settlement_days,
-    is_active,
-    sort_order,
-    created_at,
-    updated_at
-FROM payment_methods
-WHERE id = $1
+    method.id,
+    method.organization_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    method.sort_order,
+    method.created_at,
+    method.updated_at
+FROM payment_methods AS method
+WHERE method.organization_id = $1
+  AND method.code = $2
 LIMIT 1
 `
 
-func (q *Queries) GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (PaymentMethod, error) {
-	row := q.db.QueryRow(ctx, getPaymentMethodByID, id)
+type GetPaymentMethodByCodeForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	Code           string
+}
+
+func (q *Queries) GetPaymentMethodByCodeForOrganization(ctx context.Context, arg GetPaymentMethodByCodeForOrganizationParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, getPaymentMethodByCodeForOrganization, arg.OrganizationID, arg.Code)
 	var i PaymentMethod
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.Code,
 		&i.Name,
 		&i.Kind,
@@ -289,30 +450,113 @@ func (q *Queries) GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (Pay
 	return i, err
 }
 
-const listActivePaymentMethods = `-- name: ListActivePaymentMethods :many
+const getPaymentMethodByIDForOrganization = `-- name: GetPaymentMethodByIDForOrganization :one
 SELECT
-    id,
-    code,
-    name,
-    kind,
-    provider,
-    allows_change,
-    requires_external_reference,
-    allows_installments,
-    max_installments,
-    fee_percentage,
-    settlement_days,
-    is_active,
-    sort_order,
-    created_at,
-    updated_at
-FROM payment_methods
-WHERE is_active = TRUE
-ORDER BY sort_order, name
+    method.id,
+    method.organization_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    method.sort_order,
+    method.created_at,
+    method.updated_at
+FROM payment_methods AS method
+WHERE method.organization_id = $1
+  AND method.id = $2
+LIMIT 1
 `
 
-func (q *Queries) ListActivePaymentMethods(ctx context.Context) ([]PaymentMethod, error) {
-	rows, err := q.db.Query(ctx, listActivePaymentMethods)
+type GetPaymentMethodByIDForOrganizationParams struct {
+	OrganizationID pgtype.UUID
+	ID             pgtype.UUID
+}
+
+func (q *Queries) GetPaymentMethodByIDForOrganization(ctx context.Context, arg GetPaymentMethodByIDForOrganizationParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, getPaymentMethodByIDForOrganization, arg.OrganizationID, arg.ID)
+	var i PaymentMethod
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Code,
+		&i.Name,
+		&i.Kind,
+		&i.Provider,
+		&i.AllowsChange,
+		&i.RequiresExternalReference,
+		&i.AllowsInstallments,
+		&i.MaxInstallments,
+		&i.FeePercentage,
+		&i.SettlementDays,
+		&i.IsActive,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getStorePaymentMethodForOrganization = `-- name: GetStorePaymentMethodForOrganization :one
+SELECT organization_id, store_id, payment_method_id, is_active, sort_order, created_at, updated_at
+FROM store_payment_methods
+WHERE organization_id=$1
+  AND store_id=$2 AND payment_method_id=$3
+`
+
+type GetStorePaymentMethodForOrganizationParams struct {
+	OrganizationID  pgtype.UUID
+	StoreID         pgtype.UUID
+	PaymentMethodID pgtype.UUID
+}
+
+func (q *Queries) GetStorePaymentMethodForOrganization(ctx context.Context, arg GetStorePaymentMethodForOrganizationParams) (StorePaymentMethod, error) {
+	row := q.db.QueryRow(ctx, getStorePaymentMethodForOrganization, arg.OrganizationID, arg.StoreID, arg.PaymentMethodID)
+	var i StorePaymentMethod
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
+		&i.PaymentMethodID,
+		&i.IsActive,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const listActivePaymentMethodsForOrganization = `-- name: ListActivePaymentMethodsForOrganization :many
+SELECT
+    method.id,
+    method.organization_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    method.sort_order,
+    method.created_at,
+    method.updated_at
+FROM payment_methods AS method
+WHERE method.organization_id = $1
+  AND method.is_active = TRUE
+ORDER BY method.sort_order, method.name, method.id
+`
+
+func (q *Queries) ListActivePaymentMethodsForOrganization(ctx context.Context, organizationID pgtype.UUID) ([]PaymentMethod, error) {
+	rows, err := q.db.Query(ctx, listActivePaymentMethodsForOrganization, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -322,6 +566,7 @@ func (q *Queries) ListActivePaymentMethods(ctx context.Context) ([]PaymentMethod
 		var i PaymentMethod
 		if err := rows.Scan(
 			&i.ID,
+			&i.OrganizationID,
 			&i.Code,
 			&i.Name,
 			&i.Kind,
@@ -347,29 +592,124 @@ func (q *Queries) ListActivePaymentMethods(ctx context.Context) ([]PaymentMethod
 	return items, nil
 }
 
-const listPaymentMethods = `-- name: ListPaymentMethods :many
+const listOperationalPaymentMethodsForStore = `-- name: ListOperationalPaymentMethodsForStore :many
 SELECT
-    id,
-    code,
-    name,
-    kind,
-    provider,
-    allows_change,
-    requires_external_reference,
-    allows_installments,
-    max_installments,
-    fee_percentage,
-    settlement_days,
-    is_active,
-    sort_order,
-    created_at,
-    updated_at
-FROM payment_methods
-ORDER BY sort_order, name
+    method.id,
+    method.organization_id,
+    binding.store_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    binding.sort_order AS store_sort_order,
+    method.created_at,
+    method.updated_at
+FROM store_payment_methods AS binding
+INNER JOIN payment_methods AS method
+    ON method.organization_id = binding.organization_id
+   AND method.id = binding.payment_method_id
+WHERE binding.organization_id = $1
+  AND binding.store_id = $2
+  AND binding.is_active = TRUE
+  AND method.is_active = TRUE
+ORDER BY binding.sort_order, method.name, method.id
 `
 
-func (q *Queries) ListPaymentMethods(ctx context.Context) ([]PaymentMethod, error) {
-	rows, err := q.db.Query(ctx, listPaymentMethods)
+type ListOperationalPaymentMethodsForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+}
+
+type ListOperationalPaymentMethodsForStoreRow struct {
+	ID                        pgtype.UUID
+	OrganizationID            pgtype.UUID
+	StoreID                   pgtype.UUID
+	Code                      string
+	Name                      string
+	Kind                      PaymentMethodKind
+	Provider                  pgtype.Text
+	AllowsChange              bool
+	RequiresExternalReference bool
+	AllowsInstallments        bool
+	MaxInstallments           int16
+	FeePercentage             pgtype.Numeric
+	SettlementDays            int32
+	IsActive                  bool
+	StoreSortOrder            int32
+	CreatedAt                 pgtype.Timestamptz
+	UpdatedAt                 pgtype.Timestamptz
+}
+
+func (q *Queries) ListOperationalPaymentMethodsForStore(ctx context.Context, arg ListOperationalPaymentMethodsForStoreParams) ([]ListOperationalPaymentMethodsForStoreRow, error) {
+	rows, err := q.db.Query(ctx, listOperationalPaymentMethodsForStore, arg.OrganizationID, arg.StoreID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListOperationalPaymentMethodsForStoreRow{}
+	for rows.Next() {
+		var i ListOperationalPaymentMethodsForStoreRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.StoreID,
+			&i.Code,
+			&i.Name,
+			&i.Kind,
+			&i.Provider,
+			&i.AllowsChange,
+			&i.RequiresExternalReference,
+			&i.AllowsInstallments,
+			&i.MaxInstallments,
+			&i.FeePercentage,
+			&i.SettlementDays,
+			&i.IsActive,
+			&i.StoreSortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentMethodsForOrganization = `-- name: ListPaymentMethodsForOrganization :many
+SELECT
+    method.id,
+    method.organization_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    method.sort_order,
+    method.created_at,
+    method.updated_at
+FROM payment_methods AS method
+WHERE method.organization_id = $1
+ORDER BY method.sort_order, method.name, method.id
+`
+
+func (q *Queries) ListPaymentMethodsForOrganization(ctx context.Context, organizationID pgtype.UUID) ([]PaymentMethod, error) {
+	rows, err := q.db.Query(ctx, listPaymentMethodsForOrganization, organizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -379,6 +719,7 @@ func (q *Queries) ListPaymentMethods(ctx context.Context) ([]PaymentMethod, erro
 		var i PaymentMethod
 		if err := rows.Scan(
 			&i.ID,
+			&i.OrganizationID,
 			&i.Code,
 			&i.Name,
 			&i.Kind,
@@ -404,8 +745,69 @@ func (q *Queries) ListPaymentMethods(ctx context.Context) ([]PaymentMethod, erro
 	return items, nil
 }
 
-const updatePaymentMethod = `-- name: UpdatePaymentMethod :one
-UPDATE payment_methods
+const listStorePaymentMethods = `-- name: ListStorePaymentMethods :many
+SELECT spm.organization_id, spm.store_id, spm.payment_method_id, spm.is_active,
+       spm.sort_order, spm.created_at, spm.updated_at,
+       pm.code, pm.name, pm.kind, pm.is_active AS organization_active
+FROM store_payment_methods spm
+JOIN payment_methods pm ON pm.organization_id=spm.organization_id AND pm.id=spm.payment_method_id
+WHERE spm.organization_id=$1 AND spm.store_id=$2
+ORDER BY spm.sort_order, pm.name, pm.id
+`
+
+type ListStorePaymentMethodsParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+}
+
+type ListStorePaymentMethodsRow struct {
+	OrganizationID     pgtype.UUID
+	StoreID            pgtype.UUID
+	PaymentMethodID    pgtype.UUID
+	IsActive           bool
+	SortOrder          int32
+	CreatedAt          pgtype.Timestamptz
+	UpdatedAt          pgtype.Timestamptz
+	Code               string
+	Name               string
+	Kind               PaymentMethodKind
+	OrganizationActive bool
+}
+
+func (q *Queries) ListStorePaymentMethods(ctx context.Context, arg ListStorePaymentMethodsParams) ([]ListStorePaymentMethodsRow, error) {
+	rows, err := q.db.Query(ctx, listStorePaymentMethods, arg.OrganizationID, arg.StoreID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStorePaymentMethodsRow{}
+	for rows.Next() {
+		var i ListStorePaymentMethodsRow
+		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.StoreID,
+			&i.PaymentMethodID,
+			&i.IsActive,
+			&i.SortOrder,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Code,
+			&i.Name,
+			&i.Kind,
+			&i.OrganizationActive,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const updatePaymentMethodForOrganization = `-- name: UpdatePaymentMethodForOrganization :one
+UPDATE payment_methods AS method
 SET
     code = $1,
     name = $2,
@@ -417,28 +819,29 @@ SET
     max_installments = $8,
     fee_percentage = $9,
     settlement_days = $10,
-    is_active = $11,
-    sort_order = $12
-WHERE id = $13
+    sort_order = $11
+WHERE method.organization_id = $12
+  AND method.id = $13
 RETURNING
-    id,
-    code,
-    name,
-    kind,
-    provider,
-    allows_change,
-    requires_external_reference,
-    allows_installments,
-    max_installments,
-    fee_percentage,
-    settlement_days,
-    is_active,
-    sort_order,
-    created_at,
-    updated_at
+    method.id,
+    method.organization_id,
+    method.code,
+    method.name,
+    method.kind,
+    method.provider,
+    method.allows_change,
+    method.requires_external_reference,
+    method.allows_installments,
+    method.max_installments,
+    method.fee_percentage,
+    method.settlement_days,
+    method.is_active,
+    method.sort_order,
+    method.created_at,
+    method.updated_at
 `
 
-type UpdatePaymentMethodParams struct {
+type UpdatePaymentMethodForOrganizationParams struct {
 	Code                      string
 	Name                      string
 	Kind                      PaymentMethodKind
@@ -449,13 +852,13 @@ type UpdatePaymentMethodParams struct {
 	MaxInstallments           int16
 	FeePercentage             pgtype.Numeric
 	SettlementDays            int32
-	IsActive                  bool
 	SortOrder                 int32
+	OrganizationID            pgtype.UUID
 	ID                        pgtype.UUID
 }
 
-func (q *Queries) UpdatePaymentMethod(ctx context.Context, arg UpdatePaymentMethodParams) (PaymentMethod, error) {
-	row := q.db.QueryRow(ctx, updatePaymentMethod,
+func (q *Queries) UpdatePaymentMethodForOrganization(ctx context.Context, arg UpdatePaymentMethodForOrganizationParams) (PaymentMethod, error) {
+	row := q.db.QueryRow(ctx, updatePaymentMethodForOrganization,
 		arg.Code,
 		arg.Name,
 		arg.Kind,
@@ -466,13 +869,14 @@ func (q *Queries) UpdatePaymentMethod(ctx context.Context, arg UpdatePaymentMeth
 		arg.MaxInstallments,
 		arg.FeePercentage,
 		arg.SettlementDays,
-		arg.IsActive,
 		arg.SortOrder,
+		arg.OrganizationID,
 		arg.ID,
 	)
 	var i PaymentMethod
 	err := row.Scan(
 		&i.ID,
+		&i.OrganizationID,
 		&i.Code,
 		&i.Name,
 		&i.Kind,
@@ -483,6 +887,64 @@ func (q *Queries) UpdatePaymentMethod(ctx context.Context, arg UpdatePaymentMeth
 		&i.MaxInstallments,
 		&i.FeePercentage,
 		&i.SettlementDays,
+		&i.IsActive,
+		&i.SortOrder,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const upsertStorePaymentMethod = `-- name: UpsertStorePaymentMethod :one
+INSERT INTO store_payment_methods (
+    organization_id,
+    store_id,
+    payment_method_id,
+    is_active,
+    sort_order
+)
+VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5
+)
+ON CONFLICT (organization_id, store_id, payment_method_id)
+DO UPDATE SET
+    is_active = EXCLUDED.is_active,
+    sort_order = EXCLUDED.sort_order
+RETURNING
+    organization_id,
+    store_id,
+    payment_method_id,
+    is_active,
+    sort_order,
+    created_at,
+    updated_at
+`
+
+type UpsertStorePaymentMethodParams struct {
+	OrganizationID  pgtype.UUID
+	StoreID         pgtype.UUID
+	PaymentMethodID pgtype.UUID
+	IsActive        bool
+	SortOrder       int32
+}
+
+func (q *Queries) UpsertStorePaymentMethod(ctx context.Context, arg UpsertStorePaymentMethodParams) (StorePaymentMethod, error) {
+	row := q.db.QueryRow(ctx, upsertStorePaymentMethod,
+		arg.OrganizationID,
+		arg.StoreID,
+		arg.PaymentMethodID,
+		arg.IsActive,
+		arg.SortOrder,
+	)
+	var i StorePaymentMethod
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.StoreID,
+		&i.PaymentMethodID,
 		&i.IsActive,
 		&i.SortOrder,
 		&i.CreatedAt,

@@ -1,10 +1,14 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"log"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,32 +17,46 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gabrielalc23/pdv/internal/catalog"
-	"github.com/gabrielalc23/pdv/internal/checkout"
-	"github.com/gabrielalc23/pdv/internal/fiscal"
-	"github.com/gabrielalc23/pdv/internal/inventory"
-	"github.com/gabrielalc23/pdv/internal/payments"
+	"github.com/gabrielalc23/pdv/internal/app"
+	authmodule "github.com/gabrielalc23/pdv/internal/auth"
+	"github.com/gabrielalc23/pdv/internal/platform/cookie"
+	"github.com/gabrielalc23/pdv/internal/platform/csrf"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
-	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
-	"github.com/gabrielalc23/pdv/internal/products"
-	"github.com/gabrielalc23/pdv/internal/receipt"
-	"github.com/gabrielalc23/pdv/internal/sales"
+	"github.com/gabrielalc23/pdv/internal/platform/mailer"
+	"github.com/gabrielalc23/pdv/internal/platform/password"
+	"github.com/gabrielalc23/pdv/internal/platform/ratelimit"
+	"github.com/gabrielalc23/pdv/internal/platform/requestmeta"
+	jwt "github.com/gabrielalc23/pdv/internal/platform/token/jwt"
+	"github.com/gabrielalc23/pdv/internal/platform/valkey"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-var baseURL string
+var (
+	baseURL          string
+	testOrgID        string
+	testStoreID      string
+	testMembershipID string
+	accessToken      string
+	testPool         *pgxpool.Pool
+	testStore        *database.PostgresStore
+	testValkey       *valkey.Client
+)
 
 func TestMain(m *testing.M) {
 	dsn := os.Getenv("DATABASE_URL")
 	if dsn == "" {
-		dsn = "postgres://pdv:pdv@localhost:5432/pdv?sslmode=disable"
+		dsn = "postgres://pdv:pdv@localhost:5433/pdv?sslmode=disable"
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	if !tryConnect(ctx, dsn) {
+	valkeyAddr := os.Getenv("VALKEY_ADDR")
+	if valkeyAddr == "" {
+		valkeyAddr = "localhost:6380"
+	}
+	if !tryConnect(ctx, dsn) || !tryValkey(ctx, valkeyAddr) {
 		startDeps(ctx, dsn)
 	}
 
@@ -51,16 +69,26 @@ func TestMain(m *testing.M) {
 	pool.Close()
 
 	testDSN := replaceDBName(dsn, testDBName)
-	testPool := mustConnect(ctx, testDSN)
+	testPool = mustConnect(ctx, testDSN)
 	defer testPool.Close()
 
 	runMigrations(ctx, testPool)
-	seedPaymentMethods(ctx, testPool)
+	testOrgID, testStoreID, testMembershipID = seedTenantData(ctx, testPool)
 
 	store := database.NewStore(testPool)
+	testStore = store
 	lis := mustListen()
 	baseURL = "http://" + lis.Addr().String()
-	server := startServer(store, lis.Addr().String())
+	vk, err := valkey.NewClient(valkey.Config{Addr: valkeyAddr, DB: 15})
+	if err != nil {
+		log.Fatalf("valkey: %v", err)
+	}
+	defer vk.Close()
+	testValkey = vk
+	if _, err := vk.Do(ctx, vk.B().Flushdb().Build()); err != nil {
+		log.Fatalf("flush isolated e2e valkey database: %v", err)
+	}
+	server := startServer(store, vk, lis.Addr().String())
 
 	go func() {
 		if err := server.Serve(lis); err != nil && err != http.ErrServerClosed {
@@ -69,6 +97,8 @@ func TestMain(m *testing.M) {
 	}()
 
 	waitForReady(ctx)
+
+	accessToken = loginAndGetStoreToken(ctx)
 
 	code := m.Run()
 
@@ -129,7 +159,7 @@ func tryConnect(ctx context.Context, dsn string) bool {
 func startDeps(ctx context.Context, dsn string) {
 	cmd := exec.CommandContext(ctx,
 		"docker", "compose",
-		"-f", "../docker-compose.test.yml",
+		"-f", "../../docker-compose.test.yml",
 		"up", "-d",
 	)
 	out, err := cmd.CombinedOutput()
@@ -141,9 +171,24 @@ func startDeps(ctx context.Context, dsn string) {
 		if tryConnect(ctx, dsn) {
 			return
 		}
-		time.Sleep(time.Second)
+		timer := time.NewTimer(time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			log.Fatal("dependency startup cancelled")
+		case <-timer.C:
+		}
 	}
 	log.Fatal("postgres not ready after 30s")
+}
+
+func tryValkey(ctx context.Context, addr string) bool {
+	client, err := valkey.NewClient(valkey.Config{Addr: addr, DB: 15})
+	if err != nil {
+		return false
+	}
+	defer client.Close()
+	return client.Ping(ctx) == nil
 }
 
 func mustConnect(ctx context.Context, dsn string) *pgxpool.Pool {
@@ -204,45 +249,115 @@ func runMigrations(ctx context.Context, pool *pgxpool.Pool) {
 	}
 }
 
-func seedPaymentMethods(ctx context.Context, pool *pgxpool.Pool) {
-	conn, err := pool.Acquire(ctx)
+
+
+func seedTenantData(ctx context.Context, pool *pgxpool.Pool) (orgID, storeID, membershipID string) {
+	cheapHasher, err := password.NewHasher(password.Params{
+		MemoryKiB: 8, Iterations: 1, Parallelism: 1, SaltLength: 16, KeyLength: 32,
+	})
 	if err != nil {
-		log.Fatalf("acquire: %v", err)
+		log.Fatalf("cheap hasher: %v", err)
 	}
-	defer conn.Release()
-
-	var count int
-	if err := conn.QueryRow(ctx, `SELECT COUNT(*) FROM payment_methods`).Scan(&count); err != nil {
-		log.Fatalf("count payment_methods: %v", err)
-	}
-	if count > 0 {
-		return
+	passwordHash, err := cheapHasher.Hash("e2e-test-password-2026")
+	if err != nil {
+		log.Fatalf("hash password: %v", err)
 	}
 
-	methods := []struct {
-		code, name, kind string
-		allowsChange     bool
-		allowsInstall    bool
-		maxInstall       int16
-		sortOrder        int
-	}{
-		{"CASH", "Dinheiro", "CASH", true, false, 1, 1},
-		{"PIX", "PIX", "PIX", false, false, 1, 2},
-		{"DEBIT", "Cartão de Débito", "DEBIT_CARD", false, false, 1, 3},
-		{"CREDIT", "Cartão de Crédito", "CREDIT_CARD", false, true, 12, 4},
-		{"VOUCHER", "Vale", "VOUCHER", false, false, 1, 5},
-	}
-
-	for _, m := range methods {
-		_, err := conn.Exec(ctx, `
-			INSERT INTO payment_methods (code, name, kind, allows_change, allows_installments, max_installments, sort_order)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
-			ON CONFLICT (code) DO NOTHING
-		`, m.code, m.name, m.kind, m.allowsChange, m.allowsInstall, m.maxInstall, m.sortOrder)
+	store := database.NewStore(pool)
+	err = store.WithTx(ctx, func(tx *database.Tx) error {
+		user, err := tx.CreateUserWithPassword(ctx, database.CreateUserWithPasswordParams{
+			Email:           "e2e@test.local",
+			EmailNormalized: "e2e@test.local",
+			DisplayName:     "E2E Test",
+			PasswordHash:    passwordHash,
+		})
 		if err != nil {
-			log.Fatalf("seed payment method %s: %v", m.code, err)
+			return err
 		}
+		result, err := authmodule.BootstrapOrganization(ctx, tx.Queries, authmodule.OrganizationBootstrapInput{
+			UserID: user.ID,
+			Organization: authmodule.OrganizationRequest{
+				Name: "E2E Test Org", Slug: "e2e-test-org",
+				Timezone: "America/Sao_Paulo", Locale: "pt-BR", Currency: "BRL",
+			},
+			Store: authmodule.StoreRequest{
+				Code: "E2E", Name: "E2E Store", Timezone: "America/Sao_Paulo",
+			},
+		})
+		if err != nil {
+			return err
+		}
+		orgID = result.Organization.ID.String()
+		storeID = result.Store.ID.String()
+		membershipID = result.Membership.ID.String()
+		return nil
+	})
+	if err != nil {
+		log.Fatalf("seed tenant data: %v", err)
 	}
+	return
+}
+
+func loginAndGetStoreToken(ctx context.Context) string {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		log.Fatalf("cookie jar: %v", err)
+	}
+	client := &http.Client{Jar: jar, Timeout: 10 * time.Second}
+
+	csrfResp, err := client.Get(baseURL + "/auth/csrf")
+	if err != nil {
+		log.Fatalf("csrf request: %v", err)
+	}
+	var csrfBody struct{ CSRFToken string `json:"csrfToken"` }
+	if err := json.NewDecoder(csrfResp.Body).Decode(&csrfBody); err != nil {
+		log.Fatalf("csrf decode: %v", err)
+	}
+	csrfResp.Body.Close()
+
+	loginPayload := map[string]any{
+		"email": "e2e@test.local", "password": "e2e-test-password-2026",
+		"clientId": "pdv-admin",
+	}
+	loginData, err := json.Marshal(loginPayload)
+	if err != nil {
+		log.Fatalf("login marshal: %v", err)
+	}
+	loginReq, err := http.NewRequest(http.MethodPost, baseURL+"/auth/login", bytes.NewReader(loginData))
+	if err != nil {
+		log.Fatalf("login request: %v", err)
+	}
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginReq.Header.Set("Origin", baseURL)
+	loginReq.Header.Set("Sec-Fetch-Site", "same-origin")
+	loginReq.Header.Set("X-CSRF-Token", csrfBody.CSRFToken)
+	resp, err := client.Do(loginReq)
+	if err != nil {
+		log.Fatalf("login do: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Fatalf("login failed: status=%d body=%s", resp.StatusCode, body)
+	}
+
+	var loginResp struct {
+		AccessToken string `json:"accessToken"`
+		Context     struct {
+			Kind  string `json:"kind"`
+			Store *struct {
+				ID string `json:"id"`
+			} `json:"store"`
+		} `json:"context"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&loginResp); err != nil {
+		log.Fatalf("login decode: %v", err)
+	}
+	if loginResp.Context.Kind != "store" || loginResp.Context.Store == nil {
+		log.Fatalf("expected store context after login, got kind=%s", loginResp.Context.Kind)
+	}
+	return loginResp.AccessToken
 }
 
 func mustListen() net.Listener {
@@ -253,52 +368,43 @@ func mustListen() net.Listener {
 	return lis
 }
 
-func startServer(store *database.Store, addr string) *http.Server {
-	router := apphttp.NewRouter(apphttp.Dependencies{
-		HealthHandler: func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"status":"ok"}`))
-		},
-	})
+func startServer(store *database.PostgresStore, vk *valkey.Client, addr string) *http.Server {
+	logMailer, err := mailer.NewLogMailer("test")
+	if err != nil {
+		log.Fatalf("test log mailer: %v", err)
+	}
+	handler := app.New(testDependencies(store, vk, "http://"+addr, true, false, logMailer))
+	return app.NewHTTPServer(addr, handler)
+}
 
-	productService := products.NewService(store.Queries)
-	productHandler := products.NewHandler(productService)
-	products.RegisterRoutes(router, productHandler)
-
-	inventoryService := inventory.NewService(store.Queries, inventory.NewTxManager(store))
-	inventoryHandler := inventory.NewHandler(inventoryService)
-	inventory.RegisterRoutes(router, inventoryHandler)
-
-	catalogService := catalog.NewService(store.Queries)
-	catalogHandler := catalog.NewHandler(catalogService)
-	catalog.RegisterRoutes(router, catalogHandler)
-
-	salesService := sales.NewService(store.Queries, sales.NewTxManager(store))
-	salesHandler := sales.NewHandler(salesService)
-	sales.RegisterRoutes(router, salesHandler)
-
-	fiscalProvider := &fiscal.MockProvider{}
-
-	checkoutService := checkout.NewService(checkout.NewTxManager(store), fiscalProvider, store)
-	checkoutHandler := checkout.NewHandler(checkoutService)
-	checkout.RegisterRoutes(router, checkoutHandler)
-
-	paymentsService := payments.NewService(store.Queries)
-	paymentsHandler := payments.NewHandler(paymentsService)
-	payments.RegisterRoutes(router, paymentsHandler)
-
-	fiscalService := fiscal.NewService(store.Queries, fiscalProvider)
-	fiscalHandler := fiscal.NewHandler(fiscalService)
-	fiscal.RegisterRoutes(router, fiscalHandler)
-
-	receiptService := receipt.NewService(store.Queries)
-	receiptHandler := receipt.NewHandler(receiptService)
-	receipt.RegisterRoutes(router, receiptHandler)
-
-	return &http.Server{
-		Addr:    addr,
-		Handler: router,
+func testDependencies(store *database.PostgresStore, vk *valkey.Client, publicURL string, registrationEnabled, requireVerified bool, authMailer mailer.Mailer) app.Dependencies {
+	hasher, err := password.NewHasher(password.DefaultParams())
+	if err != nil {
+		log.Fatalf("password hasher: %v", err)
+	}
+	keyring, err := jwt.NewEphemeralKeyring("e2e-key")
+	if err != nil {
+		log.Fatalf("keyring: %v", err)
+	}
+	cookies, err := cookie.NewManager(cookie.Config{Secure: false, SameSite: "Lax", RefreshName: "pdv_refresh", CSRFName: "pdv_csrf", Env: "test"})
+	if err != nil {
+		log.Fatalf("cookies: %v", err)
+	}
+	csrfManager, err := csrf.NewManager([]byte("0123456789abcdef0123456789abcdef"), []string{publicURL})
+	if err != nil {
+		log.Fatalf("csrf: %v", err)
+	}
+	meta, err := requestmeta.NewResolver(nil)
+	if err != nil {
+		log.Fatalf("request metadata: %v", err)
+	}
+	fallback := ratelimit.NewFallbackLimiter(10000)
+	return app.Dependencies{
+		Store: store, Valkey: vk, PasswordHasher: hasher, PasswordPolicy: password.DefaultPolicy(), PasswordBlocklist: password.NewBuiltinBlocklist(),
+		CookieManager: cookies, CSRFManager: csrfManager, JWTKeyring: keyring, JWTIssuer: "pdv-auth", JWTAudience: "pdv-api", AccessTokenTTL: 5 * time.Minute, JWTClockSkew: 30 * time.Second,
+		RequestMeta: meta, RateLimiter: ratelimit.NewValkeyLimiter(vk, fallback), RefreshIdleTTL: 30 * 24 * time.Hour, SessionAbsoluteTTL: 90 * 24 * time.Hour,
+		AuthTokenHashKey: []byte("abcdef0123456789abcdef0123456789"), RateLimitKeySecret: []byte("fedcba9876543210fedcba9876543210"),
+		RegistrationEnabled: registrationEnabled, RequireVerifiedEmail: requireVerified, AppPublicURL: publicURL, AuthSessionCacheTTL: time.Minute, AuthSessionTouchInterval: 30 * time.Second, Mailer: authMailer,
 	}
 }
 

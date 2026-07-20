@@ -7,20 +7,35 @@ import (
 	"time"
 
 	"github.com/gabrielalc23/pdv/internal/payments"
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+)
+
+var (
+	orgID   = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b801")
+	storeID = mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b802")
+	actor   = authn.StoreActor{
+		UserID:         mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b803"),
+		SessionID:      mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b804"),
+		OrganizationID: orgID,
+		MembershipID:   mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b805"),
+		StoreID:        storeID,
+		ClientID:       "test-client",
+	}
 )
 
 func TestListPaymentMethodsReturnsActiveOnlyAndEmptySlice(t *testing.T) {
 	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	svc := payments.NewService(&paymentsFakeStore{
-		listActivePaymentMethodsFn: func(context.Context) ([]database.PaymentMethod, error) {
+		listActivePaymentMethodsFn: func(context.Context, tenancy.OrganizationScope) ([]database.PaymentMethod, error) {
 			return []database.PaymentMethod{paymentMethodFixture(methodID, "pix", "PIX", database.PaymentMethodKindPIX, true)}, nil
 		},
 	})
 
-	resp, err := svc.ListPaymentMethods(context.Background())
+	resp, err := svc.ListPaymentMethods(context.Background(), actor)
 	if err != nil {
 		t.Fatalf("ListPaymentMethods returned error: %v", err)
 	}
@@ -34,12 +49,12 @@ func TestListPaymentMethodsReturnsActiveOnlyAndEmptySlice(t *testing.T) {
 
 func TestListPaymentMethodsPropagatesError(t *testing.T) {
 	svc := payments.NewService(&paymentsFakeStore{
-		listActivePaymentMethodsFn: func(context.Context) ([]database.PaymentMethod, error) {
+		listActivePaymentMethodsFn: func(context.Context, tenancy.OrganizationScope) ([]database.PaymentMethod, error) {
 			return nil, errors.New("db down")
 		},
 	})
 
-	_, err := svc.ListPaymentMethods(context.Background())
+	_, err := svc.ListPaymentMethods(context.Background(), actor)
 	if err == nil || err.Error() != "list active payment methods: db down" {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -51,16 +66,16 @@ func TestListSalePaymentsReturnsOrderedPayments(t *testing.T) {
 	cashID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8ab")
 
 	svc := payments.NewService(&paymentsFakeStore{
-		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
+		getSaleByIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
-		listPaymentsBySaleIDFn: func(context.Context, pgtype.UUID) ([]database.ListPaymentsBySaleIDRow, error) {
-			return []database.ListPaymentsBySaleIDRow{
-				paymentListRowFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8b1"), saleID, cashID, "40.00", "40.00", "0.00", 1, "cash", 2),
-				paymentListRowFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8b2"), saleID, pixID, "60.00", "60.00", "0.00", 1, "pix", 1),
+		listPaymentsBySaleIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) ([]database.Payment, error) {
+			return []database.Payment{
+				paymentFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8b1"), saleID, cashID, "40.00", "40.00", "0.00", 1, "cash", 2),
+				paymentFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8b2"), saleID, pixID, "60.00", "60.00", "0.00", 1, "pix", 1),
 			}, nil
 		},
-		getPaymentMethodByIDFn: func(_ context.Context, id pgtype.UUID) (database.PaymentMethod, error) {
+		getPaymentMethodByIDFn: func(_ context.Context, _ tenancy.OrganizationScope, id pgtype.UUID) (database.PaymentMethod, error) {
 			switch id.String() {
 			case pixID.String():
 				return paymentMethodFixture(pixID, "pix", "PIX", database.PaymentMethodKindPIX, true), nil
@@ -72,7 +87,7 @@ func TestListSalePaymentsReturnsOrderedPayments(t *testing.T) {
 		},
 	})
 
-	resp, err := svc.ListSalePayments(context.Background(), saleID.String())
+	resp, err := svc.ListSalePayments(context.Background(), actor, saleID.String())
 	if err != nil {
 		t.Fatalf("ListSalePayments returned error: %v", err)
 	}
@@ -90,15 +105,15 @@ func TestListSalePaymentsReturnsOrderedPayments(t *testing.T) {
 func TestListSalePaymentsReturnsEmptySliceWhenNone(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
 	svc := payments.NewService(&paymentsFakeStore{
-		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
+		getSaleByIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error) {
 			return saleFixtureRow(saleID, database.SaleStatusOPEN), nil
 		},
-		listPaymentsBySaleIDFn: func(context.Context, pgtype.UUID) ([]database.ListPaymentsBySaleIDRow, error) {
-			return []database.ListPaymentsBySaleIDRow{}, nil
+		listPaymentsBySaleIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) ([]database.Payment, error) {
+			return []database.Payment{}, nil
 		},
 	})
 
-	resp, err := svc.ListSalePayments(context.Background(), saleID.String())
+	resp, err := svc.ListSalePayments(context.Background(), actor, saleID.String())
 	if err != nil {
 		t.Fatalf("ListSalePayments returned error: %v", err)
 	}
@@ -113,12 +128,12 @@ func TestListSalePaymentsReturnsEmptySliceWhenNone(t *testing.T) {
 func TestListSalePaymentsSaleNotFound(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
 	svc := payments.NewService(&paymentsFakeStore{
-		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
-			return database.GetSaleByIDRow{}, pgx.ErrNoRows
+		getSaleByIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error) {
+			return database.Sale{}, pgx.ErrNoRows
 		},
 	})
 
-	_, err := svc.ListSalePayments(context.Background(), saleID.String())
+	_, err := svc.ListSalePayments(context.Background(), actor, saleID.String())
 	if !errors.Is(err, payments.ErrSaleNotFound) {
 		t.Fatalf("expected payments.ErrSaleNotFound, got %v", err)
 	}
@@ -128,65 +143,68 @@ func TestListSalePaymentsMethodMissingFails(t *testing.T) {
 	saleID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8a9")
 	methodID := mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8aa")
 	svc := payments.NewService(&paymentsFakeStore{
-		getSaleByIDFn: func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error) {
+		getSaleByIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error) {
 			return saleFixtureRow(saleID, database.SaleStatusCOMPLETED), nil
 		},
-		listPaymentsBySaleIDFn: func(context.Context, pgtype.UUID) ([]database.ListPaymentsBySaleIDRow, error) {
-			return []database.ListPaymentsBySaleIDRow{
-				paymentListRowFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8b3"), saleID, methodID, "10.00", "10.00", "0.00", 1, "pix", 1),
+		listPaymentsBySaleIDFn: func(context.Context, tenancy.StoreScope, pgtype.UUID) ([]database.Payment, error) {
+			return []database.Payment{
+				paymentFixture(mustUUID("01972d6b-bf3a-7f1f-a4f8-1d2f31c3b8b3"), saleID, methodID, "10.00", "10.00", "0.00", 1, "pix", 1),
 			}, nil
 		},
-		getPaymentMethodByIDFn: func(context.Context, pgtype.UUID) (database.PaymentMethod, error) {
+		getPaymentMethodByIDFn: func(context.Context, tenancy.OrganizationScope, pgtype.UUID) (database.PaymentMethod, error) {
 			return database.PaymentMethod{}, pgx.ErrNoRows
 		},
 	})
 
-	_, err := svc.ListSalePayments(context.Background(), saleID.String())
+	_, err := svc.ListSalePayments(context.Background(), actor, saleID.String())
 	if err == nil {
 		t.Fatalf("expected error")
 	}
 }
 
 type paymentsFakeStore struct {
-	listActivePaymentMethodsFn func(context.Context) ([]database.PaymentMethod, error)
-	listPaymentsBySaleIDFn     func(context.Context, pgtype.UUID) ([]database.ListPaymentsBySaleIDRow, error)
-	getSaleByIDFn              func(context.Context, pgtype.UUID) (database.GetSaleByIDRow, error)
-	getPaymentMethodByIDFn     func(context.Context, pgtype.UUID) (database.PaymentMethod, error)
+	listActivePaymentMethodsFn func(context.Context, tenancy.OrganizationScope) ([]database.PaymentMethod, error)
+	listPaymentsBySaleIDFn     func(context.Context, tenancy.StoreScope, pgtype.UUID) ([]database.Payment, error)
+	getSaleByIDFn              func(context.Context, tenancy.StoreScope, pgtype.UUID) (database.Sale, error)
+	getPaymentMethodByIDFn     func(context.Context, tenancy.OrganizationScope, pgtype.UUID) (database.PaymentMethod, error)
 }
 
-func (f *paymentsFakeStore) ListActivePaymentMethods(ctx context.Context) ([]database.PaymentMethod, error) {
+func (f *paymentsFakeStore) ListActivePaymentMethods(ctx context.Context, scope tenancy.OrganizationScope) ([]database.PaymentMethod, error) {
 	if f.listActivePaymentMethodsFn != nil {
-		return f.listActivePaymentMethodsFn(ctx)
+		return f.listActivePaymentMethodsFn(ctx, scope)
 	}
 	return []database.PaymentMethod{}, nil
 }
 
-func (f *paymentsFakeStore) ListPaymentsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]database.ListPaymentsBySaleIDRow, error) {
+func (f *paymentsFakeStore) ListPaymentsBySaleID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) ([]database.Payment, error) {
 	if f.listPaymentsBySaleIDFn != nil {
-		return f.listPaymentsBySaleIDFn(ctx, saleID)
+		return f.listPaymentsBySaleIDFn(ctx, scope, saleID)
 	}
-	return []database.ListPaymentsBySaleIDRow{}, nil
+	return []database.Payment{}, nil
 }
 
-func (f *paymentsFakeStore) GetSaleByID(ctx context.Context, saleID pgtype.UUID) (database.GetSaleByIDRow, error) {
+func (f *paymentsFakeStore) GetSaleByID(ctx context.Context, scope tenancy.StoreScope, saleID pgtype.UUID) (database.Sale, error) {
 	if f.getSaleByIDFn != nil {
-		return f.getSaleByIDFn(ctx, saleID)
+		return f.getSaleByIDFn(ctx, scope, saleID)
 	}
-	return database.GetSaleByIDRow{}, pgx.ErrNoRows
+	return database.Sale{}, pgx.ErrNoRows
 }
 
-func (f *paymentsFakeStore) GetPaymentMethodByID(ctx context.Context, id pgtype.UUID) (database.PaymentMethod, error) {
+func (f *paymentsFakeStore) GetPaymentMethodByID(ctx context.Context, scope tenancy.OrganizationScope, id pgtype.UUID) (database.PaymentMethod, error) {
 	if f.getPaymentMethodByIDFn != nil {
-		return f.getPaymentMethodByIDFn(ctx, id)
+		return f.getPaymentMethodByIDFn(ctx, scope, id)
 	}
 	return database.PaymentMethod{}, pgx.ErrNoRows
 }
 
-func saleFixtureRow(id pgtype.UUID, status database.SaleStatus) database.GetSaleByIDRow {
+func saleFixtureRow(id pgtype.UUID, status database.SaleStatus) database.Sale {
 	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
-	row := database.GetSaleByIDRow{
+	row := database.Sale{
 		ID:             id,
+		OrganizationID: orgID,
+		StoreID:        storeID,
 		Number:         77,
+		IdempotencyKey: "sale-1",
 		Status:         status,
 		Subtotal:       mustNumeric("100.00"),
 		Discount:       mustNumeric("0.00"),
@@ -195,7 +213,6 @@ func saleFixtureRow(id pgtype.UUID, status database.SaleStatus) database.GetSale
 		OpenedAt:       timestamptz(now),
 		CreatedAt:      timestamptz(now),
 		UpdatedAt:      timestamptz(now),
-		IdempotencyKey: "sale-1",
 	}
 	if status == database.SaleStatusCOMPLETED {
 		row.CompletedAt = timestamptz(now.Add(time.Minute))
@@ -219,9 +236,11 @@ func paymentMethodFixture(id pgtype.UUID, code, name string, kind database.Payme
 	}
 }
 
-func paymentListRowFixture(rowID, saleID, methodID pgtype.UUID, amount, received, change string, installments int16, externalReference string, order int) database.ListPaymentsBySaleIDRow {
-	return database.ListPaymentsBySaleIDRow{
+func paymentFixture(rowID, saleID, methodID pgtype.UUID, amount, received, change string, installments int16, externalReference string, order int) database.Payment {
+	return database.Payment{
 		ID:                rowID,
+		OrganizationID:    orgID,
+		StoreID:           storeID,
 		SaleID:            saleID,
 		PaymentMethodID:   methodID,
 		Status:            database.PaymentStatusAPPROVED,

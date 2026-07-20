@@ -11,36 +11,69 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const listReceiptPaymentsBySaleID = `-- name: ListReceiptPaymentsBySaleID :many
-SELECT
-    id,
-    sale_id,
-    payment_method_id,
-    payment_method_name,
-    status,
-    amount,
-    received_amount,
-    change_amount,
-    installments,
-    external_reference,
-    paid_at,
-    created_at,
-    updated_at
-FROM mv_receipt_payments
-WHERE sale_id = $1
-ORDER BY created_at, id
+const countReceiptPaymentsBySaleIDForStore = `-- name: CountReceiptPaymentsBySaleIDForStore :one
+SELECT COUNT(*)
+FROM receipt_payments AS receipt
+WHERE receipt.organization_id = $1
+  AND receipt.store_id = $2
+  AND receipt.sale_id = $3
 `
 
-func (q *Queries) ListReceiptPaymentsBySaleID(ctx context.Context, saleID pgtype.UUID) ([]MvReceiptPayment, error) {
-	rows, err := q.db.Query(ctx, listReceiptPaymentsBySaleID, saleID)
+type CountReceiptPaymentsBySaleIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+}
+
+func (q *Queries) CountReceiptPaymentsBySaleIDForStore(ctx context.Context, arg CountReceiptPaymentsBySaleIDForStoreParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countReceiptPaymentsBySaleIDForStore, arg.OrganizationID, arg.StoreID, arg.SaleID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const listReceiptPaymentsBySaleIDForStore = `-- name: ListReceiptPaymentsBySaleIDForStore :many
+SELECT
+    receipt.organization_id,
+    receipt.store_id,
+    receipt.id,
+    receipt.sale_id,
+    receipt.payment_method_id,
+    receipt.payment_method_name,
+    receipt.status,
+    receipt.amount,
+    receipt.received_amount,
+    receipt.change_amount,
+    receipt.installments,
+    receipt.external_reference,
+    receipt.paid_at,
+    receipt.created_at,
+    receipt.updated_at
+FROM receipt_payments AS receipt
+WHERE receipt.organization_id = $1
+  AND receipt.store_id = $2
+  AND receipt.sale_id = $3
+ORDER BY receipt.created_at, receipt.id
+`
+
+type ListReceiptPaymentsBySaleIDForStoreParams struct {
+	OrganizationID pgtype.UUID
+	StoreID        pgtype.UUID
+	SaleID         pgtype.UUID
+}
+
+func (q *Queries) ListReceiptPaymentsBySaleIDForStore(ctx context.Context, arg ListReceiptPaymentsBySaleIDForStoreParams) ([]ReceiptPayment, error) {
+	rows, err := q.db.Query(ctx, listReceiptPaymentsBySaleIDForStore, arg.OrganizationID, arg.StoreID, arg.SaleID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []MvReceiptPayment{}
+	items := []ReceiptPayment{}
 	for rows.Next() {
-		var i MvReceiptPayment
+		var i ReceiptPayment
 		if err := rows.Scan(
+			&i.OrganizationID,
+			&i.StoreID,
 			&i.ID,
 			&i.SaleID,
 			&i.PaymentMethodID,

@@ -10,14 +10,14 @@ import (
 )
 
 type checkoutState struct {
-	sale           database.CompleteSaleRow
+	sale           database.Sale
 	items          []database.SaleItem
 	payments       []checkoutPaymentResult
 	fiscalDocument FiscalDocumentResponse
 }
 
 type checkoutPaymentResult struct {
-	row    database.ApprovePaymentRow
+	row    database.Payment
 	method database.PaymentMethod
 }
 
@@ -43,7 +43,7 @@ func toCheckoutResponse(state checkoutState) (CheckoutResponse, error) {
 	}, nil
 }
 
-func toCheckoutSaleResponse(row database.CompleteSaleRow) (CheckoutSaleResponse, error) {
+func toCheckoutSaleResponse(row database.Sale) (CheckoutSaleResponse, error) {
 	subtotal, err := MoneyToString(row.Subtotal)
 	if err != nil {
 		return CheckoutSaleResponse{}, fmt.Errorf("format subtotal: %w", err)
@@ -81,7 +81,7 @@ func toCheckoutSaleResponse(row database.CompleteSaleRow) (CheckoutSaleResponse,
 	}, nil
 }
 
-func toCheckoutPaymentResponse(row database.ApprovePaymentRow, method database.PaymentMethod) (CheckoutPaymentResponse, error) {
+func toCheckoutPaymentResponse(row database.Payment, method database.PaymentMethod) (CheckoutPaymentResponse, error) {
 	amount, err := MoneyToString(row.Amount)
 	if err != nil {
 		return CheckoutPaymentResponse{}, fmt.Errorf("format amount: %w", err)

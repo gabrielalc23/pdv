@@ -5,60 +5,60 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) ensureSKUAvailable(ctx context.Context, sku, currentID string) error {
-	product, err := s.store.GetProductBySKU(ctx, sku)
+func (s *Service) ensureSKUAvailable(ctx context.Context, scope tenancy.OrganizationScope, sku, currentID string) error {
+	product, err := s.store.GetProductBySKU(ctx, scope, sku)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		return fmt.Errorf("check sku availability: %w", err)
 	}
-
 	if currentID != "" && product.ID.String() == currentID {
 		return nil
 	}
-
 	return ErrSKUAlreadyExists
 }
 
-func (s *Service) ensureBarcodeAvailable(ctx context.Context, barcode, currentID string) error {
-	product, err := s.store.GetProductByBarcode(ctx, pgtype.Text{String: barcode, Valid: true})
+func (s *Service) ensureBarcodeAvailable(ctx context.Context, scope tenancy.OrganizationScope, barcode, currentID string) error {
+	product, err := s.store.GetProductByBarcode(ctx, scope, pgtype.Text{String: barcode, Valid: true})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
 		}
 		return fmt.Errorf("check barcode availability: %w", err)
 	}
-
 	if currentID != "" && product.ID.String() == currentID {
 		return nil
 	}
-
 	return ErrBarcodeAlreadyExists
 }
 
-func (s *Service) Create(ctx context.Context, input UpsertProductInput) (ProductResponse, error) {
+func (s *Service) Create(ctx context.Context, actor authn.OrganizationActor, input UpsertProductInput) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	normalized, err := normalizeUpsertInput(input)
 	if err != nil {
 		return ProductResponse{}, err
 	}
 
-	if err := s.ensureSKUAvailable(ctx, normalized.SKU, ""); err != nil {
+	if err := s.ensureSKUAvailable(ctx, scope, normalized.SKU, ""); err != nil {
 		return ProductResponse{}, err
 	}
 
 	if normalized.Barcode != nil {
-		if err := s.ensureBarcodeAvailable(ctx, *normalized.Barcode, ""); err != nil {
+		if err := s.ensureBarcodeAvailable(ctx, scope, *normalized.Barcode, ""); err != nil {
 			return ProductResponse{}, err
 		}
 	}
 
-	product, err := s.store.CreateProduct(ctx, database.CreateProductParams{
+	row, err := s.store.CreateProduct(ctx, scope, database.CreateProductForOrganizationParams{
 		SKU:        normalized.SKU,
 		Barcode:    toText(normalized.Barcode),
 		Name:       normalized.Name,
@@ -71,16 +71,18 @@ func (s *Service) Create(ctx context.Context, input UpsertProductInput) (Product
 		return ProductResponse{}, translatePersistenceError(err)
 	}
 
-	return toProductResponse(product)
+	return toProductResponse(productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt))
 }
 
-func (s *Service) Update(ctx context.Context, id string, input UpsertProductInput) (ProductResponse, error) {
+func (s *Service) Update(ctx context.Context, actor authn.OrganizationActor, id string, input UpsertProductInput) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	productID, err := parseUUID(id, "id")
 	if err != nil {
 		return ProductResponse{}, err
 	}
 
-	current, err := s.getProductByID(ctx, productID)
+	current, err := s.getProductByID(ctx, scope, productID)
 	if err != nil {
 		return ProductResponse{}, err
 	}
@@ -91,20 +93,20 @@ func (s *Service) Update(ctx context.Context, id string, input UpsertProductInpu
 	}
 
 	if normalized.SKU != current.SKU {
-		if err := s.ensureSKUAvailable(ctx, normalized.SKU, current.ID.String()); err != nil {
+		if err := s.ensureSKUAvailable(ctx, scope, normalized.SKU, current.ID.String()); err != nil {
 			return ProductResponse{}, err
 		}
 	}
 
 	if normalized.Barcode != nil {
 		if !current.Barcode.Valid || current.Barcode.String != *normalized.Barcode {
-			if err := s.ensureBarcodeAvailable(ctx, *normalized.Barcode, current.ID.String()); err != nil {
+			if err := s.ensureBarcodeAvailable(ctx, scope, *normalized.Barcode, current.ID.String()); err != nil {
 				return ProductResponse{}, err
 			}
 		}
 	}
 
-	product, err := s.store.UpdateProduct(ctx, database.UpdateProductParams{
+	row, err := s.store.UpdateProduct(ctx, scope, database.UpdateProductForOrganizationParams{
 		ID:         productID,
 		SKU:        normalized.SKU,
 		Barcode:    toText(normalized.Barcode),
@@ -117,16 +119,18 @@ func (s *Service) Update(ctx context.Context, id string, input UpsertProductInpu
 		return ProductResponse{}, translatePersistenceError(err)
 	}
 
-	return toProductResponse(product)
+	return toProductResponse(productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt))
 }
 
-func (s *Service) Activate(ctx context.Context, id string) (ProductResponse, error) {
+func (s *Service) Activate(ctx context.Context, actor authn.OrganizationActor, id string) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	productID, err := parseUUID(id, "id")
 	if err != nil {
 		return ProductResponse{}, err
 	}
 
-	current, err := s.getProductByID(ctx, productID)
+	current, err := s.getProductByID(ctx, scope, productID)
 	if err != nil {
 		return ProductResponse{}, err
 	}
@@ -135,21 +139,23 @@ func (s *Service) Activate(ctx context.Context, id string) (ProductResponse, err
 		return toProductResponse(current)
 	}
 
-	product, err := s.store.ActivateProduct(ctx, productID)
+	row, err := s.store.ActivateProduct(ctx, scope, productID)
 	if err != nil {
 		return ProductResponse{}, translatePersistenceError(err)
 	}
 
-	return toProductResponse(product)
+	return toProductResponse(productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt))
 }
 
-func (s *Service) Deactivate(ctx context.Context, id string) (ProductResponse, error) {
+func (s *Service) Deactivate(ctx context.Context, actor authn.OrganizationActor, id string) (ProductResponse, error) {
+	scope := actor.ToOrganizationScope()
+
 	productID, err := parseUUID(id, "id")
 	if err != nil {
 		return ProductResponse{}, err
 	}
 
-	current, err := s.getProductByID(ctx, productID)
+	current, err := s.getProductByID(ctx, scope, productID)
 	if err != nil {
 		return ProductResponse{}, err
 	}
@@ -158,10 +164,10 @@ func (s *Service) Deactivate(ctx context.Context, id string) (ProductResponse, e
 		return toProductResponse(current)
 	}
 
-	product, err := s.store.DeactivateProduct(ctx, productID)
+	row, err := s.store.DeactivateProduct(ctx, scope, productID)
 	if err != nil {
 		return ProductResponse{}, translatePersistenceError(err)
 	}
 
-	return toProductResponse(product)
+	return toProductResponse(productFromRow(row.ID, row.SKU, row.Barcode, row.Name, row.CategoryID, row.Price, row.Cost, row.IsActive, row.CreatedAt, row.UpdatedAt))
 }

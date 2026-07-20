@@ -5,14 +5,16 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) ensureNameAvailable(ctx context.Context, name, currentID string) error {
-	category, err := s.store.GetCategoryByName(ctx, name)
+func (s *Service) ensureNameAvailable(ctx context.Context, actor authn.OrganizationActor, name, currentID string) error {
+	scope := actor.ToOrganizationScope()
+	category, err := s.store.GetCategoryByName(ctx, scope, name)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
@@ -25,8 +27,9 @@ func (s *Service) ensureNameAvailable(ctx context.Context, name, currentID strin
 	return ErrCategoryNameExists
 }
 
-func (s *Service) ensureSlugAvailable(ctx context.Context, slug, currentID string) error {
-	category, err := s.store.GetCategoryBySlug(ctx, slug)
+func (s *Service) ensureSlugAvailable(ctx context.Context, actor authn.OrganizationActor, slug, currentID string) error {
+	scope := actor.ToOrganizationScope()
+	category, err := s.store.GetCategoryBySlug(ctx, scope, slug)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil
@@ -39,27 +42,28 @@ func (s *Service) ensureSlugAvailable(ctx context.Context, slug, currentID strin
 	return ErrCategorySlugExists
 }
 
-func (s *Service) Create(ctx context.Context, input UpsertCategoryInput) (CategoryResponse, error) {
+func (s *Service) Create(ctx context.Context, actor authn.OrganizationActor, input UpsertCategoryInput) (CategoryResponse, error) {
 	name, err := normalizeName(input.Name)
 	if err != nil {
 		return CategoryResponse{}, err
 	}
 	slug := slugify(name)
-	if err := s.ensureNameAvailable(ctx, name, ""); err != nil {
+	scope := actor.ToOrganizationScope()
+	if err := s.ensureNameAvailable(ctx, actor, name, ""); err != nil {
 		return CategoryResponse{}, err
 	}
-	if err := s.ensureSlugAvailable(ctx, slug, ""); err != nil {
+	if err := s.ensureSlugAvailable(ctx, actor, slug, ""); err != nil {
 		return CategoryResponse{}, err
 	}
 
-	category, err := s.store.CreateCategory(ctx, database.CreateCategoryParams{Name: name, Slug: slug})
+	row, err := s.store.CreateCategory(ctx, scope, database.CreateCategoryForOrganizationParams{Name: name, Slug: slug})
 	if err != nil {
 		return CategoryResponse{}, translatePersistenceError(err)
 	}
-	return toCategoryResponse(category), nil
+	return toCategoryResponse(row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt), nil
 }
 
-func (s *Service) Update(ctx context.Context, rawID string, input UpsertCategoryInput) (CategoryResponse, error) {
+func (s *Service) Update(ctx context.Context, actor authn.OrganizationActor, rawID string, input UpsertCategoryInput) (CategoryResponse, error) {
 	id, err := parseUUID(rawID)
 	if err != nil {
 		return CategoryResponse{}, err
@@ -69,49 +73,67 @@ func (s *Service) Update(ctx context.Context, rawID string, input UpsertCategory
 		return CategoryResponse{}, err
 	}
 	slug := slugify(name)
-	if err := s.ensureNameAvailable(ctx, name, rawID); err != nil {
+	scope := actor.ToOrganizationScope()
+	if err := s.ensureNameAvailable(ctx, actor, name, rawID); err != nil {
 		return CategoryResponse{}, err
 	}
-	if err := s.ensureSlugAvailable(ctx, slug, rawID); err != nil {
+	if err := s.ensureSlugAvailable(ctx, actor, slug, rawID); err != nil {
 		return CategoryResponse{}, err
 	}
 
-	category, err := s.store.UpdateCategory(ctx, database.UpdateCategoryParams{
+	row, err := s.store.UpdateCategory(ctx, scope, database.UpdateCategoryForOrganizationParams{
 		ID: id, Name: name, Slug: slug,
 	})
 	if err != nil {
 		return CategoryResponse{}, translatePersistenceError(err)
 	}
-	return toCategoryResponse(category), nil
+	return toCategoryResponse(row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt), nil
 }
 
-func (s *Service) Activate(ctx context.Context, rawID string) (CategoryResponse, error) {
-	return s.setActive(ctx, rawID, true)
+func (s *Service) Activate(ctx context.Context, actor authn.OrganizationActor, rawID string) (CategoryResponse, error) {
+	return s.setActive(ctx, actor, rawID, true)
 }
 
-func (s *Service) Deactivate(ctx context.Context, rawID string) (CategoryResponse, error) {
-	return s.setActive(ctx, rawID, false)
+func (s *Service) Deactivate(ctx context.Context, actor authn.OrganizationActor, rawID string) (CategoryResponse, error) {
+	return s.setActive(ctx, actor, rawID, false)
 }
 
-func (s *Service) setActive(ctx context.Context, rawID string, active bool) (CategoryResponse, error) {
+func (s *Service) setActive(ctx context.Context, actor authn.OrganizationActor, rawID string, active bool) (CategoryResponse, error) {
 	id, err := parseUUID(rawID)
 	if err != nil {
 		return CategoryResponse{}, err
 	}
+	scope := actor.ToOrganizationScope()
 
-	var category database.Category
+	var row struct {
+		ID        pgtype.UUID
+		Name      string
+		Slug      string
+		IsActive  bool
+		CreatedAt pgtype.Timestamptz
+		UpdatedAt pgtype.Timestamptz
+	}
 	if active {
-		category, err = s.store.ActivateCategory(ctx, id)
-	} else {
-		category, err = s.store.DeactivateCategory(ctx, id)
-	}
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return CategoryResponse{}, ErrCategoryNotFound
+		r, err := s.store.ActivateCategory(ctx, scope, id)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return CategoryResponse{}, ErrCategoryNotFound
+			}
+			return CategoryResponse{}, translatePersistenceError(err)
 		}
-		return CategoryResponse{}, translatePersistenceError(err)
+		row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt = r.ID, r.Name, r.Slug, r.IsActive, r.CreatedAt, r.UpdatedAt
+	} else {
+		r, err := s.store.DeactivateCategory(ctx, scope, id)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return CategoryResponse{}, ErrCategoryNotFound
+			}
+			return CategoryResponse{}, translatePersistenceError(err)
+		}
+		row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt = r.ID, r.Name, r.Slug, r.IsActive, r.CreatedAt, r.UpdatedAt
 	}
-	return toCategoryResponse(category), nil
+
+	return toCategoryResponse(row.ID, row.Name, row.Slug, row.IsActive, row.CreatedAt, row.UpdatedAt), nil
 }
 
 func parseUUID(raw string) (pgtype.UUID, error) {
@@ -137,9 +159,9 @@ func translatePersistenceError(err error) error {
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" {
 		switch pgErr.ConstraintName {
-		case "categories_name_unique":
+		case "categories_organization_id_name_unique":
 			return ErrCategoryNameExists
-		case "categories_slug_unique":
+		case "categories_organization_id_slug_unique":
 			return ErrCategorySlugExists
 		}
 	}

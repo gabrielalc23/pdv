@@ -26,6 +26,9 @@ func doRequest(method, path string, body any) (*http.Response, error) {
 		return nil, fmt.Errorf("new request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+	}
 
 	resp, err := httpClient.Do(req)
 	if err != nil {

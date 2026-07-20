@@ -1,160 +1,254 @@
--- name: CreateSale :one
-WITH inserted AS (
+-- name: CreateSaleForStore :one
+WITH existing AS MATERIALIZED (
+    SELECT
+        sale.id,
+        sale.organization_id,
+        sale.store_id,
+        sale.number,
+        sale.idempotency_key,
+        sale.status,
+        sale.subtotal,
+        sale.discount,
+        sale.addition,
+        sale.total,
+        sale.opened_by_membership_id,
+        sale.completed_by_membership_id,
+        sale.cancelled_by_membership_id,
+        sale.opened_at,
+        sale.completed_at,
+        sale.cancelled_at,
+        sale.created_at,
+        sale.updated_at
+    FROM sales AS sale
+    WHERE sale.organization_id = sqlc.arg(organization_id)
+      AND sale.store_id = sqlc.arg(store_id)
+      AND sale.idempotency_key = sqlc.arg(idempotency_key)
+), allocated_number AS (
+    INSERT INTO sale_number_counters (
+        organization_id,
+        store_id,
+        next_number
+    )
+    SELECT
+        sqlc.arg(organization_id),
+        sqlc.arg(store_id),
+        2
+    WHERE NOT EXISTS (SELECT 1 FROM existing)
+    ON CONFLICT (organization_id, store_id) DO UPDATE
+    SET next_number = sale_number_counters.next_number + 1
+    RETURNING next_number - 1 AS number
+), inserted AS (
     INSERT INTO sales (
-        status,
-        subtotal,
-        discount,
-        addition,
-        total,
-        idempotency_key
+        organization_id,
+        store_id,
+        number,
+        idempotency_key,
+        opened_by_membership_id
     )
-    VALUES (
-        'OPEN',
-        0,
-        0,
-        0,
-        0,
-        sqlc.arg(idempotency_key)
-    )
-    ON CONFLICT (idempotency_key) DO NOTHING
+    SELECT
+        sqlc.arg(organization_id),
+        sqlc.arg(store_id),
+        allocated_number.number,
+        sqlc.arg(idempotency_key),
+        sqlc.arg(opened_by_membership_id)
+    FROM allocated_number
+    ON CONFLICT (organization_id, store_id, idempotency_key) DO UPDATE
+    SET idempotency_key = EXCLUDED.idempotency_key
     RETURNING
         id,
+        organization_id,
+        store_id,
         number,
+        idempotency_key,
         status,
         subtotal,
         discount,
         addition,
         total,
+        opened_by_membership_id,
+        completed_by_membership_id,
+        cancelled_by_membership_id,
         opened_at,
         completed_at,
         cancelled_at,
         created_at,
-        updated_at,
-        idempotency_key
+        updated_at
 )
-SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM inserted
+SELECT * FROM inserted
+UNION ALL
+SELECT * FROM existing
 UNION ALL
 SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM sales
-WHERE idempotency_key = sqlc.arg(idempotency_key)
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND sale.idempotency_key = sqlc.arg(idempotency_key)
+  AND NOT EXISTS (SELECT 1 FROM inserted)
+  AND NOT EXISTS (SELECT 1 FROM existing)
 LIMIT 1;
 
--- name: GetSaleByID :one
+-- name: GetSaleByIDForStore :one
 SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM sales
-WHERE id = sqlc.arg(id)
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND sale.id = sqlc.arg(id)
 LIMIT 1;
 
--- name: LockSaleByID :one
+-- name: GetSaleByIdempotencyKeyForStore :one
 SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM sales
-WHERE id = sqlc.arg(id)
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND sale.idempotency_key = sqlc.arg(idempotency_key)
+LIMIT 1;
+
+-- name: LockSaleByIDForStore :one
+SELECT
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND sale.id = sqlc.arg(id)
 FOR UPDATE;
 
--- name: ListSales :many
+-- name: ListSalesForStore :many
 SELECT
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key
-FROM sales
-WHERE (
-    CAST(sqlc.narg(status) AS sale_status) IS NULL
-    OR status = CAST(sqlc.narg(status) AS sale_status)
-)
-ORDER BY created_at DESC, id DESC
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at
+FROM sales AS sale
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND (
+      CAST(sqlc.narg(status) AS sale_status) IS NULL
+      OR sale.status = CAST(sqlc.narg(status) AS sale_status)
+  )
+ORDER BY sale.created_at DESC, sale.id DESC
 LIMIT sqlc.arg(page_size)
 OFFSET sqlc.arg(page_offset);
 
--- name: CountSales :one
+-- name: CountSalesForStore :one
 SELECT COUNT(*)
-FROM sales
-WHERE (
-    CAST(sqlc.narg(status) AS sale_status) IS NULL
-    OR status = CAST(sqlc.narg(status) AS sale_status)
-);
+FROM sales AS sale
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND (
+      CAST(sqlc.narg(status) AS sale_status) IS NULL
+      OR sale.status = CAST(sqlc.narg(status) AS sale_status)
+  );
 
--- name: GetSaleItemByID :one
+-- name: GetSaleItemByIDForStore :one
 SELECT
-    id,
-    sale_id,
-    product_id,
-    product_name,
-    product_sku,
-    unit_price,
-    quantity,
-    discount,
-    total,
-    created_at
-FROM sale_items
-WHERE sale_id = sqlc.arg(sale_id)
-  AND id = sqlc.arg(id)
+    item.id,
+    item.organization_id,
+    item.store_id,
+    item.sale_id,
+    item.product_id,
+    item.product_name,
+    item.product_sku,
+    item.unit_price,
+    item.quantity,
+    item.discount,
+    item.total,
+    item.created_at
+FROM sale_items AS item
+WHERE item.organization_id = sqlc.arg(organization_id)
+  AND item.store_id = sqlc.arg(store_id)
+  AND item.sale_id = sqlc.arg(sale_id)
+  AND item.id = sqlc.arg(id)
 LIMIT 1;
 
--- name: CreateSaleItem :one
+-- name: CreateSaleItemForStore :one
 INSERT INTO sale_items (
+    organization_id,
+    store_id,
     sale_id,
     product_id,
     product_name,
@@ -165,6 +259,8 @@ INSERT INTO sale_items (
     total
 )
 VALUES (
+    sqlc.arg(organization_id),
+    sqlc.arg(store_id),
     sqlc.arg(sale_id),
     sqlc.arg(product_id),
     sqlc.arg(product_name),
@@ -176,6 +272,8 @@ VALUES (
 )
 RETURNING
     id,
+    organization_id,
+    store_id,
     sale_id,
     product_id,
     product_name,
@@ -186,122 +284,164 @@ RETURNING
     total,
     created_at;
 
--- name: UpdateSaleItem :one
-UPDATE sale_items
+-- name: UpdateSaleItemForStore :one
+UPDATE sale_items AS item
 SET
     quantity = sqlc.arg(quantity),
     discount = sqlc.arg(discount),
     total = sqlc.arg(total)
-WHERE sale_id = sqlc.arg(sale_id)
-  AND id = sqlc.arg(id)
+WHERE item.organization_id = sqlc.arg(organization_id)
+  AND item.store_id = sqlc.arg(store_id)
+  AND item.sale_id = sqlc.arg(sale_id)
+  AND item.id = sqlc.arg(id)
 RETURNING
-    id,
-    sale_id,
-    product_id,
-    product_name,
-    product_sku,
-    unit_price,
-    quantity,
-    discount,
-    total,
-    created_at;
+    item.id,
+    item.organization_id,
+    item.store_id,
+    item.sale_id,
+    item.product_id,
+    item.product_name,
+    item.product_sku,
+    item.unit_price,
+    item.quantity,
+    item.discount,
+    item.total,
+    item.created_at;
 
--- name: DeleteSaleItem :one
-DELETE FROM sale_items
-WHERE sale_id = sqlc.arg(sale_id)
-  AND id = sqlc.arg(id)
+-- name: DeleteSaleItemForStore :one
+DELETE FROM sale_items AS item
+WHERE item.organization_id = sqlc.arg(organization_id)
+  AND item.store_id = sqlc.arg(store_id)
+  AND item.sale_id = sqlc.arg(sale_id)
+  AND item.id = sqlc.arg(id)
 RETURNING
-    id,
-    sale_id,
-    product_id,
-    product_name,
-    product_sku,
-    unit_price,
-    quantity,
-    discount,
-    total,
-    created_at;
+    item.id,
+    item.organization_id,
+    item.store_id,
+    item.sale_id,
+    item.product_id,
+    item.product_name,
+    item.product_sku,
+    item.unit_price,
+    item.quantity,
+    item.discount,
+    item.total,
+    item.created_at;
 
--- name: ListSaleItemsBySaleID :many
+-- name: ListSaleItemsBySaleIDForStore :many
 SELECT
-    id,
-    sale_id,
-    product_id,
-    product_name,
-    product_sku,
-    unit_price,
-    quantity,
-    discount,
-    total,
-    created_at
-FROM sale_items
-WHERE sale_id = sqlc.arg(sale_id)
-ORDER BY created_at ASC, id ASC;
+    item.id,
+    item.organization_id,
+    item.store_id,
+    item.sale_id,
+    item.product_id,
+    item.product_name,
+    item.product_sku,
+    item.unit_price,
+    item.quantity,
+    item.discount,
+    item.total,
+    item.created_at
+FROM sale_items AS item
+WHERE item.organization_id = sqlc.arg(organization_id)
+  AND item.store_id = sqlc.arg(store_id)
+  AND item.sale_id = sqlc.arg(sale_id)
+ORDER BY item.created_at ASC, item.id ASC;
 
--- name: RecalculateSaleTotals :one
-UPDATE sales
+-- name: CountSaleItemsBySaleIDForStore :one
+SELECT COUNT(*)
+FROM sale_items AS item
+WHERE item.organization_id = sqlc.arg(organization_id)
+  AND item.store_id = sqlc.arg(store_id)
+  AND item.sale_id = sqlc.arg(sale_id);
+
+-- name: RecalculateSaleTotalsForStore :one
+UPDATE sales AS sale
 SET
     subtotal = sqlc.arg(subtotal),
     discount = sqlc.arg(discount),
     addition = sqlc.arg(addition),
     total = sqlc.arg(total)
-WHERE id = sqlc.arg(id)
-  AND status = 'OPEN'
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND sale.id = sqlc.arg(id)
+  AND sale.status = 'OPEN'
 RETURNING
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key;
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at;
 
--- name: CompleteSale :one
-UPDATE sales
+-- name: CompleteSaleForStore :one
+UPDATE sales AS sale
 SET
     status = 'COMPLETED',
+    completed_by_membership_id = sqlc.arg(completed_by_membership_id),
     completed_at = NOW()
-WHERE id = sqlc.arg(id)
-  AND status = 'OPEN'
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND sale.id = sqlc.arg(id)
+  AND sale.status = 'OPEN'
 RETURNING
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key;
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at;
 
--- name: CancelSale :one
-UPDATE sales
+-- name: CancelSaleForStore :one
+UPDATE sales AS sale
 SET
     status = 'CANCELLED',
+    cancelled_by_membership_id = sqlc.arg(cancelled_by_membership_id),
     cancelled_at = NOW()
-WHERE id = sqlc.arg(id)
-  AND status = 'OPEN'
+WHERE sale.organization_id = sqlc.arg(organization_id)
+  AND sale.store_id = sqlc.arg(store_id)
+  AND sale.id = sqlc.arg(id)
+  AND sale.status IN ('OPEN', 'COMPLETED')
 RETURNING
-    id,
-    number,
-    status,
-    subtotal,
-    discount,
-    addition,
-    total,
-    opened_at,
-    completed_at,
-    cancelled_at,
-    created_at,
-    updated_at,
-    idempotency_key;
+    sale.id,
+    sale.organization_id,
+    sale.store_id,
+    sale.number,
+    sale.idempotency_key,
+    sale.status,
+    sale.subtotal,
+    sale.discount,
+    sale.addition,
+    sale.total,
+    sale.opened_by_membership_id,
+    sale.completed_by_membership_id,
+    sale.cancelled_by_membership_id,
+    sale.opened_at,
+    sale.completed_at,
+    sale.cancelled_at,
+    sale.created_at,
+    sale.updated_at;

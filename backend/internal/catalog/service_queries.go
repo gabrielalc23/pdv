@@ -5,12 +5,15 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogListResponse, error) {
+func (s *Service) List(ctx context.Context, actor authn.StoreActor, input ListCatalogInput) (CatalogListResponse, error) {
+	scope := actor.ToStoreScope()
+
 	page, pageSize, err := normalizePagination(input.Page, input.PageSize)
 	if err != nil {
 		return CatalogListResponse{}, err
@@ -29,7 +32,7 @@ func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogList
 		}
 	}
 
-	total, err := s.store.CountCatalogProducts(ctx, database.CountCatalogProductsParams{
+	total, err := s.store.CountCatalogProducts(ctx, scope, database.CountCatalogProductsForStoreParams{
 		Search:      search,
 		CategoryID:  categoryID,
 		ActiveOnly:  activeOnly,
@@ -39,7 +42,7 @@ func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogList
 		return CatalogListResponse{}, fmt.Errorf("count catalog products: %w", err)
 	}
 
-	rows, err := s.store.ListCatalogProducts(ctx, database.ListCatalogProductsParams{
+	rows, err := s.store.ListCatalogProducts(ctx, scope, database.ListCatalogProductsForStoreParams{
 		Search:      search,
 		CategoryID:  categoryID,
 		ActiveOnly:  activeOnly,
@@ -66,13 +69,15 @@ func (s *Service) List(ctx context.Context, input ListCatalogInput) (CatalogList
 	}, nil
 }
 
-func (s *Service) GetByID(ctx context.Context, rawID string) (CatalogProductResponse, error) {
+func (s *Service) GetByID(ctx context.Context, actor authn.StoreActor, rawID string) (CatalogProductResponse, error) {
+	scope := actor.ToStoreScope()
+
 	productID, err := parseUUID(rawID, "id")
 	if err != nil {
 		return CatalogProductResponse{}, err
 	}
 
-	row, err := s.store.GetCatalogProductByID(ctx, productID)
+	row, err := s.store.GetCatalogProductByID(ctx, scope, productID)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return CatalogProductResponse{}, ErrCatalogProductNotFound
@@ -83,13 +88,15 @@ func (s *Service) GetByID(ctx context.Context, rawID string) (CatalogProductResp
 	return ToCatalogProductResponse(toCatalogProductDataFromIDRow(row))
 }
 
-func (s *Service) GetByBarcode(ctx context.Context, rawBarcode string) (CatalogProductResponse, error) {
+func (s *Service) GetByBarcode(ctx context.Context, actor authn.StoreActor, rawBarcode string) (CatalogProductResponse, error) {
+	scope := actor.ToStoreScope()
+
 	barcode, err := normalizeRequiredText("barcode", rawBarcode)
 	if err != nil {
 		return CatalogProductResponse{}, err
 	}
 
-	row, err := s.store.GetCatalogProductByBarcode(ctx, optionalText(barcode))
+	row, err := s.store.GetCatalogProductByBarcode(ctx, scope, optionalText(barcode))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return CatalogProductResponse{}, ErrCatalogProductNotFound

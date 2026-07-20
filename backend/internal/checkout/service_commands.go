@@ -8,12 +8,17 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/gabrielalc23/pdv/internal/platform/authn"
 	"github.com/gabrielalc23/pdv/internal/platform/database"
+	"github.com/gabrielalc23/pdv/internal/platform/tenancy"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func (s *Service) Checkout(ctx context.Context, rawSaleID string, input CheckoutInput) (CheckoutResponse, error) {
+func (s *Service) Checkout(ctx context.Context, actor authn.StoreActor, rawSaleID string, input CheckoutInput) (CheckoutResponse, error) {
+	storeScope := actor.ToStoreScope()
+	actorScope := actor.ToActorScope()
+
 	saleID, err := parseUUID(rawSaleID, "id")
 	if err != nil {
 		return CheckoutResponse{}, err
@@ -26,8 +31,8 @@ func (s *Service) Checkout(ctx context.Context, rawSaleID string, input Checkout
 
 	var state checkoutState
 
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		sale, err := tx.LockSaleByID(ctx, saleID)
+	err = s.txManager.WithTx(ctx, actorScope, func(tx TxQueries) error {
+		sale, err := tx.LockSaleByID(ctx, storeScope, saleID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return ErrSaleNotFound
@@ -45,7 +50,7 @@ func (s *Service) Checkout(ctx context.Context, rawSaleID string, input Checkout
 			return ErrSaleNotOpen
 		}
 
-		items, err := tx.ListSaleItemsBySaleID(ctx, saleID)
+		items, err := tx.ListSaleItemsBySaleID(ctx, storeScope, saleID)
 		if err != nil {
 			return fmt.Errorf("list sale items: %w", err)
 		}
@@ -57,26 +62,28 @@ func (s *Service) Checkout(ctx context.Context, rawSaleID string, input Checkout
 			return err
 		}
 
-		validatedPayments, err := s.ValidatePayments(ctx, tx, sale.Total, normalized.Payments)
+		validated, err := s.ValidatePayments(ctx, tx, actor, sale.Total, normalized.Payments)
 		if err != nil {
 			return err
 		}
 
-		if err := applyInventoryChanges(ctx, tx, saleID, items); err != nil {
+		if err := applyInventoryChanges(ctx, tx, actor, saleID, items); err != nil {
 			return err
 		}
 
-		approvedPayments, err := s.createPayments(ctx, tx, saleID, validatedPayments)
+		payments, err := s.createPayments(ctx, tx, actor, saleID, validated)
 		if err != nil {
 			return err
 		}
 
-		completed, err := tx.CompleteSale(ctx, saleID)
+		completed, err := tx.CompleteSale(ctx, actorScope, database.CompleteSaleForStoreParams{
+			ID: saleID,
+		})
 		if err != nil {
 			return fmt.Errorf("complete sale: %w", err)
 		}
 
-		fiscalDocument, err := tx.CreateFiscalDocument(ctx, database.CreateFiscalDocumentParams{
+		fiscalDocument, err := tx.CreateFiscalDocument(ctx, storeScope, database.CreateFiscalDocumentForStoreParams{
 			SaleID: saleID,
 		})
 		if err != nil {
@@ -84,29 +91,10 @@ func (s *Service) Checkout(ctx context.Context, rawSaleID string, input Checkout
 		}
 
 		state = checkoutState{
-			sale:     completed,
-			items:    items,
-			payments: approvedPayments,
-			fiscalDocument: toFiscalDocumentResponse(database.FiscalDocument{
-				ID:                fiscalDocument.ID,
-				SaleID:            fiscalDocument.SaleID,
-				Status:            fiscalDocument.Status,
-				Environment:       fiscalDocument.Environment,
-				DocumentModel:     fiscalDocument.DocumentModel,
-				Series:            fiscalDocument.Series,
-				Number:            fiscalDocument.Number,
-				AccessKey:         fiscalDocument.AccessKey,
-				Protocol:          fiscalDocument.Protocol,
-				Provider:          fiscalDocument.Provider,
-				ExternalReference: fiscalDocument.ExternalReference,
-				XML:               fiscalDocument.XML,
-				ErrorCode:         fiscalDocument.ErrorCode,
-				ErrorMessage:      fiscalDocument.ErrorMessage,
-				IssuedAt:          fiscalDocument.IssuedAt,
-				CancelledAt:       fiscalDocument.CancelledAt,
-				CreatedAt:         fiscalDocument.CreatedAt,
-				UpdatedAt:         fiscalDocument.UpdatedAt,
-			}),
+			sale:           completed,
+			items:          items,
+			payments:       payments,
+			fiscalDocument: toFiscalDocumentResponse(fiscalDocFromCreateRow(fiscalDocument)),
 		}
 
 		return nil
@@ -115,22 +103,43 @@ func (s *Service) Checkout(ctx context.Context, rawSaleID string, input Checkout
 		return CheckoutResponse{}, err
 	}
 
-	authorized, err := s.authorizeFiscalDocument(ctx, state)
+	authorized, err := s.authorizeFiscalDocument(ctx, actor, state)
 	if err != nil {
 		return CheckoutResponse{}, err
 	}
 	state.fiscalDocument = authorized
 
-	if s.store != nil {
-		if err := s.store.RefreshReceiptViews(ctx); err != nil {
-			return CheckoutResponse{}, fmt.Errorf("refresh receipt views: %w", err)
-		}
-	}
-
 	return toCheckoutResponse(state)
 }
 
-func (s *Service) ValidatePayments(ctx context.Context, tx TxQueries, saleTotal pgtype.Numeric, inputs []normalizedCheckoutPaymentInput) ([]validatedCheckoutPayment, error) {
+func fiscalDocFromCreateRow(row database.CreateFiscalDocumentForStoreRow) database.FiscalDocument {
+	return database.FiscalDocument{
+		ID:                row.ID,
+		OrganizationID:    row.OrganizationID,
+		StoreID:           row.StoreID,
+		SaleID:            row.SaleID,
+		Status:            row.Status,
+		Environment:       row.Environment,
+		DocumentModel:     row.DocumentModel,
+		Series:            row.Series,
+		Number:            row.Number,
+		AccessKey:         row.AccessKey,
+		Protocol:          row.Protocol,
+		Provider:          row.Provider,
+		ExternalReference: row.ExternalReference,
+		XML:               row.XML,
+		ErrorCode:         row.ErrorCode,
+		ErrorMessage:      row.ErrorMessage,
+		IssuedAt:          row.IssuedAt,
+		CancelledAt:       row.CancelledAt,
+		CreatedAt:         row.CreatedAt,
+		UpdatedAt:         row.UpdatedAt,
+	}
+}
+
+func (s *Service) ValidatePayments(ctx context.Context, tx TxQueries, actor authn.StoreActor, saleTotal pgtype.Numeric, inputs []normalizedCheckoutPaymentInput) ([]validatedCheckoutPayment, error) {
+	orgScope := tenancy.OrganizationScope{OrganizationID: actor.OrganizationID}
+
 	if len(inputs) == 0 {
 		return nil, ErrPaymentsRequired
 	}
@@ -139,7 +148,7 @@ func (s *Service) ValidatePayments(ctx context.Context, tx TxQueries, saleTotal 
 	sum := zeroMoney()
 
 	for _, input := range inputs {
-		method, err := tx.GetPaymentMethodByID(ctx, input.PaymentMethodID)
+		method, err := tx.GetPaymentMethodByID(ctx, orgScope, input.PaymentMethodID)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				return nil, ErrPaymentMethodNotFound
@@ -255,7 +264,7 @@ func validateInstallments(method database.PaymentMethod, installments int16) (in
 	return installments, nil
 }
 
-func validateSaleTotals(sale database.LockSaleByIDRow, items []database.SaleItem) error {
+func validateSaleTotals(sale database.Sale, items []database.SaleItem) error {
 	var subtotal pgtype.Numeric
 	var discount pgtype.Numeric
 	var total pgtype.Numeric
@@ -326,7 +335,9 @@ func validateSaleTotals(sale database.LockSaleByIDRow, items []database.SaleItem
 	return nil
 }
 
-func applyInventoryChanges(ctx context.Context, tx TxQueries, saleID pgtype.UUID, items []database.SaleItem) error {
+func applyInventoryChanges(ctx context.Context, tx TxQueries, actor authn.StoreActor, saleID pgtype.UUID, items []database.SaleItem) error {
+	storeScope := actor.ToStoreScope()
+	actorScope := actor.ToActorScope()
 	type aggregate struct {
 		productID pgtype.UUID
 		quantity  pgtype.Numeric
@@ -357,13 +368,13 @@ func applyInventoryChanges(ctx context.Context, tx TxQueries, saleID pgtype.UUID
 
 	for _, key := range keys {
 		agg := byProduct[key]
-		update, err := tx.DecreaseInventory(ctx, database.DecreaseInventoryParams{
+		update, err := tx.DecreaseInventory(ctx, storeScope, database.DecreaseInventoryForStoreParams{
 			ProductID: agg.productID,
 			Quantity:  agg.quantity,
 		})
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
-				if _, lookupErr := tx.GetInventoryByProductID(ctx, agg.productID); lookupErr != nil {
+				if _, lookupErr := tx.GetInventoryByProductID(ctx, storeScope, agg.productID); lookupErr != nil {
 					if errors.Is(lookupErr, pgx.ErrNoRows) {
 						return ErrInventoryNotFound
 					}
@@ -374,7 +385,7 @@ func applyInventoryChanges(ctx context.Context, tx TxQueries, saleID pgtype.UUID
 			return fmt.Errorf("decrease inventory: %w", err)
 		}
 
-		if _, err := tx.CreateInventoryMovement(ctx, database.CreateInventoryMovementParams{
+		if _, err := tx.CreateInventoryMovement(ctx, actorScope, database.CreateInventoryMovementForStoreParams{
 			ProductID:        agg.productID,
 			MovementType:     database.InventoryMovementTypeSALE,
 			Quantity:         agg.quantity,
@@ -384,7 +395,7 @@ func applyInventoryChanges(ctx context.Context, tx TxQueries, saleID pgtype.UUID
 			ReferenceType:    "sale",
 			ReferenceID:      saleID,
 		}); err != nil {
-			if isUniqueViolation(err) {
+			if isUniqueViolation(err, "inventory_movements_reference_unique") {
 				return ErrSaleAlreadyCompleted
 			}
 			return fmt.Errorf("create inventory movement: %w", err)
@@ -406,11 +417,13 @@ func addQuantity(a, b pgtype.Numeric) (pgtype.Numeric, error) {
 	return numericFromScaledInt(new(big.Int).Add(left, right), 3), nil
 }
 
-func (s *Service) createPayments(ctx context.Context, tx TxQueries, saleID pgtype.UUID, inputs []validatedCheckoutPayment) ([]checkoutPaymentResult, error) {
+func (s *Service) createPayments(ctx context.Context, tx TxQueries, actor authn.StoreActor, saleID pgtype.UUID, inputs []validatedCheckoutPayment) ([]checkoutPaymentResult, error) {
+	storeScope := actor.ToStoreScope()
+	actorScope := actor.ToActorScope()
 	results := make([]checkoutPaymentResult, 0, len(inputs))
 
 	for i, input := range inputs {
-		create, err := tx.CreatePayment(ctx, database.CreatePaymentParams{
+		create, err := tx.CreatePayment(ctx, actorScope, database.CreatePaymentForStoreParams{
 			SaleID:            saleID,
 			PaymentMethodID:   input.method.ID,
 			Amount:            input.amount,
@@ -424,7 +437,7 @@ func (s *Service) createPayments(ctx context.Context, tx TxQueries, saleID pgtyp
 			return nil, fmt.Errorf("create payment: %w", err)
 		}
 
-		approved, err := tx.ApprovePayment(ctx, database.ApprovePaymentParams{
+		approved, err := tx.ApprovePayment(ctx, storeScope, database.ApprovePaymentForStoreParams{
 			ID:             create.ID,
 			ReceivedAmount: derefNumeric(input.receivedAmount),
 			ChangeAmount:   derefNumeric(input.changeAmount),
@@ -443,7 +456,6 @@ func derefNumeric(value *pgtype.Numeric) pgtype.Numeric {
 	if value == nil {
 		return pgtype.Numeric{}
 	}
-
 	return *value
 }
 
@@ -451,7 +463,10 @@ func PaymentIdempotencyKey(saleID pgtype.UUID, index int) string {
 	return "checkout:" + saleID.String() + ":payment:" + intToString(index)
 }
 
-func (s *Service) authorizeFiscalDocument(ctx context.Context, state checkoutState) (FiscalDocumentResponse, error) {
+func (s *Service) authorizeFiscalDocument(ctx context.Context, actor authn.StoreActor, state checkoutState) (FiscalDocumentResponse, error) {
+	storeScope := actor.ToStoreScope()
+	actorScope := actor.ToActorScope()
+
 	if s.fiscalProvider == nil {
 		return state.fiscalDocument, nil
 	}
@@ -464,8 +479,8 @@ func (s *Service) authorizeFiscalDocument(ctx context.Context, state checkoutSta
 	result, err := s.fiscalProvider.Authorize(ctx, input)
 	if err != nil {
 		var updated database.FiscalDocument
-		updateErr := s.txManager.WithTx(ctx, func(tx TxQueries) error {
-			row, err := tx.MarkFiscalDocumentError(ctx, database.MarkFiscalDocumentErrorParams{
+		updateErr := s.txManager.WithTx(ctx, actorScope, func(tx TxQueries) error {
+			row, err := tx.MarkFiscalDocumentError(ctx, storeScope, database.MarkFiscalDocumentErrorForStoreParams{
 				ID:           parseUUIDMust(state.fiscalDocument.ID),
 				ErrorCode:    pgtype.Text{String: "mock_authorization_failed", Valid: true},
 				ErrorMessage: pgtype.Text{String: "Fiscal authorization failed", Valid: true},
@@ -483,14 +498,14 @@ func (s *Service) authorizeFiscalDocument(ctx context.Context, state checkoutSta
 	}
 
 	updated := FiscalDocumentResponse{}
-	err = s.txManager.WithTx(ctx, func(tx TxQueries) error {
-		row, err := tx.MarkFiscalDocumentAuthorized(ctx, database.MarkFiscalDocumentAuthorizedParams{
+	err = s.txManager.WithTx(ctx, actorScope, func(tx TxQueries) error {
+		row, err := tx.MarkFiscalDocumentAuthorized(ctx, storeScope, database.MarkFiscalDocumentAuthorizedForStoreParams{
 			AccessKey:         pgtype.Text{String: result.AccessKey, Valid: true},
 			Protocol:          pgtype.Text{String: result.Protocol, Valid: true},
 			Provider:          pgtype.Text{String: result.Provider, Valid: true},
 			ExternalReference: pgtype.Text{String: result.ExternalReference, Valid: true},
 			XML:               pgtype.Text{String: result.XML, Valid: true},
-			IssuedAt:          pgtype.Timestamptz{Time: result.AuthorizedAt, Valid: true},
+			IssuedAt:          pgtype.Timestamptz{},
 			ID:                parseUUIDMust(state.fiscalDocument.ID),
 		})
 		if err != nil {

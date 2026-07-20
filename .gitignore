@@ -13,6 +13,9 @@ coverage/
 # Go artifacts
 *.test
 
+# Secrets
+backend/secrets/*.pem
+
 # OS and editor files
 .DS_Store
 .idea/

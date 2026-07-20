@@ -1,12 +1,39 @@
 package products
 
-import "github.com/go-chi/chi/v5"
+import (
+	"github.com/go-chi/chi/v5"
 
-func RegisterRoutes(r chi.Router, h *Handler) {
-	r.Post("/products", h.CreateProduct)
-	r.Get("/products", h.ListProducts)
-	r.Get("/products/{id}", h.GetProduct)
-	r.Put("/products/{id}", h.UpdateProduct)
-	r.Post("/products/{id}/activate", h.ActivateProduct)
-	r.Post("/products/{id}/deactivate", h.DeactivateProduct)
+	"github.com/gabrielalc23/pdv/internal/platform/authz"
+)
+
+func RegisterRoutes(r chi.Router, h *Handler, guard authz.Guard) {
+	r.With(
+		guard.RequireOrganizationContext(),
+		guard.RequireAll(authz.ScopeProductsCreate),
+	).Post("/products", h.CreateProduct)
+
+	r.With(
+		guard.RequireOrganizationContext(),
+		guard.RequireAll(authz.ScopeProductsRead),
+	).Get("/products", h.ListProducts)
+
+	r.With(
+		guard.RequireOrganizationContext(),
+		guard.RequireAll(authz.ScopeProductsRead),
+	).Get("/products/{id}", h.GetProduct)
+
+	r.With(
+		guard.RequireOrganizationContext(),
+		guard.RequireAll(authz.ScopeProductsUpdate),
+	).Put("/products/{id}", h.UpdateProduct)
+
+	r.With(
+		guard.RequireOrganizationContext(),
+		guard.RequireAll(authz.ScopeProductsStatusUpdate),
+	).Post("/products/{id}/activate", h.ActivateProduct)
+
+	r.With(
+		guard.RequireOrganizationContext(),
+		guard.RequireAll(authz.ScopeProductsStatusUpdate),
+	).Post("/products/{id}/deactivate", h.DeactivateProduct)
 }

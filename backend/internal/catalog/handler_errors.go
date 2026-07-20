@@ -7,12 +7,12 @@ import (
 	apphttp "github.com/gabrielalc23/pdv/internal/platform/http"
 )
 
-func (h *Handler) writeServiceError(w http.ResponseWriter, err error, validationStatus int) {
+func (h *Handler) writeServiceError(w http.ResponseWriter, err error) {
 	var validationErr *ValidationError
 
 	switch {
 	case errors.As(err, &validationErr):
-		status := validationStatus
+		status := http.StatusBadRequest
 		if validationErr.Field == "id" || validationErr.Field == "barcode" {
 			status = http.StatusBadRequest
 		}

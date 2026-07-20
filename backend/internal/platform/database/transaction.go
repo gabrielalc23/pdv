@@ -32,7 +32,7 @@ func (t *Tx) Rollback(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) WithTx(ctx context.Context, fn func(*Tx) error) (err error) {
+func (s *PostgresStore) WithTx(ctx context.Context, fn func(*Tx) error) (err error) {
 	tx, err := s.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return err
@@ -54,7 +54,7 @@ func (s *Store) WithTx(ctx context.Context, fn func(*Tx) error) (err error) {
 	return err
 }
 
-func (s *Store) WithTxOptions(ctx context.Context, opts pgx.TxOptions, fn func(*Tx) error) (err error) {
+func (s *PostgresStore) WithTxOptions(ctx context.Context, opts pgx.TxOptions, fn func(*Tx) error) (err error) {
 	tx, err := s.BeginTx(ctx, opts)
 	if err != nil {
 		return err
