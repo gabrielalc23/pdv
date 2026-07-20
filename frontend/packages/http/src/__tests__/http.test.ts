@@ -8,7 +8,9 @@ import { InvalidApiResponseError } from "@pdv/errors";
 import AxiosMockAdapter from "axios-mock-adapter";
 
 const mockInstance = new AxiosMockAdapter(instance);
-const mockInstanceWithoutInterceptors = new AxiosMockAdapter(instanceWithoutInterceptors);
+const mockInstanceWithoutInterceptors = new AxiosMockAdapter(
+  instanceWithoutInterceptors,
+);
 
 afterEach(() => {
   mockInstance.reset();
@@ -35,7 +37,9 @@ describe("createApiCall", () => {
   });
 
   it("sends GET request without params", async () => {
-    mockInstanceWithoutInterceptors.onGet("/products").reply(200, { data: ["a", "b"] });
+    mockInstanceWithoutInterceptors
+      .onGet("/products")
+      .reply(200, { data: ["a", "b"] });
 
     const api = createApiCall({
       type: "public",
@@ -63,7 +67,9 @@ describe("createApiCall", () => {
   });
 
   it("throws InvalidApiResponseError when response doesn't match schema", async () => {
-    mockInstanceWithoutInterceptors.onGet("/not-schema-match").reply(200, { unexpected: "shape" });
+    mockInstanceWithoutInterceptors
+      .onGet("/not-schema-match")
+      .reply(200, { unexpected: "shape" });
 
     const api = createApiCall({
       type: "public",
@@ -107,7 +113,9 @@ describe("requestLocation inference", () => {
   });
 
   it("infers 'data' from POST", async () => {
-    mockInstanceWithoutInterceptors.onPost("/test").reply(200, { created: true });
+    mockInstanceWithoutInterceptors
+      .onPost("/test")
+      .reply(200, { created: true });
 
     const api = createApiCall({
       type: "public",

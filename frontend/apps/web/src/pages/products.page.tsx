@@ -406,7 +406,7 @@ function ProductRow({
 }: {
   product: ProductResponse;
   tone: "coral" | "mint" | "blue" | "sand";
-  onToggle: () => void;
+  onToggle: VoidFunction;
   isPending: boolean;
 }) {
   const bg = {

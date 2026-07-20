@@ -13,6 +13,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pdv/auth": "workspace:*",
     "@pdv/errors": "workspace:*",
     "@pdv/http": "workspace:*",
     "@pdv/ui-kit": "workspace:*",

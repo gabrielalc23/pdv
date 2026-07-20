@@ -19,7 +19,10 @@ export interface CreateApiCallOptions<
   responseSchema: TResponseSchema;
 }
 
-export function createApiCall<TRequestSchema extends ZodType, TResponseSchema extends ZodType>({
+export function createApiCall<
+  TRequestSchema extends ZodType,
+  TResponseSchema extends ZodType,
+>({
   type = "private",
   method,
   path,
@@ -29,8 +32,11 @@ export function createApiCall<TRequestSchema extends ZodType, TResponseSchema ex
 }: CreateApiCallOptions<TRequestSchema, TResponseSchema>): (
   requestData: input<TRequestSchema>,
 ) => Promise<output<TResponseSchema>> {
-  return async (requestData: input<TRequestSchema>): Promise<output<TResponseSchema>> => {
-    const parsedRequest: output<TRequestSchema> = requestSchema.parse(requestData);
+  return async (
+    requestData: input<TRequestSchema>,
+  ): Promise<output<TResponseSchema>> => {
+    const parsedRequest: output<TRequestSchema> =
+      requestSchema.parse(requestData);
 
     const resolvedRequestLocation: ApiRequestLocation = resolveRequestLocation(
       method,
@@ -53,11 +59,11 @@ export function createApiCall<TRequestSchema extends ZodType, TResponseSchema ex
     const axiosInstance: AxiosInstance =
       type === "private" ? instance : instanceWithoutInterceptors;
 
-    const response: AxiosResponse<unknown> = await axiosInstance.request<unknown>(requestConfig);
+    const response: AxiosResponse<unknown> =
+      await axiosInstance.request<unknown>(requestConfig);
 
-    const parsedResponse: ZodSafeParseResult<output<TResponseSchema>> = responseSchema.safeParse(
-      response.data,
-    );
+    const parsedResponse: ZodSafeParseResult<output<TResponseSchema>> =
+      responseSchema.safeParse(response.data);
 
     if (!parsedResponse.success) {
       throw new InvalidApiResponseError(path, parsedResponse.error);
